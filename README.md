@@ -36,7 +36,7 @@ Standard visualization of molecular vibrations can be subjective. This tool uses
 
 ## 4. Usage Guide
 
-1. Place your log file (e.g., `h2o.log`) in the `data/logs/` folder.
+1. Place your log file obtained from the Gaussian program (e.g., `h2o.log`) in the `data/logs/` folder.
 
 2. Run the main script:
 
@@ -44,7 +44,7 @@ Standard visualization of molecular vibrations can be subjective. This tool uses
    python main.py data/logs/h2o.log
    ```
 
-3. **Check Bonds:** The script will check for connectivity. If none is found, it will **PAUSE** and ask you to edit the generated text file in `data/intermediate/` to add bonds manually (e.g., `1 2` for a bond between Atom 1 and Atom 2).
+3. **Check Bonds:** The script will check for connectivity. If none is found, it will **PAUSE** and ask you to edit the generated text file in `data/intermediate/` to add bonds manually (e.g., `1 2` for a bond between Atom 1 and Atom 2). You can copy them from the Gaussian input file.
 
 4. **Results:** Once confirmed, scores are saved to `data/results/h2o_scores.csv`.
 

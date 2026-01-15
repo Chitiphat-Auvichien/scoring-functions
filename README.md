@@ -48,14 +48,6 @@ Standard visualization of molecular vibrations can be subjective. This tool uses
 
 4. **Results:** Once confirmed, scores are saved to `data/results/h2o_scores.csv`.
 
-## 5. Interpreting Results
+## 5. Citation
 
-* **T, R ≈ 1.0**: Pure Translation or Rotation.
-
-* **V ≈ 1.0**: Pure Stretching.
-
-* **V ≈ 0.0**: Pure Bending (if T/R are low).
-
-## 6. Citation
-
-> Auvichien, C.; et al. "Scoring Functions for Classifying Modes of Molecular Motion..." *J. Chem. Educ.* 202X.
+> Auvichien, C.; et al. Scoring functions for classifying modes of molecular motion: I. Bridging mathematics and chemistry education", *J. Chem. Educ.* **2026**, ...

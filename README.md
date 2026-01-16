@@ -18,7 +18,7 @@ Standard visualization of molecular vibrations can be subjective. This tool uses
 
 ## 2. Installation
 
-1. Ensure you have **Python 3.8** or higher installed.
+1. Ensure you have **Python 3** or higher installed.
 
 2. Install the required dependencies using the provided file:
 

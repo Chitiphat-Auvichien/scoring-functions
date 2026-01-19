@@ -2,82 +2,151 @@ import argparse
 import pandas as pd
 import os
 import sys
-from src.parser import GaussianParser, IntermediateIO
+from src.parser import GaussianParser, EMITParser, IntermediateIO
 from src.scoring import ModeScorer
 
 def main():
-    parser = argparse.ArgumentParser(description="Calculate Molecular Mode Scores (J. Chem. Educ.)")
-    parser.add_argument("input_file", help="Path to Gaussian .log file (in data/logs/)")
-    parser.add_argument("--out", help="Optional explicit output path (overrides auto-naming)")
-    
+    parser = argparse.ArgumentParser(description="Calculate Molecular Mode Scores")
+    parser.add_argument("-m", "--molecule", help="Molecule name (without extension)", required=True)
     args = parser.parse_args()
     
-    # 1. Setup Systematic Paths
-    base_name = os.path.splitext(os.path.basename(args.input_file))[0]
+    mol_name = args.molecule
     
-    # Define folder structure
     data_dir = "data"
+    logs_dir = os.path.join(data_dir, "logs")
+    emit_dir = os.path.join(data_dir, "EMIT")
+    gjf_dir = os.path.join(data_dir, "gjf")
     inter_dir = os.path.join(data_dir, "intermediate")
     results_dir = os.path.join(data_dir, "results")
     
-    # Ensure folders exist
-    os.makedirs(inter_dir, exist_ok=True)
-    os.makedirs(results_dir, exist_ok=True)
+    for d in [logs_dir, emit_dir, gjf_dir, inter_dir, results_dir]:
+        os.makedirs(d, exist_ok=True)
+
+    print("-------------------------------------------------------")
+    print(f" Processing Molecule: {mol_name}")
+    print("-------------------------------------------------------")
+    print("Choose calculation type:")
+    print("  1. Normal Modes (reads from data/logs/)")
+    print("  2. EMIT Modes (reads from data/EMIT/)")
     
-    # Define filenames
-    intermediate_file = os.path.join(inter_dir, f"{base_name}.txt")
+    choice = input("Enter 1 or 2: ").strip()
+    if choice not in ['1', '2']:
+        print("Invalid choice.")
+        return
+
+    # Find Log File
+    log_path = None
+    for ext in ['.log', '.out']:
+        p = os.path.join(logs_dir, f"{mol_name}{ext}")
+        if os.path.exists(p):
+            log_path = p
+            break
+            
+    if not log_path:
+        print(f"Error: Could not find log file for '{mol_name}' in {logs_dir}")
+        return
+
+    intermediate_file = os.path.join(inter_dir, f"{mol_name}_data.txt")
     
-    if args.out:
-        output_file = args.out
-    else:
-        output_file = os.path.join(results_dir, f"{base_name}_scores.csv")
-    
-    try:
-        # Step 2: Parse the Log File
-        print(f"Reading Gaussian log: {args.input_file}")
-        gp = GaussianParser(args.input_file)
-        raw_data = gp.parse()
+    # Common variables to be set by logic blocks
+    raw_data = None
+    should_rotate_modes = True # Default for Normal Modes
+
+    if choice == '1':
+        # --- NORMAL MODES ---
+        output_file = os.path.join(results_dir, f"{mol_name}_normal_scores.csv")
+        print(f"Reading Gaussian log: {log_path}")
+        gp = GaussianParser(log_path)
+        raw_data = gp.parse(parse_modes=True)
+        should_rotate_modes = True
+
+    elif choice == '2':
+        # --- EMIT MODES ---
+        emit_path = os.path.join(emit_dir, f"{mol_name}_EMIT.txt")
+        if not os.path.exists(emit_path):
+            emit_path = os.path.join(emit_dir, f"{mol_name}.txt")
+            
+        if not os.path.exists(emit_path):
+            print(f"Error: Could not find EMIT file in {emit_dir} (expected {mol_name}_EMIT.txt)")
+            return
+
+        output_file = os.path.join(results_dir, f"{mol_name}_EMIT_scores.csv")
+
+        # 1. Parse Geometry only from log
+        print(f"Reading Geometry from: {log_path}")
+        gp = GaussianParser(log_path)
+        raw_data = gp.parse(parse_modes=False)
         
-        # Step 3: Save to Intermediate File
+        # 2. Parse EMIT modes
+        print(f"Reading EMIT modes from: {emit_path}")
+        ep = EMITParser(emit_path, len(raw_data['atoms']))
+        emit_modes = ep.parse()
+        raw_data['modes'] = emit_modes
+        
+        # EMIT modes are already in Principal Axes, so do NOT rotate them
+        should_rotate_modes = False
+
+    # --- COMMON WORKFLOW ---
+    try:
         print(f"Saving extracted data to: {intermediate_file}")
         IntermediateIO.save(raw_data, intermediate_file)
         
-        # Step 4: Check if bonds exist. If not, PAUSE for user input.
         if not raw_data['bonds']:
             print("\n" + "!"*70)
-            print(" ATTENTION: No bonding information found in the log file.")
-            print(f" Please open the file below and manually add bonds under the 'BONDS' section:")
-            print(f" FILE: {os.path.abspath(intermediate_file)}")
-            print("\n Format: 'AtomIndex1 AtomIndex2' (e.g., '1 2' for bond between atom 1 and 2).")
+            print(" ATTENTION: No bonding information found.")
+            print(f" Please open {intermediate_file} and add bonds manually.")
+            print(" Format: '1 2' (for bond between Atom 1 and Atom 2)")
             print("!"*70 + "\n")
-            
-            input(">> Once you have saved the file with bonds, press ENTER to continue...")
+            input(">> Press ENTER after saving the file...")
         
-        # Step 5: Reload validated data from the intermediate file
         print(f"Loading data from: {intermediate_file}...")
         data = IntermediateIO.load(intermediate_file)
-        
-        if not data['bonds']:
-            print("Warning: Still no bonds found. Vibrational scores (V) will be 0.")
-        else:
-            print(f"Loaded {len(data['bonds'])} bonds.")
+        print(f"Loaded {len(data['bonds'])} bonds.")
 
-        # Step 6: Calculate Scores
         scorer = ModeScorer(data['atoms'], data['coords'], data['bonds'])
-        results = []
         
-        print(f"Calculating scores for {len(data['modes'])} modes...")
-        for i, mode in enumerate(data['modes']):
+        # A. Rotate Molecule (Always) and Modes (Conditional)
+        print("Aligning molecule to Principal Axes (MIT)...")
+        if not should_rotate_modes:
+            print("  -> EMIT modes detected: Rotating MOLECULE ONLY, preserving mode vectors.")
+        else:
+            print("  -> Normal modes detected: Rotating BOTH molecule and mode vectors.")
+            
+        rotated_modes = scorer.MIT(data['modes'], rotate_modes=should_rotate_modes)
+        
+        final_modes = []
+        
+        if choice == '1':
+            print("Constructing ideal T/R modes...")
+            t_modes = scorer.construct_T()
+            r_modes = scorer.construct_R()
+            for i, m in enumerate(rotated_modes):
+                m['label'] = f"Vib {i+1}"
+            final_modes = t_modes + r_modes + rotated_modes
+        else:
+            # For EMIT Modes: Use 3N modes directly
+            final_modes = rotated_modes
+
+        results = []
+        print(f"Calculating scores for {len(final_modes)} modes...")
+        
+        for i, mode in enumerate(final_modes):
             scores = scorer.calculate_scores(mode['vector'])
-            results.append({
-                "Mode": i + 1,
-                "Freq": mode['frequency'],
+            mode_name = mode.get('label', f"Mode {i+1}")
+            
+            is_emit = mode.get("is_emit", False)
+            val_header = "Eigenvalue" if is_emit else "Freq"
+            val_data = mode['frequency']
+            
+            row = {
+                "Mode": mode_name,
+                val_header: val_data,
                 "Tx": scores['T']['x'], "Ty": scores['T']['y'], "Tz": scores['T']['z'],
                 "Rx": scores['R']['x'], "Ry": scores['R']['y'], "Rz": scores['R']['z'],
                 "V_Stretch": scores['V']
-            })
+            }
+            results.append(row)
 
-        # Step 7: Save Results
         df = pd.DataFrame(results)
         print("\n--- Scoring Results ---")
         print(df.to_string(index=False, float_format="%.3f"))

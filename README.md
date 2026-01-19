@@ -78,4 +78,4 @@ Results are saved to `data/results/benzene_normal_scores.csv` (or `_EMIT_scores.
 
 ## 5. Citation
 
-> Auvichien, C.; et al. Scoring functions for classifying modes of molecular motion: I. Bridging mathematics and chemistry education" (Citation will be updated after submission to the *J. Chem. Educ.*)
+> Auvichien, C.; Therdpraisan, N.; Lertmankha, P.; Paiboonvorachat, N. Scoring functions for classifying modes of molecular motion: I. Bridging mathematics and chemistry education" (Citation will be updated after submission to the *J. Chem. Educ.*)

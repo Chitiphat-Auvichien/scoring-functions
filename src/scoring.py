@@ -7,6 +7,12 @@ from .utils import atomicMass
 def sizeVec(v):
     return math.sqrt(np.dot(v, v))
 
+def normalize(v):
+    norm = sizeVec(v)
+    if norm < 1e-9:
+        return v
+    return v / norm
+
 class Coordinate:
     def __init__(self, x, y, z):
         self.X = x
@@ -57,7 +63,15 @@ class ModeScorer:
         self.bList = bonds
         self.bVec = []
         
-        # Calculate initial bond vectors (Vector from i to j)
+        # Initial bond calculation
+        self.update_bond_vectors()
+
+        # Move to Center of Mass
+        self.COM()
+
+    def update_bond_vectors(self):
+        """Recalculate bond vectors based on current atom positions."""
+        self.bVec = []
         for (i, j) in self.bList:
             vec = np.array([
                 self.atoms[j].x() - self.atoms[i].x(),
@@ -65,9 +79,6 @@ class ModeScorer:
                 self.atoms[j].z() - self.atoms[i].z()
             ])
             self.bVec.append(vec)
-
-        # Move to Center of Mass (Required for Rscore)
-        self.COM()
 
     def COM(self):
         """Calculate Center of Mass and translate molecule."""
@@ -90,6 +101,174 @@ class ModeScorer:
 
         for atom in self.atoms:
             atom.translation(XMass, YMass, ZMass)
+        
+        # Update bonds after translation (vectors shouldn't change, but good practice)
+        self.update_bond_vectors()
+
+    def MIT(self, modes=None, rotate_modes=True):
+        """
+        Rotates the molecule and displacement vectors into the basis of principal axes of rotation.
+        Integrated from atom.py.
+        """
+        # 1. Compute Moment of Inertia Tensor
+        XX = YY = ZZ = 0.0
+        XY = XZ = YZ = 0.0
+        for atom in self.atoms:
+            rMass = atom.rMass
+            x, y, z = atom.x(), atom.y(), atom.z()
+            
+            XX += rMass * (y**2 + z**2)
+            YY += rMass * (x**2 + z**2)
+            ZZ += rMass * (x**2 + y**2)
+            XY -= rMass * x * y
+            XZ -= rMass * x * z
+            YZ -= rMass * y * z
+
+        tensor = np.array([
+            [XX, XY, XZ],
+            [XY, YY, YZ],
+            [XZ, YZ, ZZ]
+        ])
+
+        # 2. Diagonalize (Principal Axes)
+        # eigh returns eigenvalues and eigenvectors (columns of rot)
+        eigVal, rot = np.linalg.eigh(tensor)
+        
+        # 3. Handle coordinate orientation (Heaviest atom check from atom.py)
+        # Find heaviest atom
+        heaviest_idx = 0
+        max_mass = -1.0
+        for i, atom in enumerate(self.atoms):
+            if atom.rMass > max_mass:
+                max_mass = atom.rMass
+                heaviest_idx = i
+        
+        # Project heaviest atom coords onto new axes to check sign
+        h_atom = self.atoms[heaviest_idx]
+        h_x = h_atom.x()
+        h_y = h_atom.y()
+        h_z = h_atom.z()
+        
+        # Calculate new coordinates of heaviest atom temporarily
+        new_h_x = h_x * rot[0, 0] + h_y * rot[1, 0] + h_z * rot[2, 0]
+        new_h_y = h_x * rot[0, 1] + h_y * rot[1, 1] + h_z * rot[2, 1]
+        new_h_z = h_x * rot[0, 2] + h_y * rot[1, 2] + h_z * rot[2, 2]
+        
+        if (new_h_x + new_h_y + new_h_z) < 0.0:
+            # Invert rotation matrix (as per atom.py logic)
+            rot = -rot
+
+        # 4. Rotate Atoms
+        for atom in self.atoms:
+            x, y, z = atom.x(), atom.y(), atom.z()
+            atom.coord.X = x * rot[0, 0] + y * rot[1, 0] + z * rot[2, 0]
+            atom.coord.Y = x * rot[0, 1] + y * rot[1, 1] + z * rot[2, 1]
+            atom.coord.Z = x * rot[0, 2] + y * rot[1, 2] + z * rot[2, 2]
+
+        # 5. Rotate Bond Vectors
+        # Recalculate is safer/easier than rotating existing vectors
+        self.update_bond_vectors()
+
+        # 6. Rotate Displacement Vectors (Modes)
+        if modes is not None:
+            if rotate_modes:
+                rotated_modes = []
+                for mode in modes:
+                    # Mode vector shape: (N_atoms, 3)
+                    vecs = mode['vector'] # shape (N, 3)
+                    new_vecs = np.zeros_like(vecs)
+                    
+                    for a in range(self.n):
+                        x, y, z = vecs[a][0], vecs[a][1], vecs[a][2]
+                        # Apply same rotation
+                        new_vecs[a][0] = x * rot[0, 0] + y * rot[1, 0] + z * rot[2, 0]
+                        new_vecs[a][1] = x * rot[0, 1] + y * rot[1, 1] + z * rot[2, 1]
+                        new_vecs[a][2] = x * rot[0, 2] + y * rot[1, 2] + z * rot[2, 2]
+                    
+                    # Store back
+                    new_mode = mode.copy()
+                    new_mode['vector'] = new_vecs
+                    rotated_modes.append(new_mode)
+                
+                return rotated_modes
+            else:
+                return modes
+        return None
+
+    def construct_T(self):
+        """
+        Constructs 3 translational modes (Tx, Ty, Tz).
+        Returns a list of 3 mode dictionaries.
+        """
+        modes = []
+        labels = ['Tx', 'Ty', 'Tz']
+        
+        # Create vectors for x, y, z translation
+        for i in range(3):
+            # Shape (N, 3)
+            vec = np.zeros((self.n, 3))
+            
+            # Set the i-th component to 1.0 for all atoms
+            vec[:, i] = 1.0
+            
+            # Normalize the entire 3N vector
+            # Flatten, calc norm, divide
+            flat_norm = np.linalg.norm(vec)
+            if flat_norm > 1e-9:
+                vec = vec / flat_norm
+            
+            modes.append({
+                "frequency": 0.0, # Placeholder
+                "vector": vec,
+                "label": labels[i] # Special tag
+            })
+        return modes
+
+    def construct_R(self):
+        """
+        Constructs 3 rotational modes (Rx, Ry, Rz).
+        Returns a list of 3 mode dictionaries.
+        """
+        self.COM() # Ensure we are at COM
+        modes = []
+        labels = ['Rx', 'Ry', 'Rz']
+        
+        # Arrays to accumulate displacements
+        # Rx: cross(x-axis, r) -> vector along tangent
+        # Tangent directions for rotation around axes:
+        # Rx: (0, -z, y)
+        # Ry: (z, 0, -x)
+        # Rz: (-y, x, 0)
+        
+        rx_vecs = np.zeros((self.n, 3))
+        ry_vecs = np.zeros((self.n, 3))
+        rz_vecs = np.zeros((self.n, 3))
+        
+        for a in range(self.n):
+            x = self.atoms[a].x()
+            y = self.atoms[a].y()
+            z = self.atoms[a].z()
+            
+            # Rx
+            rx_vecs[a] = np.array([0.0, -z, y])
+            # Ry
+            ry_vecs[a] = np.array([z, 0.0, -x])
+            # Rz
+            rz_vecs[a] = np.array([-y, x, 0.0])
+            
+        # Normalize
+        for vecs, lbl in zip([rx_vecs, ry_vecs, rz_vecs], labels):
+            flat_norm = np.linalg.norm(vecs)
+            if flat_norm > 1e-9:
+                vecs = vecs / flat_norm
+            
+            modes.append({
+                "frequency": 0.0,
+                "vector": vecs,
+                "label": lbl
+            })
+            
+        return modes
 
     def calculate_scores(self, mode_vector):
         """

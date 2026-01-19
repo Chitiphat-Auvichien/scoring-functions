@@ -25,28 +25,54 @@ Standard visualization of molecular vibrations can be subjective. This tool uses
    ```
    pip install -r requirements.txt
    ```
-
 ## 3. Directory Structure
+The program expects files to be organized systematically in the data/ folder:
 
-* `data/logs/`: **[INPUT]** Place your Gaussian `.log` files here.
+* `data/logs/`: **[INPUT]** Place your Gaussian `.log` or `.out` files here.
 
-* `data/intermediate/`: **[EDITABLE]** Extracted geometry files. **Edit this file to add bonds manually if needed.**
+* `data/EMIT/`: **[INPUT]** (Optional) Place EMIT mode text files here (e.g., benzene_EMIT.txt).
 
-* `data/results/`: **[OUTPUT]** Final CSV score tables.
+* `data/gjf/`: **[INPUT]** (Optional) Place Gaussian input files (.com or .gjf) here for automatic connectivity reading.
+
+* `data/intermediate/`: **[EDITABLE]** The program generates readable text files here for you to verify/add bonds.
+
+* `data/results/`: **[OUTPUT]** Final CSV score tables are saved here.
+
+**File Naming Convention**: For a molecule named benzene, name your files consistently:
+
+* Log: `data/logs/benzene.log`
+
+* EMIT: `data/EMIT/benzene_EMIT.txt`
+
+* GJF: `data/gjf/benzene.com`
 
 ## 4. Usage Guide
+### Step 1: Prepare your files
+Copy your Gaussian log file (and optionally EMIT/GJF files) into the correct subfolders inside `data/`.
 
-1. Place your log file obtained from the Gaussian program (e.g., `h2o.log`) in the `data/logs/` folder.
+### Step 2: Run the Script
+Run the main program by specifying the molecule name (without extension) using the `-m` flag:
 
-2. Run the main script:
+'''python main.py -m benzene'''
 
-   ```
-   python main.py data/logs/h2o.log
-   ```
+### Step 3: Choose Calculation Type
+The program will ask:
 
-3. **Check Bonds:** The script will check for connectivity. If none is found, it will **PAUSE** and ask you to edit the generated text file in `data/intermediate/` to add bonds manually (e.g., `1 2` for a bond between Atom 1 and Atom 2). You can copy them from the Gaussian input file.
+1. **Normal Modes:** Calculates scores for the standard normal modes found in the Gaussian log.
 
-4. **Results:** Once confirmed, scores are saved to `data/results/h2o_scores.csv`.
+2. **EMIT Modes:** Calculates scores for the 3*N* EMIT modes found in the corresponding text file in `data/EMIT/`.
+
+### Step 4: Check Bonds
+The program will generate an intermediate file (e.g., `data/intermediate/benzene_data.txt`).
+
+* **If bonds are found (from GJF or Log):** It proceeds automatically.
+
+* **If NO bonds are found:** It will **PAUSE** and ask you to open the intermediate text file to manually add bonds (e.g., 1 2 for a bond between Atom 1 and Atom 2).
+
+* Save the file and press ENTER to continue.
+
+### Step 5: Get Results
+Results are saved to `data/results/benzene_normal_scores.csv` (or `_EMIT_scores.csv`).
 
 ## 5. Citation
 

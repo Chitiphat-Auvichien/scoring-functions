@@ -71,7 +71,7 @@ The program will generate an intermediate file (e.g., `data/intermediate/benzene
 
 * **If NO bonds are found:** It will **PAUSE** and ask you to open the intermediate text file to manually add bonds (e.g., 1 2 for a bond between Atom 1 and Atom 2 or copy directly from the GJF file).
 
-* Save the file and press ENTER to continue.
+   * Save the file and press ENTER to continue.
 
 ### Step 5: Get Results
 Results are saved to `data/results/benzene_normal_scores.csv` (or `_EMIT_scores.csv`).

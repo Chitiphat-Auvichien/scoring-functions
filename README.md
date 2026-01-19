@@ -46,6 +46,8 @@ The program expects files to be organized systematically in the data/ folder:
 
 * GJF: `data/gjf/benzene.com`
 
+**Note:** This repository is designed to facilitate calculations of scores for vibrational modes from the Gaussian program or for EMIT modes. However, the user can calculate scores for modes of motion obtained from any programs or methods by adapting the output format to suit this program.
+
 ## 4. Usage Guide
 ### Step 1: Prepare your files
 Copy your Gaussian log file (and optionally EMIT/GJF files) into the correct subfolders inside `data/`.

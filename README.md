@@ -53,7 +53,9 @@ Copy your Gaussian log file (and optionally EMIT/GJF files) into the correct sub
 ### Step 2: Run the Script
 Run the main program by specifying the molecule name (without extension) using the `-m` flag:
 
-'''python main.py -m benzene'''
+'''
+python main.py -m benzene
+'''
 
 ### Step 3: Choose Calculation Type
 The program will ask:
@@ -67,7 +69,7 @@ The program will generate an intermediate file (e.g., `data/intermediate/benzene
 
 * **If bonds are found (from GJF or Log):** It proceeds automatically.
 
-* **If NO bonds are found:** It will **PAUSE** and ask you to open the intermediate text file to manually add bonds (e.g., 1 2 for a bond between Atom 1 and Atom 2).
+* **If NO bonds are found:** It will **PAUSE** and ask you to open the intermediate text file to manually add bonds (e.g., 1 2 for a bond between Atom 1 and Atom 2 or copy directly from the GJF file).
 
 * Save the file and press ENTER to continue.
 
@@ -76,4 +78,4 @@ Results are saved to `data/results/benzene_normal_scores.csv` (or `_EMIT_scores.
 
 ## 5. Citation
 
-> Auvichien, C.; et al. Scoring functions for classifying modes of molecular motion: I. Bridging mathematics and chemistry education", *J. Chem. Educ.* **2026**, ...
+> Auvichien, C.; et al. Scoring functions for classifying modes of molecular motion: I. Bridging mathematics and chemistry education" (Citation will be updated after submission to the *J. Chem. Educ.*)

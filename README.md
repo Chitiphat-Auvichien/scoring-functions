@@ -53,9 +53,9 @@ Copy your Gaussian log file (and optionally EMIT/GJF files) into the correct sub
 ### Step 2: Run the Script
 Run the main program by specifying the molecule name (without extension) using the `-m` flag:
 
-'''
+```
 python main.py -m benzene
-'''
+```
 
 ### Step 3: Choose Calculation Type
 The program will ask:

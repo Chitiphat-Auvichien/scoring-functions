@@ -33,9 +33,9 @@ You need **Python 3.0** or higher installed on your computer.
 The program is designed to be simple. You provide a molecule name, and it looks for files in the `data/` folder.
 
 ### Step 1: Prepare Your Files
-1.  Run a frequency calculation in Gaussian (e.g., `freq=hpmodes`).
-2.  Rename your log file to the molecule name (e.g., `benzene.log`).
-3.  Place the file in the **`data/logs/`** folder.
+1.  Run optimization + frequency calculations in Gaussian (e.g., `freq=hpmodes`).
+2.  Rename your files to the molecule name (e.g., `benzene.com` and `benzene.log`). The name must be **consistent**.
+3.  Place the Gaussian input file (`.com` or `.gjf`) in the **`data/gjf/`** folder and the Gaussian output file (`.log`) in the **`data/logs/`** folder.
 
 *(Optional)* If you have EMIT mode files, place them in `data/EMIT/` named `benzene_EMIT.txt`.
 
@@ -51,9 +51,9 @@ The program will ask you to choose a mode:
 * **Type** `2`: To calculate scores for **EMIT Modes** (advanced user option).
 
 ### Step 4: Verify Bonds
-The program generates a text file in `data/intermediate/` containing the molecule's geometry.
-* **If bonds are missing:** The program will pause and ask you to open this text file.
-* **Action:** Open the file, verify the `BONDS` section, and add any missing bonds (e.g., `1 2` for a bond between Atom 1 and Atom 2). Save and close the file, then press **Enter** in the terminal.
+The program generates a text file in `data/intermediate/` containing the molecule's geometry and the mode vectors.
+* **If bonds are missing (e.g., there is no `.gjf` file):** The program will pause and ask you to open this text file.
+* **Action:** Open the file, verify the `BONDS` section, and add any missing bonds (e.g., `1 2` for a bond between Atom 1 and Atom 2 or you can copy the connectivity information directly from the Gaussian input file). Save and close the file, then press **Enter** in the terminal.
 
 ### Step 5: View Results
 The results are saved as a CSV file in `data/results/`. You can open this file in Excel.

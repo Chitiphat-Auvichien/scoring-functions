@@ -10,74 +10,56 @@ This repository contains the Python implementation of the scoring functions desc
 
 Standard visualization of molecular vibrations can be subjective. This tool uses vector mathematics to quantitatively classify normal modes into three categories:
 
-1. **Translational Scores (T):** Motion along principal axes (x, y, z).
+* **Translational Scores (T):** Does the whole molecule move along the X, Y, or Z axis?
+* **Rotational Scores (R):** Does the whole molecule rotate around the X, Y, or Z axis?
+* **Vibrational Scores (V):** Is the motion a bond **Stretching** (high score) or **Bending** (low score)?
 
-2. **Rotational Scores (R):** Rotation around principal axes (x, y, z).
+## 2. Getting Started
 
-3. **Vibrational Scores (V):** Distinguishes **Stretching** (high score) from **Bending** (low score).
+### Prerequisites
+You need **Python 3.0** or higher installed on your computer.
 
-## 2. Installation
+### Installation
+1.  Download this repository to your computer.
+2.  Open your terminal (Command Prompt, PowerShell, or Terminal).
+3.  Navigate to the folder and install the required libraries:
 
-1. Ensure you have **Python 3** or higher installed.
+    ```bash
+    pip install -r requirements.txt
+    ```
+    
+## 3. How to Use
 
-2. Install the required dependencies using the provided file:
+The program is designed to be simple. You provide a molecule name, and it looks for files in the `data/` folder.
 
-   ```
-   pip install -r requirements.txt
-   ```
-## 3. Directory Structure
-The program expects files to be organized systematically in the data/ folder:
+### Step 1: Prepare Your Files
+1.  Run a frequency calculation in Gaussian (e.g., `freq=hpmodes`).
+2.  Rename your log file to the molecule name (e.g., `benzene.log`).
+3.  Place the file in the **`data/logs/`** folder.
 
-* `data/logs/`: **[INPUT]** Place your Gaussian `.log` or `.out` files here.
+*(Optional)* If you have EMIT mode files, place them in `data/EMIT/` named `benzene_EMIT.txt`.
 
-* `data/EMIT/`: **[INPUT]** (Optional) Place EMIT mode text files here (e.g., benzene_EMIT.txt).
+### Step 2: Run the Script
+In your terminal, run the following command (replace `benzene` with your molecule name):
 
-* `data/gjf/`: **[INPUT]** (Optional) Place Gaussian input files (.com or .gjf) here for automatic connectivity reading.
+```bash
+python main.py -m benzene
+```
+### Step 3: Choose Calculation Mode
+The program will ask you to choose a mode:
+* **Type** `1`: To calculate scores for **Normal Modes** (standard Gaussian output).
+* **Type** `2`: To calculate scores for **EMIT Modes** (advanced user option).
 
-* `data/intermediate/`: **[EDITABLE]** The program generates readable text files here for you to verify/add bonds.
+### Step 4: Verify Bonds
+The program generates a text file in `data/intermediate/` containing the molecule's geometry.
+* **If bonds are missing:** The program will pause and ask you to open this text file.
+* **Action:** Open the file, verify the `BONDS` section, and add any missing bonds (e.g., `1 2` for a bond between Atom 1 and Atom 2). Save and close the file, then press **Enter** in the terminal.
 
-* `data/results/`: **[OUTPUT]** Final CSV score tables are saved here.
-
-**File Naming Convention**: For a molecule named benzene, name your files consistently:
-
-* Log: `data/logs/benzene.log`
-
-* EMIT: `data/EMIT/benzene_EMIT.txt`
-
-* GJF: `data/gjf/benzene.com`
+### Step 5: View Results
+The results are saved as a CSV file in `data/results/`. You can open this file in Excel.
 
 **Note:** This repository is designed to facilitate calculations of scores for vibrational modes from the Gaussian program or for EMIT modes. However, the user can calculate scores for modes of motion obtained from any programs or methods by adapting the output format to suit this program.
 
-## 4. Usage Guide
-### Step 1: Prepare your files
-Copy your Gaussian log file (and optionally EMIT/GJF files) into the correct subfolders inside `data/`.
-
-### Step 2: Run the Script
-Run the main program by specifying the molecule name (without extension) using the `-m` flag:
-
-```
-python main.py -m benzene
-```
-
-### Step 3: Choose Calculation Type
-The program will ask:
-
-1. **Normal Modes:** Calculates scores for the standard normal modes found in the Gaussian log.
-
-2. **EMIT Modes:** Calculates scores for the 3*N* EMIT modes found in the corresponding text file in `data/EMIT/`.
-
-### Step 4: Check Bonds
-The program will generate an intermediate file (e.g., `data/intermediate/benzene_data.txt`).
-
-* **If bonds are found (from GJF or Log):** It proceeds automatically.
-
-* **If NO bonds are found:** It will **PAUSE** and ask you to open the intermediate text file to manually add bonds (e.g., 1 2 for a bond between Atom 1 and Atom 2 or copy directly from the GJF file).
-
-   * Save the file and press ENTER to continue.
-
-### Step 5: Get Results
-Results are saved to `data/results/benzene_normal_scores.csv` (or `_EMIT_scores.csv`).
-
 ## 5. Citation
-
+If you use this code in your class or research, please cite:
 > Auvichien, C.; Therdpraisan, N.; Lertmankha, P.; Paiboonvorachat, N. Scoring functions for classifying modes of molecular motion: I. Bridging mathematics and chemistry education" (Citation will be updated after submission to the *J. Chem. Educ.*)

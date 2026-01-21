@@ -1,10 +1,5 @@
 # Scoring Functions for Classifying Modes of Molecular Motion
-
-**Authors:** Chitiphat Auvichien, Nathani Therdpraisan, Phitchanaka Lertmankha, and Nattapong Paiboonvorachat
-
-**Affiliation:** Department of Chemistry, Faculty of Science, Chulalongkorn University
-
-This repository contains the Python implementation of the scoring functions described in our paper submitted to the *Journal of Chemical Education*.
+![Figure abstract](https://github.com/Chitiphat-Auvichien/scoring-functions/blob/main/Abstract.jpg)
 
 ## 1. Overview
 

@@ -1,15 +1,16 @@
 # Scoring Functions for Classifying Modes of Molecular Motion
 ![Figure abstract](https://github.com/Chitiphat-Auvichien/scoring-functions/blob/main/Abstract.jpg)
 
-## 1. Overview
+## Overview
 
+This repository contains the Python implementation of the scoring functions described in our paper submitted to the *Journal of Chemical Education*.
 Standard visualization of molecular vibrations can be subjective. This tool uses vector mathematics to quantitatively classify normal modes into three categories:
 
 * **Translational Scores (T):** Does the whole molecule move along the X, Y, or Z axis?
 * **Rotational Scores (R):** Does the whole molecule rotate around the X, Y, or Z axis?
 * **Vibrational Scores (V):** Is the motion a bond **Stretching** (high score) or **Bending** (low score)?
 
-## 2. Getting Started
+## Getting Started
 
 ### Prerequisites
 You need **Python 3.0** or higher installed on your computer.
@@ -23,7 +24,7 @@ You need **Python 3.0** or higher installed on your computer.
     pip install -r requirements.txt
     ```
     
-## 3. How to Use
+## How to Use
 
 The program is designed to be simple. You provide a molecule name, and it looks for files in the `data/` folder.
 
@@ -55,6 +56,6 @@ The results are saved as a CSV file in `data/results/`. You can open this file i
 
 **Note:** This repository is designed to facilitate calculations of scores for vibrational modes from the Gaussian program or for EMIT modes. However, the user can calculate scores for modes of motion obtained from any programs or methods by adapting the output format to suit this program.
 
-## 5. Citation
+## Citation
 If you use this code in your class or research, please cite:
 > Auvichien, C.; Therdpraisan, N.; Lertmankha, P.; Paiboonvorachat, N. Scoring functions for classifying modes of molecular motion: I. Bridging mathematics and chemistry education" (Citation will be updated after submission to the *J. Chem. Educ.*)

@@ -9,8 +9,8 @@
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
 > with `Σ s_AB==s[V_S]`; range asserts; `Rscore` = consensus form (settled); manuscript Theory section
 > (T/R/V) expanded + `s[R]` eq/`sin φ` discussion. Engine results match tab:water/benzene.
-> **Next, in order:** (1) commit hydride-library + CO₂ input data → (2) CO₂ linear-molecule check (n_R=2)
-> → (3) completeness/fail-loud checks (3N / 3N−6 modes; missing bonds) → (4) pytest golden-reference harness
+> **Next, in order:** ~~(1) commit library+CO₂ data~~ ✓ → ~~(2) CO₂ linear check (n_R=2)~~ ✓ →
+> (3) completeness/fail-loud checks (3N / 3N−6 modes; missing bonds) → (4) pytest golden-reference harness
 > (water/benzene/CO₂ + benzene-EMIT score-level targets) → (5) Phase-0 headless `run_pipeline` refactor →
 > (6) Phase-0 Excel column verification (re-score one library molecule vs `data_score`).
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
@@ -114,17 +114,17 @@ library scores from the Excel file.
       (down-weights non-tangential in-plane motion). I briefly switched to the ω-form (÷`|ω|`) and reverted;
       code is byte-identical to the original. Externals ±1; ranges hold; EMIT 2-vs-9 inversion `|Ry| 0.143
       vs 0.215`. JCC `eq:rscore` rewritten to the separate-normalization form + new `sin φ` paragraph.
-- [x] **Linear-molecule guard:** for a linear molecule every atom is on the axis → `N−N_Q=0` for that axis →
-      `Rscore` returns 0 (effectively `n_R=2`) with no divide-by-zero (the `if n_off>0 else 0.0` guard). Still
-      add a CO₂ regression test (data now in `data/logs/co2_mp2_3-21g.log`).
+- [x] **Linear-molecule guard — VERIFIED on CO₂ (2026-06-30).** `co2_mp2_3-21g` runs cleanly: molecular-axis
+      rotation `s[Rx]=0` (n_R=2), `Ry=Rz=1.000`, no divide-by-zero; 2 stretches `V_S=1.000`, 2 degenerate
+      bends `V_S=0`. Result in `data/results/co2_mp2_3-21g_normal_scores.csv`. Automated regression → harness below.
 - [x] `src/scoring.py`: added `score_bonds()` exposing per-bond `s_AB` (factored `Vscore` loop into
       `_bond_contributions()`); asserts `Σ s_AB == s[V_S]` (tol 1e-6; observed err ≤2.2e-16). Vscore value unchanged.
 - [x] **Range-invariant asserts:** `s[T],s[R] ∈ [−1,1]`; `s[V_S] ∈ [0,1]` — enforced in `calculate_scores`.
 - [ ] **Completeness/basis checks (fail-loud):** EMIT = exactly 3N modes; Gaussian vib = 3N−6 (3N−5
       linear); raise on missing bonds rather than silently scoring wrong `V`. Replace the catch-all
       `except` swallow in `main`/parser with explicit errors.
-- [ ] **Add a linear molecule (e.g. CO₂)** input set to exercise the `n_R=2` / `N_Q` branch (otherwise
-      unexercised by water/benzene).
+- [x] **Add a linear molecule (CO₂)** to exercise the `n_R=2` / `N_Q` branch (otherwise unexercised by
+      water/benzene). Done — `co2_mp2_3-21g` log+com in repo, runs clean (see Linear-molecule guard above).
 - [ ] **Golden-reference regression harness** (`tests/`, pytest): pin water `tab:water` to 3 dp, the
       `Σ s_AB == s[V_S]` identity, score ranges, and frozen score CSVs for water/benzene/CO₂. This is a
       first-class deliverable — not ad-hoc prints. (Score-level only here; labels come later.)

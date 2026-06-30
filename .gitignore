@@ -1,0 +1,12 @@
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Large source spreadsheet (important columns are split into CSV in data/ instead)
+data/*.xlsx
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db

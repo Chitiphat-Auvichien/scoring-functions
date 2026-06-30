@@ -2,6 +2,21 @@ import numpy as np
 import math
 from .utils import atomicMass
 
+# --- Centralized numerical constants (JCC spec conventions) ---
+# Displacement cutoff ε_disp from the spec: atoms with |d_A| <= EPS_DISP are
+# treated as zero-motion (unit(0):=0). Spec value is 1e-8.
+EPS_DISP = 1e-8
+# Vector-normalization guard (unit(0):=0); used when normalizing ideal T/R
+# basis vectors and arbitrary direction vectors.
+EPS_NORM = 1e-9
+# Denominator guard for the V-score ratio (Σ|Δb|² near zero -> score 0).
+EPS_DENOM = 1e-6
+# Relative tolerance for grouping degenerate principal moments of inertia
+# into axis blocks (symmetric/spherical tops). Provisional per the plan.
+DEGEN_TOL = 1e-3
+# Tolerance for the range-invariant score asserts.
+RANGE_TOL = 1e-6
+
 # --- Helper Classes to mimic atom.py structure ---
 
 def sizeVec(v):
@@ -9,7 +24,7 @@ def sizeVec(v):
 
 def normalize(v):
     norm = sizeVec(v)
-    if norm < 1e-9:
+    if norm < EPS_NORM:
         return v
     return v / norm
 
@@ -105,18 +120,18 @@ class ModeScorer:
         # Update bonds after translation (vectors shouldn't change, but good practice)
         self.update_bond_vectors()
 
-    def MIT(self, modes=None, rotate_modes=True):
+    def _build_inertia_tensor(self):
+        """Build the moment-of-inertia tensor at the current geometry.
+
+        Factored out of MIT so the classifier accessors (principal_axes /
+        axis_blocks) share one implementation instead of recomputing it.
         """
-        Rotates the molecule and displacement vectors into the basis of principal axes of rotation.
-        Integrated from atom.py.
-        """
-        # 1. Compute Moment of Inertia Tensor
         XX = YY = ZZ = 0.0
         XY = XZ = YZ = 0.0
         for atom in self.atoms:
             rMass = atom.rMass
             x, y, z = atom.x(), atom.y(), atom.z()
-            
+
             XX += rMass * (y**2 + z**2)
             YY += rMass * (x**2 + z**2)
             ZZ += rMass * (x**2 + y**2)
@@ -124,11 +139,64 @@ class ModeScorer:
             XZ -= rMass * x * z
             YZ -= rMass * y * z
 
-        tensor = np.array([
+        return np.array([
             [XX, XY, XZ],
             [XY, YY, YZ],
             [XZ, YZ, ZZ]
         ])
+
+    def principal_axes(self):
+        """Principal moments and axes of the inertia tensor at the current geometry.
+
+        Returns
+        -------
+        moments : np.ndarray, shape (3,)
+            Principal moments of inertia in ascending order (eigenvalues).
+        axes : np.ndarray, shape (3, 3)
+            Principal-axis directions as columns (eigenvectors of the tensor).
+
+        Note: moments are rotation-invariant, so this is consistent whether
+        called before or after MIT(); after MIT the tensor is diagonal and the
+        axes reduce to (a permutation/sign of) the identity.
+        """
+        tensor = self._build_inertia_tensor()
+        moments, axes = np.linalg.eigh(tensor)
+        return moments, axes
+
+    def axis_blocks(self, rel_tol=DEGEN_TOL):
+        """Group principal axes into degeneracy blocks by their moments.
+
+        Axes whose principal moments are equal within a relative tolerance are
+        collected into the same block (symmetric/spherical tops), where per-axis
+        rotation assignment is ill-defined and the classifier must assign the
+        block collectively.
+
+        Returns a list of blocks, each a list of axis indices (0,1,2) referring
+        to the ascending-moment ordering of principal_axes().
+        """
+        moments, _ = self.principal_axes()
+        order = list(np.argsort(moments))
+        scale = max(float(np.max(np.abs(moments))), 1e-12)
+        blocks = []
+        current = [order[0]]
+        for k in range(1, len(order)):
+            prev = moments[order[k - 1]]
+            cur = moments[order[k]]
+            if abs(cur - prev) <= rel_tol * scale:
+                current.append(order[k])
+            else:
+                blocks.append(current)
+                current = [order[k]]
+        blocks.append(current)
+        return blocks
+
+    def MIT(self, modes=None, rotate_modes=True):
+        """
+        Rotates the molecule and displacement vectors into the basis of principal axes of rotation.
+        Integrated from atom.py.
+        """
+        # 1. Compute Moment of Inertia Tensor
+        tensor = self._build_inertia_tensor()
 
         # 2. Diagonalize (Principal Axes)
         # eigh returns eigenvalues and eigenvectors (columns of rot)
@@ -280,11 +348,25 @@ class ModeScorer:
             self.atoms[i].dispVec = mode_vector[i]
             self.atoms[i].dispLength = sizeVec(mode_vector[i])
 
-        return {
+        scores = {
             "T": self.Tscore(),
             "R": self.Rscore(),
             "V": self.Vscore()
         }
+        self._assert_score_ranges(scores)
+        return scores
+
+    @staticmethod
+    def _assert_score_ranges(scores):
+        """Range-invariant guards from the spec: s[T],s[R] in [-1,1]; s[V_S] in [0,1]."""
+        for axis, val in scores["T"].items():
+            assert -1.0 - RANGE_TOL <= val <= 1.0 + RANGE_TOL, \
+                f"s[T_{axis}]={val} out of [-1,1]"
+        for axis, val in scores["R"].items():
+            assert -1.0 - RANGE_TOL <= val <= 1.0 + RANGE_TOL, \
+                f"s[R_{axis}]={val} out of [-1,1]"
+        vs = scores["V"]
+        assert -RANGE_TOL <= vs <= 1.0 + RANGE_TOL, f"s[V_S]={vs} out of [0,1]"
 
     def Tscore(self):
         """Calculates Translational Scores (Tx, Ty, Tz). Adapted from atom.py."""
@@ -292,7 +374,7 @@ class ModeScorer:
         Tx, Ty, Tz = 0.0, 0.0, 0.0
         
         for atom in self.atoms:
-            if atom.dispLength > 1.0E-6:
+            if atom.dispLength > EPS_DISP:
                 Tx += atom.dispVec[0] / atom.dispLength
                 Ty += atom.dispVec[1] / atom.dispLength
                 Tz += atom.dispVec[2] / atom.dispLength
@@ -347,16 +429,23 @@ class ModeScorer:
             'z': Rz * (1.0/float(Nz)) if Nz > 0 else 0.0
         }
 
-    def Vscore(self):
-        """Calculates Vibrational Score (V). Adapted from atom.py."""
-        modeScr = 0.0
-        denom = 0.0
-        
+    def _bond_contributions(self):
+        """Per-bond pieces of the V-score (eq:vscore numerator and denominator).
+
+        Returns two parallel lists over self.bList:
+          terms   : |(d_B - d_A) . b_AB| * |d_B - d_A| / |b_AB|
+                    (== |Δb_AB|² * |unit(Δb_AB) · b̂_AB|, the numerator term)
+          sqdisps : |d_B - d_A|²                         (the denominator term)
+        Both Vscore() and score_bonds() build on this so the per-bond s_AB
+        sum back to s[V_S] exactly.
+        """
+        terms = []
+        sqdisps = []
         for b in range(self.nBond):
             idx1, idx2 = self.bList[b]
             atom1 = self.atoms[idx1]
             atom2 = self.atoms[idx2]
-            
+
             # Current bond vector
             bVec_curr = self.bVec[b]
             bLength = sizeVec(bVec_curr)
@@ -367,11 +456,41 @@ class ModeScorer:
 
             # | (d2-d1) . bondVec | * |d2-d1| / |bondVec|
             dot_val = np.dot(delDisp, bVec_curr)
-            
-            term = abs(dot_val) * delDispLength / bLength
-            modeScr += term
-            denom += delDispLength**2
-        
-        if denom > 1.0E-6:
+
+            terms.append(abs(dot_val) * delDispLength / bLength)
+            sqdisps.append(delDispLength**2)
+        return terms, sqdisps
+
+    def Vscore(self):
+        """Calculates Vibrational Score (V). Adapted from atom.py."""
+        terms, sqdisps = self._bond_contributions()
+        modeScr = sum(terms)
+        denom = sum(sqdisps)
+
+        if denom > EPS_DENOM:
             return modeScr / denom
         return 0.0
+
+    def score_bonds(self):
+        """Per-bond stretch contribution s_AB (eq:bondscore), summing to s[V_S].
+
+        s_AB = |Δb_AB|² * |unit(Δb_AB) · b̂_AB| / Σ_bonds |Δb|²  (global denominator)
+
+        Returns a list of dicts {'i', 'j', 's_AB'} aligned with self.bList.
+        Asserts Σ s_AB == s[V_S] to 1e-6. Call calculate_scores()/load
+        displacements first so the atom dispVecs are populated.
+        """
+        terms, sqdisps = self._bond_contributions()
+        denom = sum(sqdisps)
+
+        bonds = []
+        for b in range(self.nBond):
+            idx1, idx2 = self.bList[b]
+            s_AB = terms[b] / denom if denom > EPS_DENOM else 0.0
+            bonds.append({"i": idx1, "j": idx2, "s_AB": s_AB})
+
+        total = sum(bd["s_AB"] for bd in bonds)
+        vs = self.Vscore()
+        assert abs(total - vs) <= 1e-6, \
+            f"Sum of per-bond s_AB ({total}) != s[V_S] ({vs})"
+        return bonds

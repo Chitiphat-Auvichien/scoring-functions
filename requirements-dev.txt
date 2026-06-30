@@ -1,0 +1,4 @@
+# Development / testing dependencies (in addition to requirements.txt).
+# Run the golden-reference suite with:  py -m pytest tests/
+# (tests also run standalone without pytest:  py tests/test_scores.py)
+pytest

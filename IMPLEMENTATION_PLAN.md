@@ -39,11 +39,17 @@ library scores from the Excel file.
   element) → Step3 **clean iff `|score|≥τ_pure` AND `s[V_S]≤τ_bend`** (directionally aligned AND
   internally rigid), else `mixed_external` (flag + dominant slot + `s[V_S]`) →
   Step4 `s[V_S]≥τ_stretch` stretching / `≤τ_bend` bending / else mixed. `n_T=3`, `n_R=2 if linear else 3`.
-  **Two-gate purity (DECIDED 2026-06-30):** `s[T]/s[R]` are direction-only and read ±1 even for
-  amplitude-varying (impure) modes; `s[V_S]` is the reference-free witness of internal character.
-  Verified on benzene EMIT — 36 (A₂ᵤ, Tz=1, `s[V_S]=0`) = CLEAN; degenerate 34/35 (E₁ᵤ, Tx/Ty=1,
-  `s[V_S]=0.667/0.577`) = flagged. No new constant (reuses τ_pure, τ_bend); for normal modes the exact
-  externals have `s[V_S]=0` so the second gate never fires (completeness intact).
+  **Two-gate purity (refined 2026-06-30):** `s[T]/s[R]` are direction-only (read ±1 for amplitude-varying
+  impure modes); the second gate uses `s[V_S]` to catch **stretching-type** external impurity. Benzene
+  EMIT: 34/35 (E₁ᵤ, Tx/Ty=1, `s[V_S]=0.667/0.577`) correctly flagged. **KNOWN BLIND SPOT:** EMIT 36 (A₂ᵤ,
+  Tz=1, `s[V_S]=0`) is out-of-plane **bending**-mixed (amplitude variation ⊥ the in-plane bonds → bending,
+  no stretching), yet its score signature {Tz=1, rest 0, V_S=0} is **identical to a pure z-translation** —
+  {s[T],s[R],s[V_S]} cannot distinguish them (no bending observable). The flag detects stretching-type
+  impurity only; bending-type is invisible (projection resolves it). Reuses τ_pure/τ_bend; for exact
+  normal-mode externals (genuinely rigid, `s[V_S]=0`) the gate never fires (completeness intact).
+  **OPEN DECISION (X vs Y):** (X) accept as honest limitation — recommended, spine-consistent; or
+  (Y) add a reference-free rigid-body residual to catch it — but that is projection onto the T/R subspace
+  and risks the substitutability objection.
 - Conventions: `ε_disp=1e-8`; `unit(0):=0`; degeneracy tolerance groups inertia axes (by `λ_i`) & modes
   (by frequency/eigenvalue) — **fix the numeric tolerance** (provisional `1e-3` relative; confirm).
   `τ_pure` is taken from **calibration**, NOT hardcoded (PDF example uses 0.95).
@@ -105,12 +111,14 @@ library scores from the Excel file.
 - [ ] Step 2 global assignment via `linear_sum_assignment` **maximizing `Σ|score|`** (negate / `maximize=True`),
       with a **concrete, documented block-constrained mechanism** so a degenerate axis-block binds a
       degenerate mode-block collectively (plain 1-to-1 will mis-assign Tₐ/Oₕ tops & degenerate pairs).
-- [ ] **Step 3 two-gate purity (DECIDED — see Authoritative spec):** clean external iff
-      `|s_slot|≥τ_pure` AND `s[V_S]≤τ_bend`; else `mixed_external` (flag + dominant slot + `s[V_S]`).
-      Confirmed against the real EMIT CSV: EMIT 36 (A₂ᵤ, Tz=1, `s[V_S]=0`) → CLEAN; degenerate 34/35
-      (E₁ᵤ, Tx/Ty=1, `s[V_S]=0.667/0.577`) → flagged. Reuses existing constants; second gate never fires
-      for exact normal-mode externals. **Manuscript refinement needed (B8.4):** the claim "EMIT 34–36
-      flagged" → "34/35 flagged, 36 clean" (the trailing `0` in `0.667/0.577/0` is 36 being clean).
+- [ ] **Step 3 two-gate purity (see Authoritative spec):** clean external iff `|s_slot|≥τ_pure` AND
+      `s[V_S]≤τ_bend`; else `mixed_external` (flag + dominant slot + `s[V_S]`). Reuses existing constants.
+      Correctly flags 34/35 (stretching-mixed). **BLIND SPOT — EMIT 36** (A₂ᵤ out-of-plane bending,
+      `s[V_S]=0`) has a score signature identical to a pure z-translation, so the scores cannot flag it
+      (no bending observable). **Manuscript refinement (B8.4):** "EMIT 34–36 flagged" → "34/35 flagged
+      (stretching); 36 is the honest limit — its out-of-plane bending residual is invisible to the
+      reference-free scores and resolved only by projection." **Pending X-vs-Y decision** (accept limit
+      vs add rigid-body residual).
 - [ ] Step 4 internal split (stretching/bending/mixed) + attach `s_AB`.
 - [ ] Output `data/results/<mol>_classified.csv` (scores + label + annotations + `s_AB`).
 - [ ] Figure `fig:benzene`: `s[V_S]` vs freq, and score vs projected NM contribution (highlight EMIT 2/9,
@@ -197,8 +205,8 @@ library scores from the Excel file.
 - [ ] V-score uses the **initial** bond direction `b̂^{i}`.
 - [ ] Degeneracy tolerance numeric value (axes by `λ_i`, modes by freq) — fix and document.
 - [ ] Gramicidin bond-connectivity criterion (`TODO-DATA`): use `1grm.com` topology.
-- [x] Flag-criterion for `s[T]=1` + high-`s[V_S]` modes — RESOLVED: two-gate purity (`|s|≥τ_pure` AND `s[V_S]≤τ_bend`).
-- [ ] Verify in Phase 2: projection "≈77% translational for 34–36" likely describes the E₁ᵤ pair, not 36 (`s[V_S]=0` ⇒ ~100% translational).
+- [~] Flag-criterion: two-gate purity (`|s|≥τ_pure` AND `s[V_S]≤τ_bend`) flags stretching-type impurity (34/35). **OPEN X-vs-Y**: EMIT 36 out-of-plane bending is a blind spot (score signature ≡ clean translation); accept as honest limit (X) or add reference-free rigid-body residual (Y, spine risk).
+- [ ] Verify in Phase 2 the per-mode projected translational % for 34/35/36 (36 is NOT ~100% — it has out-of-plane bending despite `s[V_S]=0`; do not assume the "77%" applies uniformly).
 
 ---
 

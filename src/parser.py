@@ -18,8 +18,17 @@ class GaussianParser:
         self._parse_standard_orientation()
         if parse_modes:
             self._parse_modes()
+            # Fail loud: vibrational modes must number 3N-6 (nonlinear) or 3N-5 (linear).
+            nm = len(self.modes)
+            expected = {3 * self.natoms - 6, 3 * self.natoms - 5}
+            if nm not in expected:
+                raise ValueError(
+                    f"Parsed {nm} vibrational modes for {self.natoms} atoms "
+                    f"({os.path.basename(self.filepath)}); expected 3N-6="
+                    f"{3*self.natoms-6} (nonlinear) or 3N-5={3*self.natoms-5} (linear). "
+                    "The frequency block was likely mis-parsed.")
         self._parse_connectivity()
-        
+
         return {
             "atoms": self.atom_symbols,
             "coords": np.array(self.coordinates),
@@ -288,8 +297,15 @@ class EMITParser:
                     "is_emit": True
                 })
         else:
-            print(f"Error parsing EMIT file: Expected {expected_size} values, found {current_size}.")
-            
+            raise ValueError(
+                f"Error parsing EMIT file {os.path.basename(self.filepath)}: expected "
+                f"{expected_size} matrix values (3N x 3N for N={self.natoms}), found {current_size}.")
+
+        # Fail loud: EMIT modes must number exactly 3N.
+        if len(self.modes) != 3 * self.natoms:
+            raise ValueError(
+                f"Parsed {len(self.modes)} EMIT modes for {self.natoms} atoms; "
+                f"expected exactly 3N={3*self.natoms}.")
         return self.modes
 
 class IntermediateIO:

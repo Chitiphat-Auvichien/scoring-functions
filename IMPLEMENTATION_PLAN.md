@@ -9,8 +9,8 @@
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
 > with `Σ s_AB==s[V_S]`; range asserts; `Rscore` = consensus form (settled); manuscript Theory section
 > (T/R/V) expanded + `s[R]` eq/`sin φ` discussion. Engine results match tab:water/benzene.
-> **Next, in order:** ~~(1) commit library+CO₂ data~~ ✓ → ~~(2) CO₂ linear check (n_R=2)~~ ✓ →
-> (3) completeness/fail-loud checks (3N / 3N−6 modes; missing bonds) → (4) pytest golden-reference harness
+> **Next, in order:** ~~(1) commit library+CO₂ data~~ ✓ → ~~(2) CO₂ linear check~~ ✓ →
+> ~~(3) mode-count fail-loud checks~~ ✓ → (4) pytest golden-reference harness
 > (water/benzene/CO₂ + benzene-EMIT score-level targets) → (5) Phase-0 headless `run_pipeline` refactor →
 > (6) Phase-0 Excel column verification (re-score one library molecule vs `data_score`).
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
@@ -120,9 +120,11 @@ library scores from the Excel file.
 - [x] `src/scoring.py`: added `score_bonds()` exposing per-bond `s_AB` (factored `Vscore` loop into
       `_bond_contributions()`); asserts `Σ s_AB == s[V_S]` (tol 1e-6; observed err ≤2.2e-16). Vscore value unchanged.
 - [x] **Range-invariant asserts:** `s[T],s[R] ∈ [−1,1]`; `s[V_S] ∈ [0,1]` — enforced in `calculate_scores`.
-- [ ] **Completeness/basis checks (fail-loud):** EMIT = exactly 3N modes; Gaussian vib = 3N−6 (3N−5
-      linear); raise on missing bonds rather than silently scoring wrong `V`. Replace the catch-all
-      `except` swallow in `main`/parser with explicit errors.
+- [x] **Mode-count checks (fail-loud) — DONE 2026-06-30.** `GaussianParser.parse` raises unless normal
+      modes = 3N−6 or 3N−5; `EMITParser.parse` raises unless EMIT modes = 3N (and on malformed matrix size).
+      Verified non-breaking on water/benzene/CO₂ (normal+EMIT), results unchanged.
+- [ ] **Remaining fail-loud (deferred to headless refactor):** raise on missing bonds rather than silently
+      scoring wrong `V`; replace the catch-all `except` swallow in `main` with explicit errors.
 - [x] **Add a linear molecule (CO₂)** to exercise the `n_R=2` / `N_Q` branch (otherwise unexercised by
       water/benzene). Done — `co2_mp2_3-21g` log+com in repo, runs clean (see Linear-molecule guard above).
 - [ ] **Golden-reference regression harness** (`tests/`, pytest): pin water `tab:water` to 3 dp, the

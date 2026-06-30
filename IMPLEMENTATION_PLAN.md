@@ -26,10 +26,12 @@ library scores from the Excel file.
 ### Authoritative spec (from the `.tex`; algorithm = PDF §B6.2 `classify_all_modes`)
 - `s[T_Q] = (1/N) Σ unit(d_A)·Q̂`, atoms with `|d_A|>ε_disp`; **divisor is N** (zero-motion atoms stay in
   the count and dilute via `unit(0):=0`); range `[-1,1]`.
-- `s[R_Q] = 1/(N−N_Q) Σ unit(ω_Q^A)·Q̂`, `ω_Q^A = ((r_A−(r_A·Q̂)Q̂)×d_A)/|r_A−(r_A·Q̂)Q̂|²`;
-  `N_Q` = **on-axis atoms only** (excluded); `ε_disp` **also gates `|ω_A|`** (`unit(0):=0`); off-axis
-  zero-motion atoms remain in `N−N_Q` and dilute. Note `unit(ω)` discards the `|r_perp|²` denominator
-  (inert under normalization) → `s[R]` is the direction of `r_perp×d`.
+- `s[R_Q]` — **CORRECT (code + JCE) definition = consensus form:**
+  `s[R_Q] = (1/(N−N_Q)) Σ unit(d_A)·unit(Q̂×r_A) = (1/(N−N_Q)) Σ (r⊥×d)_Q/(|r⊥|·|d|)` — the clean analog
+  of `s[T]` (unit displacement projected onto the ideal tangential direction). `N_Q` = on-axis atoms only.
+  ⚠️ The JCC `.tex` currently prints the **WRONG** ω-form `unit(ω)·Q̂ = (r⊥×d)_Q/|r⊥×d|` (eq:omega/eq:rscore),
+  which differs by a factor `sin φ` for non-tangential (vibrational) motion and contradicts tab:water.
+  **JCC equation to be corrected to match the code/JCE (lead-author task); the code is right.**
 - `s[V_S] = (1/Σ|Δb|²) Σ |Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}|`, `Δb_AB=d_B−d_A`; **`b̂^{i}` = the INITIAL
   (equilibrium-geometry) bond direction**, not the perturbed one; range `[0,1]`. Per-bond
   `s_AB = |Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}| / Σ_bonds|Δb|²` (global denominator) with `s[V_S]=Σ s_AB`.
@@ -82,18 +84,26 @@ library scores from the Excel file.
 - [x] **Library geometries: RESOLVED (2026-06-30).** Not a blocker — the author will drop the relevant
       `.log`/`.gjf` files into `data/logs/` and `data/gjf/` on request when the SI-geometry export step
       (Phase 5) needs them. Ask for them at that point.
-- [ ] **Centralize constants** (`ε_disp=1e-8`, degeneracy `tol`) in a `Thresholds` dataclass; remove the
-      hard-coded `1e-6`/`1e-9` scattered in `scoring.py`.
-- [ ] **Expose inertia data:** add `principal_axes()` / `axis_blocks()` accessors to `scoring.py` so the
-      classifier reads principal moments + axis-degeneracy grouping instead of recomputing the tensor.
+- [x] **Centralize constants** (`ε_disp=1e-8`, degeneracy `tol`) — done as named module-level constants in
+      `scoring.py` (`EPS_DISP=1e-8`, `EPS_NORM=1e-9`, `EPS_DENOM=1e-6`, `DEGEN_TOL=1e-3`, `RANGE_TOL=1e-6`);
+      removed the scattered `1e-6`/`1e-9`. Tscore cutoff moved 1e-6→1e-8 (water/benzene outputs unchanged).
+      Rscore left untouched. (dataclass deferred to the classifier's `Thresholds`.)
+- [x] **Expose inertia data:** added `principal_axes()` / `axis_blocks()` accessors to `scoring.py`
+      (share `_build_inertia_tensor()` with `MIT`); classifier reads moments + axis-degeneracy blocks.
 
 ## Phase 1 — Score engine + score-level regression  (data: water, benzene, CO₂)  — **DO NOW**
-- [ ] **`Rscore` fix FIRST:** current code uses a sin-of-angle form `(r⊥×d)/(|r⊥||d|)`; replace with the
-      `unit(ω)·Q̂` form of eq:rscore (with `N_Q` exclusion). Gate on a **formula-auditor** confirmation.
-      Add a **linear-molecule guard** (`N−N_Q=0` on the molecular axis → drop that axis, `n_R=2`).
-- [ ] `src/scoring.py`: add `score_bonds()` exposing per-bond `s_AB` (factor existing `Vscore` loop);
-      assert `Σ s_AB == s[V_S]` (tol 1e-6).
-- [ ] **Range-invariant asserts:** `s[T],s[R] ∈ [−1,1]`; `s[V_S] ∈ [0,1]`.
+- [x] **`Rscore` is CORRECT — do NOT change the formula (RESOLVED 2026-06-30).** formula-auditor confirmed
+      the code computes `s[R_Q] = (1/(N−N_Q)) Σ unit(d_A)·unit(Q̂×r_A) = (r⊥×d)_Q/(|r⊥||d|)` — the
+      consensus form, the clean analog of `s[T]`, exactly the **JCE-manuscript** definition, and it matches
+      `tab:water` to 3 dp. The divergence is in the **JCC** `.tex` `eq:omega`/`eq:rscore` (the ω-form),
+      which is the transcription error. → Deliverable moved to a manuscript task (lead-author): correct
+      JCC `eq:omega`/`eq:rscore` to the JCE/consensus form. CODE UNCHANGED.
+- [ ] **Linear-molecule guard (still needed):** `Rscore` currently computes all three axes; for a linear
+      molecule `N−N_Q=0` on the molecular axis → divide-by-zero. Add the guard to drop that axis (`n_R=2`).
+      (Independent of the form question above.)
+- [x] `src/scoring.py`: added `score_bonds()` exposing per-bond `s_AB` (factored `Vscore` loop into
+      `_bond_contributions()`); asserts `Σ s_AB == s[V_S]` (tol 1e-6; observed err ≤2.2e-16). Vscore value unchanged.
+- [x] **Range-invariant asserts:** `s[T],s[R] ∈ [−1,1]`; `s[V_S] ∈ [0,1]` — enforced in `calculate_scores`.
 - [ ] **Completeness/basis checks (fail-loud):** EMIT = exactly 3N modes; Gaussian vib = 3N−6 (3N−5
       linear); raise on missing bonds rather than silently scoring wrong `V`. Replace the catch-all
       `except` swallow in `main`/parser with explicit errors.
@@ -217,6 +227,10 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-06-30 — s[R] definition resolved.** formula-auditor + author confirmed the CODE is correct (the
+  consensus form `unit(d)·unit(Q̂×r)`, = the JCE-manuscript definition, matches tab:water). The JCC `.tex`
+  `eq:omega`/`eq:rscore` (ω-form) is the transcription error and will be corrected to match (lead-author);
+  **no code change** to the Rscore formula. Retained only the linear-molecule divide-by-zero guard as a code task.
 - **2026-06-30 — flag-criterion + geometry decisions.** Resolved the two open questions from the review:
   (1) library geometries are not a blocker (author supplies on request at the Phase-5 SI step);
   (2) Step-3 purity is now **two-gate** (`|s_slot|≥τ_pure` AND `s[V_S]≤τ_bend`), grounded in the real

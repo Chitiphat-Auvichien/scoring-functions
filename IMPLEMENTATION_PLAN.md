@@ -26,16 +26,18 @@ library scores from the Excel file.
 ### Authoritative spec (from the `.tex`; algorithm = PDF §B6.2 `classify_all_modes`)
 - `s[T_Q] = (1/N) Σ unit(d_A)·Q̂`, atoms with `|d_A|>ε_disp`; **divisor is N** (zero-motion atoms stay in
   the count and dilute via `unit(0):=0`); range `[-1,1]`.
-- `s[R_Q]` — **CANONICAL = ω-form (JCE eq:rscore), RESOLVED 2026-06-30:**
-  `ω_Q^A = {r^A−(r^A·Q̂)Q̂}×d^A`; `s[R_Q] = (1/(N−N_Q)) Σ unit(ω_Q^A)·Q̂ = (1/(N−N_Q)) Σ (r⊥×d)_Q/|r⊥×d|`.
-  `N_Q` = on-axis atoms only. **Rationale (author):** rotation about Q = motion ⊥ r⊥ circulating about Q;
-  the cross product `r⊥×d` annihilates the radial (breathing) part of `d`, which is *correct* — radial
-  motion is stretching, owned by `s[V_S]`, not `s[R]`. A breathing+swirl mode (high `s[V_S]`) is caught by
-  the two-gate purity, so it isn't misclassified. The earlier `scoring.py` used a `|r⊥|·|d|` normalization
-  (consensus form) that diluted `s[R]` with radial motion — that was a code bug; **fixed 2026-06-30** to the
-  ω-form. JCC `eq:omega`/`eq:rscore` now match JCE (verbatim). tab:water R cross-terms regenerated
-  (Tx→Rz `0.049→0.333`; ν_as→Rz `−0.295→+0.333`); benzene EMIT 9 `|s[Ry]| 0.215→0.233`; externals, `s[V_S]`,
-  and the EMIT 2-vs-9 inversion all preserved. (Note: T/R cross-term symmetry no longer holds — discussion sentence TBD.)
+- `s[R_Q]` — **CANONICAL = consensus form (FINAL 2026-06-30):**
+  `s[R_Q] = (1/(N−N_Q)) Σ (unit(r⊥^A)×unit(d^A))·Q̂ = (1/(N−N_Q)) Σ (r⊥×d)_Q/(|r⊥|·|d|)`, with
+  `r⊥^A = r^A−(r^A·Q̂)Q̂`. `N_Q` = on-axis atoms only. **Rationale (author):** normalize `r⊥` and `d`
+  SEPARATELY, then cross — the unit-vector cross product has magnitude `sin φ` (φ = angle between r⊥ and d),
+  which is 1 only for purely tangential (ideal-rotation) motion and `<1` as `d` tilts toward radial. Retaining
+  `sin φ` (i.e. dividing by `|r⊥||d|`, NOT by `|ω|=|r⊥×d|`) makes `s[R]` measure *how much* of the motion is
+  rotation about Q, down-weighting non-tangential in-plane (stretching-like) motion. This is the original
+  `scoring.py` form and matches tab:water. **History:** I briefly switched the code to the ω-form
+  (÷`|ω|`, which discards `sin φ`) — that was WRONG and is reverted; code restored byte-identical to original.
+  JCC `eq:rscore` rewritten to the separate-normalization form + a new paragraph on the `sin φ` factor (the
+  point JCE left implicit). tab:water unchanged from original (Tx→Rz `0.049`; ν_as→Rz `−0.295`); EMIT 9
+  `|s[Ry]|=0.215`.
 - `s[V_S] = (1/Σ|Δb|²) Σ |Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}|`, `Δb_AB=d_B−d_A`; **`b̂^{i}` = the INITIAL
   (equilibrium-geometry) bond direction**, not the perturbed one; range `[0,1]`. Per-bond
   `s_AB = |Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}| / Σ_bonds|Δb|²` (global denominator) with `s[V_S]=Σ s_AB`.
@@ -96,14 +98,14 @@ library scores from the Excel file.
       (share `_build_inertia_tensor()` with `MIT`); classifier reads moments + axis-degeneracy blocks.
 
 ## Phase 1 — Score engine + score-level regression  (data: water, benzene, CO₂)  — **DO NOW**
-- [x] **`Rscore` rewritten to the ω-form (DONE 2026-06-30).** Earlier reasoning was inverted: the prior code
-      used a `|r⊥|·|d|` normalization (consensus form) that diluted `s[R]` with radial/breathing motion — a
-      bug. Canonical = JCE ω-form `s[R_Q]=(1/(N−N_Q)) Σ unit(r⊥×d)·Q̂`. `Rscore` now computes the full
-      per-axis cross product and normalizes by `|ω|`. Externals ±1; ranges hold; benzene EMIT 2-vs-9
-      inversion preserved (|Ry| 0.143 vs 0.233). JCC `eq:rscore` and tab:water updated to match.
-- [x] **Linear-molecule guard — included in the rewrite:** for a linear molecule every atom is on the axis
-      → `N−N_Q=0` for that axis → `Rscore` returns 0 (effectively `n_R=2`) with no divide-by-zero. Still add
-      a CO₂ regression test (data now in `data/logs/co2_mp2_3-21g.log`).
+- [x] **`Rscore` = consensus form, confirmed/kept (FINAL 2026-06-30).** `s[R_Q]=(1/(N−N_Q)) Σ
+      (unit(r⊥)×unit(d))·Q̂ = (r⊥×d)_Q/(|r⊥||d|)` — separate `r⊥`/`d` normalization retains `sin φ`
+      (down-weights non-tangential in-plane motion). I briefly switched to the ω-form (÷`|ω|`) and reverted;
+      code is byte-identical to the original. Externals ±1; ranges hold; EMIT 2-vs-9 inversion `|Ry| 0.143
+      vs 0.215`. JCC `eq:rscore` rewritten to the separate-normalization form + new `sin φ` paragraph.
+- [x] **Linear-molecule guard:** for a linear molecule every atom is on the axis → `N−N_Q=0` for that axis →
+      `Rscore` returns 0 (effectively `n_R=2`) with no divide-by-zero (the `if n_off>0 else 0.0` guard). Still
+      add a CO₂ regression test (data now in `data/logs/co2_mp2_3-21g.log`).
 - [x] `src/scoring.py`: added `score_bonds()` exposing per-bond `s_AB` (factored `Vscore` loop into
       `_bond_contributions()`); asserts `Σ s_AB == s[V_S]` (tol 1e-6; observed err ≤2.2e-16). Vscore value unchanged.
 - [x] **Range-invariant asserts:** `s[T],s[R] ∈ [−1,1]`; `s[V_S] ∈ [0,1]` — enforced in `calculate_scores`.
@@ -230,6 +232,13 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-06-30 (final) — s[R] = consensus form is canonical (ω-form reverted).** Author's settled
+  reasoning: normalize `r⊥` and `d` separately and cross them; the unit-vector cross product has magnitude
+  `sin φ`, which must be retained (÷`|r⊥||d|`, not ÷`|ω|`) so the score reflects *how tangential* the motion
+  is. The ω-form (÷`|ω|`) discards `sin φ` and was wrong. Reverted `Rscore` to the original (byte-identical
+  results: tab:water Tx→Rz `0.049`, ν_as→Rz `−0.295`; EMIT 9 `|s[Ry]|=0.215`). Rewrote JCC `eq:rscore` to the
+  separate-normalization form and ADDED a `sin φ` discussion paragraph (the point left implicit in JCE).
+  Supersedes the "(late)" entry below.
 - **2026-06-30 (late) — s[R] = ω-form is canonical; code fixed.** After discussion, the author confirmed
   the JCE ω-form `unit(r⊥×d)·Q̂` is canonical: rotation = circulation ⊥ r⊥; the cross product rightly
   annihilates radial (breathing) motion, which `s[V_S]` owns; breathing+swirl modes are caught by the

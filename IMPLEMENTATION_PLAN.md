@@ -47,9 +47,14 @@ library scores from the Excel file.
   {s[T],s[R],s[V_S]} cannot distinguish them (no bending observable). The flag detects stretching-type
   impurity only; bending-type is invisible (projection resolves it). Reuses τ_pure/τ_bend; for exact
   normal-mode externals (genuinely rigid, `s[V_S]=0`) the gate never fires (completeness intact).
-  **OPEN DECISION (X vs Y):** (X) accept as honest limitation — recommended, spine-consistent; or
-  (Y) add a reference-free rigid-body residual to catch it — but that is projection onto the T/R subspace
-  and risks the substitutability objection.
+  **DECISION (LOCKED 2026-06-30): X — honest limitation, no new machinery.** Framing: the scores measure
+  **directional/geometrical** character; 34/35/36 genuinely have large translational character (every
+  displacement vector aligns perfectly with a Cartesian axis, `s[T]=1`) — only their MAGNITUDES differ.
+  Equal magnitudes ⇒ pure translation; magnitude variation encodes the internal residual (stretching for
+  34/35 → caught by `s[V_S]`; out-of-plane bending for 36 → invisible). The score is "partially true" — it
+  correctly reports 36's dominant translational character; the magnitude-encoded bending residual is left
+  to projection. 36 = the worked example of the score/projection boundary. (Y, a rigid-body residual, was
+  rejected: it is projection onto the T/R subspace and reopens the substitutability objection.)
 - Conventions: `ε_disp=1e-8`; `unit(0):=0`; degeneracy tolerance groups inertia axes (by `λ_i`) & modes
   (by frequency/eigenvalue) — **fix the numeric tolerance** (provisional `1e-3` relative; confirm).
   `τ_pure` is taken from **calibration**, NOT hardcoded (PDF example uses 0.95).
@@ -117,8 +122,9 @@ library scores from the Excel file.
       `s[V_S]=0`) has a score signature identical to a pure z-translation, so the scores cannot flag it
       (no bending observable). **Manuscript refinement (B8.4):** "EMIT 34–36 flagged" → "34/35 flagged
       (stretching); 36 is the honest limit — its out-of-plane bending residual is invisible to the
-      reference-free scores and resolved only by projection." **Pending X-vs-Y decision** (accept limit
-      vs add rigid-body residual).
+      reference-free scores and resolved only by projection." **DECISION X locked** (honest limitation;
+      no rigid-body residual). Discussion must note the scores capture genuine directional/geometrical
+      translational character — only magnitudes differ — so the label is correct about dominant character.
 - [ ] Step 4 internal split (stretching/bending/mixed) + attach `s_AB`.
 - [ ] Output `data/results/<mol>_classified.csv` (scores + label + annotations + `s_AB`).
 - [ ] Figure `fig:benzene`: `s[V_S]` vs freq, and score vs projected NM contribution (highlight EMIT 2/9,
@@ -205,7 +211,7 @@ library scores from the Excel file.
 - [ ] V-score uses the **initial** bond direction `b̂^{i}`.
 - [ ] Degeneracy tolerance numeric value (axes by `λ_i`, modes by freq) — fix and document.
 - [ ] Gramicidin bond-connectivity criterion (`TODO-DATA`): use `1grm.com` topology.
-- [~] Flag-criterion: two-gate purity (`|s|≥τ_pure` AND `s[V_S]≤τ_bend`) flags stretching-type impurity (34/35). **OPEN X-vs-Y**: EMIT 36 out-of-plane bending is a blind spot (score signature ≡ clean translation); accept as honest limit (X) or add reference-free rigid-body residual (Y, spine risk).
+- [x] Flag-criterion: two-gate purity (`|s|≥τ_pure` AND `s[V_S]≤τ_bend`) flags stretching-type impurity (34/35). EMIT 36 out-of-plane bending blind spot RESOLVED as **Decision X** (honest limitation; scores report genuine directional/geometrical translational character, magnitudes differ; bending residual → projection). No rigid-body residual added.
 - [ ] Verify in Phase 2 the per-mode projected translational % for 34/35/36 (36 is NOT ~100% — it has out-of-plane bending despite `s[V_S]=0`; do not assume the "77%" applies uniformly).
 
 ---

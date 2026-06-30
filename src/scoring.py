@@ -386,48 +386,40 @@ class ModeScorer:
         }
 
     def Rscore(self):
-        """Calculates Rotational Scores (Rx, Ry, Rz). Adapted from atom.py."""
-        tolerance = 1.0E-6
-        Rx, Ry, Rz = 0.0, 0.0, 0.0
-        Nx, Ny, Nz = 0, 0, 0
+        """Rotational scores s[R_x], s[R_y], s[R_z] (eq:rscore, JCE form).
 
-        for atom in self.atoms:
-            x = atom.x()
-            y = atom.y()
-            z = atom.z()
-
-            # Rx component
-            radiusX = np.array([0.0, y, z])
-            lengthX = sizeVec(radiusX)
-            if lengthX > tolerance:
-                Nx += 1
-                if atom.dispLength > tolerance:
-                    term = (radiusX[1]*atom.dispVec[2] - radiusX[2]*atom.dispVec[1])
-                    Rx += term / (lengthX * atom.dispLength)
-
-            # Ry component
-            radiusY = np.array([x, 0.0, z])
-            lengthY = sizeVec(radiusY)
-            if lengthY > tolerance:
-                Ny += 1
-                if atom.dispLength > tolerance:
-                    term = (radiusY[2]*atom.dispVec[0] - radiusY[0]*atom.dispVec[2])
-                    Ry += term / (lengthY * atom.dispLength)
-
-            # Rz component
-            radiusZ = np.array([x, y, 0.0])
-            lengthZ = sizeVec(radiusZ)
-            if lengthZ > tolerance:
-                Nz += 1
-                if atom.dispLength > tolerance:
-                    term = (radiusZ[0]*atom.dispVec[1] - radiusZ[1]*atom.dispVec[0])
-                    Rz += term / (lengthZ * atom.dispLength)
-
-        return {
-            'x': Rx * (1.0/float(Nx)) if Nx > 0 else 0.0,
-            'y': Ry * (1.0/float(Ny)) if Ny > 0 else 0.0,
-            'z': Rz * (1.0/float(Nz)) if Nz > 0 else 0.0
-        }
+        For each axis Q, the atomic angular velocity is the cross product of the
+        radius vector r_perp = r - (r.Qhat)Qhat with the displacement d:
+            omega_Q^A = r_perp x d
+        and the score is the mean directional alignment of omega with Qhat over
+        the off-axis atoms:
+            s[R_Q] = (1/(N - N_Q)) sum_A unit(omega_Q^A) . Qhat .
+        Atoms on the Q-axis (|r_perp| ~ 0) are excluded (they are stationary under
+        that rotation): they form N_Q. omega is annihilated by the radial part of
+        d, so radial (breathing) motion does not register as rotation; an atom with
+        |omega| < EPS_DISP contributes a zero unit vector (unit(0):=0) but is still
+        counted in N - N_Q. A linear molecule has N_Q = N on its axis, so that
+        axis returns 0 (effectively n_R = 2) without dividing by zero.
+        """
+        axes = (np.array([1.0, 0.0, 0.0]),
+                np.array([0.0, 1.0, 0.0]),
+                np.array([0.0, 0.0, 1.0]))
+        out = {}
+        for key, Q in zip('xyz', axes):
+            total = 0.0
+            n_off = 0  # number of off-axis atoms = N - N_Q
+            for atom in self.atoms:
+                r = np.array([atom.x(), atom.y(), atom.z()])
+                r_perp = r - np.dot(r, Q) * Q
+                if sizeVec(r_perp) <= EPS_DENOM:   # on the axis -> excluded (N_Q)
+                    continue
+                n_off += 1
+                omega = np.cross(r_perp, atom.dispVec)
+                w = sizeVec(omega)
+                if w > EPS_DISP:                   # unit(0):=0 otherwise
+                    total += np.dot(omega, Q) / w
+            out[key] = total / n_off if n_off > 0 else 0.0
+        return out
 
     def _bond_contributions(self):
         """Per-bond pieces of the V-score (eq:vscore numerator and denominator).

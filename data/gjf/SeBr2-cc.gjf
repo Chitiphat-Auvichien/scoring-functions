@@ -1,0 +1,14 @@
+%chk=SeBr2-cc.chk
+# opt freq=hpmodes mp2/cc-pvdz geom=connectivity
+
+Title Card Required
+
+0 1
+ Se                 0.00000000    0.00000000    0.89766852
+ Br                 0.00000000    1.88610723   -0.43601042
+ Br                 0.00000000   -1.88610723   -0.43601042
+
+ 1 2 1.0 3 1.0
+ 2
+ 3
+

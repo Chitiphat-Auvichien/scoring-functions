@@ -1,0 +1,14 @@
+%chk=CSe2.chk
+# opt freq=hpmodes mp2/3-21g geom=connectivity
+
+Title Card Required
+
+0 1
+ C                 -0.00000000   -0.00000000   -0.00000000
+ Se                 0.00000000    0.00000000    1.70720000
+ Se                -0.00000000    0.00000000   -1.70720000
+
+ 1 2 2.0 3 2.0
+ 2
+ 3
+

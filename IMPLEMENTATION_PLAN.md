@@ -5,6 +5,17 @@
 > `JCC/JCC_manuscript_structure_JCCformat.pdf`, and the plan slides `JCC/Scoring_Manuscript_Plan_2026-06-29.pdf`.
 > Last updated: 2026-06-30 (revised after the seven-agent plan review — see Changelog).
 
+> ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
+> with `Σ s_AB==s[V_S]`; range asserts; `Rscore` = consensus form (settled); manuscript Theory section
+> (T/R/V) expanded + `s[R]` eq/`sin φ` discussion. Engine results match tab:water/benzene.
+> **Next, in order:** (1) commit hydride-library + CO₂ input data → (2) CO₂ linear-molecule check (n_R=2)
+> → (3) completeness/fail-loud checks (3N / 3N−6 modes; missing bonds) → (4) pytest golden-reference harness
+> (water/benzene/CO₂ + benzene-EMIT score-level targets) → (5) Phase-0 headless `run_pipeline` refactor →
+> (6) Phase-0 Excel column verification (re-score one library molecule vs `data_score`).
+> **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
+> so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
+
 ## Context
 
 The JCC manuscript ("A Unified, Reference-Free Framework for Classifying the 3N modes of molecular

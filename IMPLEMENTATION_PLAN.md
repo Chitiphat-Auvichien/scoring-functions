@@ -10,9 +10,11 @@
 > with `Σ s_AB==s[V_S]`; range asserts; `Rscore` = consensus form (settled); manuscript Theory section
 > (T/R/V) expanded + `s[R]` eq/`sin φ` discussion. Engine results match tab:water/benzene.
 > **Next, in order:** ~~(1) commit library+CO₂ data~~ ✓ → ~~(2) CO₂ linear check~~ ✓ →
-> ~~(3) mode-count fail-loud checks~~ ✓ → (4) pytest golden-reference harness
-> (water/benzene/CO₂ + benzene-EMIT score-level targets) → (5) Phase-0 headless `run_pipeline` refactor →
-> (6) Phase-0 Excel column verification (re-score one library molecule vs `data_score`).
+> ~~(3) mode-count fail-loud checks~~ ✓ → ~~(4) pytest golden-reference harness~~ ✓ →
+> (5) Phase-0 headless `run_pipeline` refactor (extract from interactive `main()`; also do remaining
+> fail-loud: raise on missing bonds, drop catch-all `except`) → (6) Phase-0 Excel column verification
+> (re-score one library molecule vs `data_score` `s[V_S]` column) → then Phase 2 (classifier/projection).
+> **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
 
@@ -127,12 +129,12 @@ library scores from the Excel file.
       scoring wrong `V`; replace the catch-all `except` swallow in `main` with explicit errors.
 - [x] **Add a linear molecule (CO₂)** to exercise the `n_R=2` / `N_Q` branch (otherwise unexercised by
       water/benzene). Done — `co2_mp2_3-21g` log+com in repo, runs clean (see Linear-molecule guard above).
-- [ ] **Golden-reference regression harness** (`tests/`, pytest): pin water `tab:water` to 3 dp, the
-      `Σ s_AB == s[V_S]` identity, score ranges, and frozen score CSVs for water/benzene/CO₂. This is a
-      first-class deliverable — not ad-hoc prints. (Score-level only here; labels come later.)
-- [ ] **Score-level benzene EMIT checks** (threshold-independent, verifiable against `.tex` in-text):
-      EMIT 34–36 `s[V_S]=0.667/0.577/0` (3 dp); EMIT 2 `|s[Ry]|=0.143` vs EMIT 9 `|s[Ry]|=0.215`
-      (3 dp, the inversion). NB these are *scores*; the "flagged `mixed_external`" *label* is Phase 3.
+- [x] **Golden-reference regression harness — DONE 2026-06-30.** `tests/test_scores.py` (pytest +
+      standalone runner; `pytest` in `requirements-dev.txt`). 6 tests, all green: `tab:water` to 3 dp,
+      `Σ s_AB == s[V_S]`, score ranges, CO₂ linear (n_R=2), benzene-EMIT targets, parser fail-loud. Run
+      `py -m pytest tests/` or `py tests/test_scores.py`.
+- [x] **Score-level benzene EMIT checks — DONE (in the harness).** `test_benzene_emit_targets`: EMIT 34–36
+      `s[V_S]=0.667/0.577/0`; EMIT 2 `|s[Ry]|=0.143` < EMIT 9 `|s[Ry]|=0.215` (inversion). Labels = Phase 3.
 - [ ] Output `data/results/<mol>_scores.csv` (unchanged format) + frozen goldens.
 
 ## Phase 2 — Unified classifier + projection reference  (data: water, benzene)

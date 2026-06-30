@@ -386,20 +386,18 @@ class ModeScorer:
         }
 
     def Rscore(self):
-        """Rotational scores s[R_x], s[R_y], s[R_z] (eq:rscore, JCE form).
+        """Rotational scores s[R_x], s[R_y], s[R_z] (eq:rscore).
 
-        For each axis Q, the atomic angular velocity is the cross product of the
-        radius vector r_perp = r - (r.Qhat)Qhat with the displacement d:
-            omega_Q^A = r_perp x d
-        and the score is the mean directional alignment of omega with Qhat over
-        the off-axis atoms:
-            s[R_Q] = (1/(N - N_Q)) sum_A unit(omega_Q^A) . Qhat .
-        Atoms on the Q-axis (|r_perp| ~ 0) are excluded (they are stationary under
-        that rotation): they form N_Q. omega is annihilated by the radial part of
-        d, so radial (breathing) motion does not register as rotation; an atom with
-        |omega| < EPS_DISP contributes a zero unit vector (unit(0):=0) but is still
-        counted in N - N_Q. A linear molecule has N_Q = N on its axis, so that
-        axis returns 0 (effectively n_R = 2) without dividing by zero.
+        Per atom and axis Q, normalize the radius vector r_perp = r-(r.Qhat)Qhat
+        and the displacement d SEPARATELY, cross them, and take the Q-component:
+            s[R_Q] = (1/(N-N_Q)) sum_offaxis (unit(r_perp) x unit(d)) . Qhat
+                   = (1/(N-N_Q)) sum_offaxis (r_perp x d)_Q / (|r_perp| |d|).
+        |unit(r_perp) x unit(d)| = sin(phi), phi = angle(r_perp, d): it is 1 only
+        for a purely tangential (ideal-rotation) displacement and is reduced as d
+        tilts toward radial, so non-rotational in-plane motion is down-weighted
+        (unlike normalizing by |omega|=|r_perp x d|, which would discard sin phi).
+        N_Q = atoms on the Q-axis (|r_perp| ~ 0), excluded; an atom with |d| ~ 0
+        contributes a zero unit vector. A linear molecule's axis returns 0 (n_R=2).
         """
         axes = (np.array([1.0, 0.0, 0.0]),
                 np.array([0.0, 1.0, 0.0]),
@@ -407,17 +405,17 @@ class ModeScorer:
         out = {}
         for key, Q in zip('xyz', axes):
             total = 0.0
-            n_off = 0  # number of off-axis atoms = N - N_Q
+            n_off = 0  # off-axis atom count = N - N_Q
             for atom in self.atoms:
                 r = np.array([atom.x(), atom.y(), atom.z()])
                 r_perp = r - np.dot(r, Q) * Q
-                if sizeVec(r_perp) <= EPS_DENOM:   # on the axis -> excluded (N_Q)
+                lr = sizeVec(r_perp)
+                if lr <= EPS_DENOM:                # on the axis -> excluded (N_Q)
                     continue
                 n_off += 1
-                omega = np.cross(r_perp, atom.dispVec)
-                w = sizeVec(omega)
-                if w > EPS_DISP:                   # unit(0):=0 otherwise
-                    total += np.dot(omega, Q) / w
+                ld = atom.dispLength
+                if ld > EPS_DENOM:                 # unit(0):=0 otherwise
+                    total += np.dot(np.cross(r_perp, atom.dispVec), Q) / (lr * ld)
             out[key] = total / n_off if n_off > 0 else 0.0
         return out
 

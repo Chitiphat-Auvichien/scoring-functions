@@ -36,8 +36,14 @@ library scores from the Excel file.
 - **Algorithm 1** (PDF §B6.2): Step1 score → Step2 global one-to-one assignment over `n_T+n_R` external
   slots **MAXIMIZING `Σ|score|`** (`linear_sum_assignment` minimizes → negate the cost / use
   `maximize=True`), degenerate axis-blocks bound to degenerate mode-blocks **collectively** (not per
-  element) → Step3 `|score|≥τ_pure` clean else `mixed_external` (flag + dominant slot + `s[V_S]`) →
+  element) → Step3 **clean iff `|score|≥τ_pure` AND `s[V_S]≤τ_bend`** (directionally aligned AND
+  internally rigid), else `mixed_external` (flag + dominant slot + `s[V_S]`) →
   Step4 `s[V_S]≥τ_stretch` stretching / `≤τ_bend` bending / else mixed. `n_T=3`, `n_R=2 if linear else 3`.
+  **Two-gate purity (DECIDED 2026-06-30):** `s[T]/s[R]` are direction-only and read ±1 even for
+  amplitude-varying (impure) modes; `s[V_S]` is the reference-free witness of internal character.
+  Verified on benzene EMIT — 36 (A₂ᵤ, Tz=1, `s[V_S]=0`) = CLEAN; degenerate 34/35 (E₁ᵤ, Tx/Ty=1,
+  `s[V_S]=0.667/0.577`) = flagged. No new constant (reuses τ_pure, τ_bend); for normal modes the exact
+  externals have `s[V_S]=0` so the second gate never fires (completeness intact).
 - Conventions: `ε_disp=1e-8`; `unit(0):=0`; degeneracy tolerance groups inertia axes (by `λ_i`) & modes
   (by frequency/eigenvalue) — **fix the numeric tolerance** (provisional `1e-3` relative; confirm).
   `τ_pure` is taken from **calibration**, NOT hardcoded (PDF example uses 0.95).
@@ -62,9 +68,9 @@ library scores from the Excel file.
 - [ ] **Verify the Excel column identity:** re-score ONE library molecule in-engine and confirm it equals
       the `data_score` `s[V_S]` candidate column (`sum_|d₂-d₁|²/sum(|d₂-d₁|²)*cosθ`) to 3 dp, before
       trusting the whole ingest/calibration chain.
-- [ ] **[BLOCKER-CONFIRM] Are the hydride-library optimized geometries retrievable?** B14 SI mandates
-      Cartesian coordinates of all optimized structures. Logs are off-server and we ingest only scores —
-      if geometries are gone, this reproducibility requirement cannot be met. Confirm with the authors NOW.
+- [x] **Library geometries: RESOLVED (2026-06-30).** Not a blocker — the author will drop the relevant
+      `.log`/`.gjf` files into `data/logs/` and `data/gjf/` on request when the SI-geometry export step
+      (Phase 5) needs them. Ask for them at that point.
 - [ ] **Centralize constants** (`ε_disp=1e-8`, degeneracy `tol`) in a `Thresholds` dataclass; remove the
       hard-coded `1e-6`/`1e-9` scattered in `scoring.py`.
 - [ ] **Expose inertia data:** add `principal_axes()` / `axis_blocks()` accessors to `scoring.py` so the
@@ -99,11 +105,12 @@ library scores from the Excel file.
 - [ ] Step 2 global assignment via `linear_sum_assignment` **maximizing `Σ|score|`** (negate / `maximize=True`),
       with a **concrete, documented block-constrained mechanism** so a degenerate axis-block binds a
       degenerate mode-block collectively (plain 1-to-1 will mis-assign Tₐ/Oₕ tops & degenerate pairs).
-- [ ] **[INVESTIGATE before coding Step 3] flag criterion:** EMIT 34–36 have `s[T]=+1` (direction-only)
-      *and* `s[V_S]=0.667`, so a bare `|score|≥τ_pure → CLEAN` would mislabel them CLEAN. Pin (with the
-      real per-axis EMIT numbers) whether they're flagged via slot-collision in Step 2 or need an extra
-      criterion; document the resolved rule. This decides whether the spec produces the paper's behavior.
-- [ ] Step 3 purity flag (`mixed_external` + dominant slot + `s[V_S]` annotation).
+- [ ] **Step 3 two-gate purity (DECIDED — see Authoritative spec):** clean external iff
+      `|s_slot|≥τ_pure` AND `s[V_S]≤τ_bend`; else `mixed_external` (flag + dominant slot + `s[V_S]`).
+      Confirmed against the real EMIT CSV: EMIT 36 (A₂ᵤ, Tz=1, `s[V_S]=0`) → CLEAN; degenerate 34/35
+      (E₁ᵤ, Tx/Ty=1, `s[V_S]=0.667/0.577`) → flagged. Reuses existing constants; second gate never fires
+      for exact normal-mode externals. **Manuscript refinement needed (B8.4):** the claim "EMIT 34–36
+      flagged" → "34/35 flagged, 36 clean" (the trailing `0` in `0.667/0.577/0` is 36 being clean).
 - [ ] Step 4 internal split (stretching/bending/mixed) + attach `s_AB`.
 - [ ] Output `data/results/<mol>_classified.csv` (scores + label + annotations + `s_AB`).
 - [ ] Figure `fig:benzene`: `s[V_S]` vs freq, and score vs projected NM contribution (highlight EMIT 2/9,
@@ -185,16 +192,23 @@ library scores from the Excel file.
 ## Open items to confirm during execution
 - [ ] (Phase 0) eq:emitproj mass-weighting convention — pinned pre-Phase-2.
 - [ ] (Phase 0) `data_score` column == `s[V_S]` — verified by in-engine re-score.
-- [ ] (Phase 0) library optimized geometries retrievable for SI — **BLOCKER**.
+- [x] (Phase 0) library optimized geometries — RESOLVED: author supplies `.log`/`.gjf` on request at the Phase-5 SI step.
 - [ ] Step-2 objective is **maximize** `Σ|score|` (not scipy's default minimize).
 - [ ] V-score uses the **initial** bond direction `b̂^{i}`.
 - [ ] Degeneracy tolerance numeric value (axes by `λ_i`, modes by freq) — fix and document.
 - [ ] Gramicidin bond-connectivity criterion (`TODO-DATA`): use `1grm.com` topology.
-- [ ] Flag-criterion resolution for `s[T]=1` + high-`s[V_S]` modes (EMIT 34–36).
+- [x] Flag-criterion for `s[T]=1` + high-`s[V_S]` modes — RESOLVED: two-gate purity (`|s|≥τ_pure` AND `s[V_S]≤τ_bend`).
+- [ ] Verify in Phase 2: projection "≈77% translational for 34–36" likely describes the E₁ᵤ pair, not 36 (`s[V_S]=0` ⇒ ~100% translational).
 
 ---
 
 ## Changelog
+- **2026-06-30 — flag-criterion + geometry decisions.** Resolved the two open questions from the review:
+  (1) library geometries are not a blocker (author supplies on request at the Phase-5 SI step);
+  (2) Step-3 purity is now **two-gate** (`|s_slot|≥τ_pure` AND `s[V_S]≤τ_bend`), grounded in the real
+  benzene EMIT CSV (A₂ᵤ EMIT 36 clean vs E₁ᵤ 34/35 flagged) — reuses existing constants, keeps
+  completeness for normal modes. Noted the B8.4 manuscript refinement ("34/35 flagged, 36 clean") and a
+  Phase-2 check on the 77%-translational figure.
 - **2026-06-30 — seven-agent plan review.** Added Phase 0 (headless refactor, pinned projection
   convention, Excel/geometry verification, centralized constants, inertia accessors). Split validation
   into score-level (early) vs label-level (after τ freeze). Corrected algorithm spec: Step-2 **maximize**

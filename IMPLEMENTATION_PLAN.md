@@ -9,11 +9,24 @@
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
 > with `Σ s_AB==s[V_S]`; range asserts; `Rscore` = consensus form (settled); manuscript Theory section
 > (T/R/V) expanded + `s[R]` eq/`sin φ` discussion. Engine results match tab:water/benzene.
-> **Next, in order:** ~~(1) commit library+CO₂ data~~ ✓ → ~~(2) CO₂ linear check~~ ✓ →
-> ~~(3) mode-count fail-loud checks~~ ✓ → ~~(4) pytest golden-reference harness~~ ✓ →
-> (5) Phase-0 headless `run_pipeline` refactor (extract from interactive `main()`; also do remaining
-> fail-loud: raise on missing bonds, drop catch-all `except`) → (6) Phase-0 Excel column verification
-> (re-score one library molecule vs `data_score` `s[V_S]` column) → then Phase 2 (classifier/projection).
+> ~~(5) Phase-0 headless `run_pipeline` refactor~~ ✓ **DONE 2026-07-01** — `main.py` now exposes
+> `resolve_dirs()/load_inputs()/score_modes()/run_pipeline()` with no `input()` in that path; fail-loud
+> raises on missing bonds/bad mode counts replace the old catch-all `except`; interactive `main()`
+> preserved as a thin wrapper (`--mode {normal,emit}` skips the prompt). Verifying it exposed a real bug
+> (not axis-frame arbitrariness): `Tscore()`'s `EPS_DISP=1e-8` noise floor was two orders of magnitude
+> looser than `Rscore`/`Vscore`'s `EPS_DENOM=1e-6`, so ~1e-8–1e-6 numerical noise on symmetry-required-
+> zero atoms in degenerate benzene EMIT eigenvectors (e.g. EMIT 3/4, 13–21) was promoted to full-weight
+> unit-vector contributions — previously masked by the old pipeline's incidental `IntermediateIO`
+> round-trip (5–6 dp text format crushed the noise to exact zero). Fixed: `Tscore()` now gates on
+> `EPS_DENOM` like the other two scores; regression tests added (`test_tscore_ignores_subthreshold_noise`,
+> golden EMIT-3 Tz pin). **Decision:** the headless path intentionally never round-trips through
+> `IntermediateIO` — that format is only ever used interactively as a bonds-editing hand-off, never a
+> numerical filter; the `EPS_DENOM` fix is what now deliberately does the noise-filtering job the
+> round-trip used to do by accident.
+> **Next, in order:** (6) Phase-0 Excel column verification (re-score one library molecule vs
+> `data_score` `s[V_S]` column) → then Phase 2 (classifier/projection) — **but see the 2026-07-01
+> scope-revision Changelog entry below first**, which supersedes several Phase 2–4 items per the new
+> `JCC/JCC_manuscript_structure_scoped.md`.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
@@ -90,9 +103,12 @@ library scores from the Excel file.
 ---
 
 ## Phase 0 — Pre-build decisions & refactor (gating; DO FIRST)
-- [ ] **Headless pipeline refactor:** extract the core flow out of interactive `main()` into a pure
-      `run_pipeline(geometry, modes, bonds, thresholds) -> results` importable by both `main.py` and
-      `reproduce.py` (no `input()` / blocking ENTER in the core path). Prerequisite for all of Phase 5.
+- [x] **Headless pipeline refactor — DONE 2026-07-01.** `main.py` exposes `resolve_dirs()`,
+      `load_inputs()`, `score_modes()`, `run_pipeline(mol_name, mode_type, data_dir="data", write=True)
+      -> (df, output_path)` — importable, no `input()`/blocking ENTER in that path. `main()` keeps the
+      interactive prompt + bonds-editing fallback, now with a `--mode {normal,emit}` flag to skip it.
+      Fail-loud raises (missing bonds, bad mode counts) replace the old catch-all `except`. Surfaced
+      and fixed a real bug in the process — see Changelog.
 - [ ] **Pin the projection / mass-weighting convention** (eq:emitproj) as a locked decision *before*
       any projection or comparison work: scores use **unweighted** Cartesian displacements; state how the
       C2 normal-mode reference is mass-weighted so score-vs-projection is like-with-like (check Excel
@@ -247,6 +263,25 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-01 — Headless refactor landed; EPS_DISP/EPS_DENOM Tscore bug found + fixed.** Completed the
+  Phase-0 `run_pipeline` refactor left mid-verification at the end of the prior session. Verifying it
+  (normal-mode CSVs unchanged; benzene/water EMIT CSVs shifted by more than rounding in a few rows, e.g.
+  EMIT 3 Tz `-0.1667→-0.6667`) traced to a real latent bug, not the degenerate-axis-frame-arbitrariness
+  hypothesis the prior session was chasing: `Tscore()` gated on `EPS_DISP=1e-8`, two orders of magnitude
+  looser than `EPS_DENOM=1e-6` used by `Rscore()`/`Vscore()` for the same "is this atom moving" test. The
+  old always-round-trip-through-`IntermediateIO` pipeline (5–6 dp text format) incidentally crushed
+  ~1e-8–1e-6 Gaussian-EMIT-file noise (present on symmetry-required-zero atoms inside degenerate
+  eigenvalue blocks, e.g. EMIT 3/4, 13–21) to exact zero; the new full-float64-precision headless path
+  let that noise leak through `Tscore` as full-weight unit-vector contributions (confirmed by direct
+  reproduction of both code paths — confined entirely to Tx/Ty/Tz columns and to degenerate blocks,
+  exactly as observed, because `Rscore`/`Vscore` already used the stricter `EPS_DENOM` floor).
+  `axis_blocks()`/`principal_axes()` are confirmed dead code (not called anywhere in the scoring path),
+  ruling out an axis-choice explanation. **Fix:** `Tscore()` now gates on `EPS_DENOM` instead of
+  `EPS_DISP`; added `test_tscore_ignores_subthreshold_noise` (synthetic reproduction) and a golden pin on
+  benzene EMIT 3's Tz. Regenerated `benzene_EMIT_scores.csv`/`water_EMIT_scores.csv`; diff against the
+  prior commit is now sub-0.0001 rounding drift only. **Decision (documented in RESUME HERE):** the
+  headless path deliberately never round-trips through `IntermediateIO`; that format remains solely an
+  interactive bonds-editing hand-off.
 - **2026-06-30 (final) — s[R] = consensus form is canonical (ω-form reverted).** Author's settled
   reasoning: normalize `r⊥` and `d` separately and cross them; the unit-vector cross product has magnitude
   `sin φ`, which must be retained (÷`|r⊥||d|`, not ÷`|ω|`) so the score reflects *how tangential* the motion

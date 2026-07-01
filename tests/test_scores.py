@@ -12,6 +12,8 @@ import os
 import sys
 import tempfile
 
+import numpy as np
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
@@ -86,6 +88,38 @@ def test_benzene_emit_targets():
     assert abs(abs(t["EMIT 9"]["Ry"]) - 0.2151) < TOL
     # the s[R] non-monotonicity: EMIT 2 has more Ry character yet smaller |s[Ry]| than EMIT 9
     assert abs(t["EMIT 2"]["Ry"]) < abs(t["EMIT 9"]["Ry"])
+    # EMIT 3 sits in the -23.7514 degenerate eigenvalue block: several H atoms carry
+    # ~4e-7 A numerical noise (symmetry requires exactly 0) in the raw Gaussian EMIT
+    # file. Tscore must reject that noise (EPS_DENOM floor), not promote it to a
+    # full-weight unit-vector contribution (regression for the EPS_DISP/EPS_DENOM bug).
+    assert abs(t["EMIT 3"]["Tz"] - (-0.1667)) < TOL
+    assert abs(t["EMIT 3"]["Tx"] - 0.0) < TOL
+    assert abs(t["EMIT 3"]["Ty"] - 0.0) < TOL
+
+
+def test_tscore_ignores_subthreshold_noise():
+    """Tscore must use the same noise floor as Rscore/Vscore (EPS_DENOM), not the looser EPS_DISP.
+
+    Reproduces the mechanism found in degenerate benzene EMIT eigenvectors: a symmetry-required-
+    zero atom carries a tiny (~1e-7) numerical noise residual. Before the fix, EPS_DISP=1e-8 let
+    this leak through as a full-weight unit-vector contribution to s[T]; it must now be excluded.
+    """
+    atoms = ["O", "H", "H"]
+    coords = [[0.0, 0.0, 0.117], [0.0, 0.757, -0.470], [0.0, -0.757, -0.470]]
+    bonds = [(0, 1), (0, 2)]
+    scorer = ModeScorer(atoms, coords, bonds)
+
+    # Atom 0 is symmetry-required to be exactly zero in this eigenvector but carries
+    # a ~1e-7 noise residual (its *entire* displacement, not a small component riding
+    # on top of real motion) -- exactly the pattern seen in the raw benzene EMIT file.
+    mode_vec = np.zeros((3, 3))
+    mode_vec[0] = [1e-7, 0.0, 0.0]
+    mode_vec[1] = [0.0, 0.0, 1.0]
+    mode_vec[2] = [0.0, 0.0, 1.0]
+
+    sc = scorer.calculate_scores(mode_vec)
+    assert abs(sc["T"]["x"]) < 1e-9, f"noise-level x-displacement leaked into Tx: {sc['T']['x']}"
+    assert abs(sc["T"]["z"] - 2.0 / 3.0) < TOL
 
 
 def test_score_ranges():

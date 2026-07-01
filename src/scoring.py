@@ -372,9 +372,15 @@ class ModeScorer:
         """Calculates Translational Scores (Tx, Ty, Tz). Adapted from atom.py."""
         n = self.n
         Tx, Ty, Tz = 0.0, 0.0, 0.0
-        
+
         for atom in self.atoms:
-            if atom.dispLength > EPS_DISP:
+            # Use EPS_DENOM (not the looser EPS_DISP) as the noise floor here,
+            # matching Rscore/Vscore: EPS_DISP=1e-8 is too permissive relative
+            # to the ~1e-8-1e-6 numerical noise Gaussian prints for atoms that
+            # are symmetry-required to be exactly zero in degenerate EMIT
+            # eigenvectors, which would otherwise be promoted to a full-weight
+            # unit-vector contribution.
+            if atom.dispLength > EPS_DENOM:
                 Tx += atom.dispVec[0] / atom.dispLength
                 Ty += atom.dispVec[1] / atom.dispLength
                 Tz += atom.dispVec[2] / atom.dispLength

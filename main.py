@@ -1,10 +1,12 @@
 import argparse
 import os
+import numpy as np
 import pandas as pd
 
 from src.parser import GaussianParser, EMITParser, IntermediateIO
 from src.scoring import ModeScorer
 from src.classifier import classify_all_modes, classify_to_rows, is_linear
+from src.projection import build_reference_basis, project_emit
 
 # Column order for the results table / CSV.
 _SCORE_COLS = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_Stretch"]
@@ -151,6 +153,62 @@ def run_classify_pipeline(mol_name, mode_type, data_dir="data", thresholds=None,
     if write:
         df.to_csv(output_file, index=False, float_format="%.4f")
     return df, output_file
+
+
+def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=True):
+    """Headless EMIT -> normal-mode projection pipeline (Phase 2, eq:emitproj).
+
+    Builds the mass-weighted normal-mode reference basis (ideal T/R + real
+    vibrational modes, src/projection.py's locked convention) from
+    data/logs/<mol>.log, projects the raw EMIT eigenvectors from
+    data/EMIT/<mol>_EMIT.txt onto it, and writes two files:
+      - data/results/<mol>_EMIT_contributions.csv -- grouped fractions
+        (C2_Tx..C2_Rz, C2_VS/VB/VMix) per EMIT mode; matches the columns and
+        semantics of the pre-existing hand-derived ground-truth file of the
+        same name (validated to ~1e-4 absolute agreement on EMIT 2/9/34-36).
+      - data/results/<mol>_EMIT_projection_full.csv -- the finer-grained
+        per-individual-reference-mode Theta_tilde**2 detail (one column per
+        ideal T/R slot and per real normal mode), the richer
+        "projection-coefficients data file" the roadmap calls for.
+
+    Raises on any missing input / missing bonds / wrong mode count (same
+    fail-loud behaviour as load_inputs()/build_scorer_and_final()).
+    Returns (df_grouped, df_full, (path_grouped, path_full)).
+    """
+    raw_n, dirs = load_inputs(mol_name, "normal", data_dir)
+    scorer_n, final_n = build_scorer_and_final(raw_n, "normal")
+    raw_e, _ = load_inputs(mol_name, "emit", data_dir)
+    scorer_e, final_e = build_scorer_and_final(raw_e, "emit")
+
+    # Q (built from scorer_n's rotated geometry) and Theta (the raw, unrotated
+    # EMIT eigenvectors) are only frame-consistent because both parses read
+    # the SAME log geometry, and MIT()'s eigendecomposition is deterministic
+    # on identical input, so scorer_n and scorer_e land in the identical
+    # principal-axis frame. That coupling was implicit; assert it rather than
+    # relying on parsing determinism silently (formula-auditor finding,
+    # 2026-07-01).
+    coords_n = np.array([[a.x(), a.y(), a.z()] for a in scorer_n.atoms])
+    coords_e = np.array([[a.x(), a.y(), a.z()] for a in scorer_e.atoms])
+    if not np.allclose(coords_n, coords_e, atol=1e-6):
+        raise ValueError(
+            f"'{mol_name}': the 'normal' and 'emit' parses of the log geometry "
+            "rotated into different principal-axis frames (max coord diff "
+            f"{np.max(np.abs(coords_n - coords_e)):.3g}) -- Q and Theta would "
+            "not be projection-comparable. Check for a second/different "
+            "'Standard orientation' block or non-deterministic MIT() sign fix."
+        )
+
+    ref = build_reference_basis(scorer_n, final_n, thresholds)
+    rows, full_rows = project_emit(ref, final_e)
+
+    df = pd.DataFrame(rows)
+    df_full = pd.DataFrame(full_rows)
+    out_grouped = os.path.join(dirs["results"], f"{mol_name}_EMIT_contributions.csv")
+    out_full = os.path.join(dirs["results"], f"{mol_name}_EMIT_projection_full.csv")
+    if write:
+        df.to_csv(out_grouped, index=False, float_format="%.6f")
+        df_full.to_csv(out_full, index=False, float_format="%.6f")
+    return df, df_full, (out_grouped, out_full)
 
 
 def main():

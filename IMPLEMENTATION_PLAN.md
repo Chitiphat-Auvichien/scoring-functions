@@ -51,8 +51,10 @@
 > 9 grouped columns** — reproduces EMIT 34/35/36 ≈76.7% translational and the EMIT 2 (38.7% Ry) vs
 > EMIT 9 (14.1% Ry) inversion to spec. formula-auditor / score-validator dispatched — see Changelog
 > for verdicts. `tests/test_projection.py` new (4 tests); 17/17 total green.
-> **Next, in order:** Phase-0 Excel column verification (re-score one library molecule vs
-> `data_score` `s[V_S]` column) → Phase 3 (library ingest + calibration).
+> ~~Phase-0 Excel column verification~~ ✓ **DONE 2026-07-01** — H2S/SF2 re-scored in-engine,
+> `V_Stretch` matches `data_score`'s eq:vscore candidate column to ~5 sig figs (well within 3 dp); see
+> Phase-0 checklist / Changelog.
+> **Next, in order:** Phase 3 (library ingest + calibration).
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
@@ -151,9 +153,14 @@ library scores from the Excel file.
       Gram-matrix check was more direct and decisive). See `src/projection.py` module docstring for
       full derivation. Validated to 3.1e-4 max abs deviation against
       `data/results/benzene_EMIT_contributions.csv` (all 36 modes × 9 columns).
-- [ ] **Verify the Excel column identity:** re-score ONE library molecule in-engine and confirm it equals
-      the `data_score` `s[V_S]` candidate column (`sum_|d₂-d₁|²/sum(|d₂-d₁|²)*cosθ`) to 3 dp, before
-      trusting the whole ingest/calibration chain.
+- [x] **Verify the Excel column identity — DONE 2026-07-01.** Re-scored H2S and SF2 (hydride-library
+      logs+gjf already in repo) in-engine via `run_pipeline(mol, "normal")` and compared each vibrational
+      mode's `V_Stretch` to the `data_score` sheet's `sum_|d₂-d₁|²/sum(|d₂-d₁|²)*cosθ` column (col index 14;
+      sheet has ONLY the 3N-6 internal vibrational rows, no T/R). **MATCH** to well within 3 dp for all
+      6 modes checked (H2S: 0.06317/0.99945/0.99954 vs engine 0.063170/0.999451/0.999539; SF2: 0.05399/
+      0.91442/0.9446 vs engine 0.053990/0.914422/0.944605 — agreement to ~5 significant figures, residual
+      ~1e-5 consistent with log-file coordinate rounding, not a formula discrepancy). Confirms the Excel
+      candidate column IS `s[V_S]` as defined in code; ingest chain (Phase 3) can trust it.
 - [x] **Library geometries: RESOLVED (2026-06-30).** Not a blocker — the author will drop the relevant
       `.log`/`.gjf` files into `data/logs/` and `data/gjf/` on request when the SI-geometry export step
       (Phase 5) needs them. Ask for them at that point.
@@ -352,7 +359,7 @@ library scores from the Excel file.
 ## Open items to confirm during execution
 - [x] (Phase 0) eq:emitproj mass-weighting convention — pinned pre-Phase-2, **DONE 2026-07-01**
       (`sqrt(mass_A)` per-atom weighting, `src/projection.py`-local only; see Phase 0/2 checklist).
-- [ ] (Phase 0) `data_score` column == `s[V_S]` — verified by in-engine re-score.
+- [x] (Phase 0) `data_score` column == `s[V_S]` — **verified 2026-07-01** by in-engine re-score (H2S, SF2; see Phase 0 checklist entry above / Changelog).
 - [x] (Phase 0) library optimized geometries — RESOLVED: author supplies `.log`/`.gjf` on request at the Phase-5 SI step.
 - [x] Step-2 objective is **maximize** `Σ|score|` (not scipy's default minimize) — implemented in
       `src/classifier.py` via `linear_sum_assignment(cost, maximize=True)`; formula-auditor confirmed
@@ -367,6 +374,25 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-01 — Phase-0 Excel column identity verified.** Re-scored two hydride-library molecules
+  (H2S, SF2 — chosen for simple 3-vibrational-mode C2v/bent-triatomic structure, logs+gjf already in
+  repo) headlessly via `run_pipeline(mol, "normal")` and compared per-mode `V_Stretch` against the
+  `data_score` sheet's candidate eq:vscore column (`sum_|d₂-d₁|²/sum(|d₂-d₁|²)*cosθ`, column index 14 —
+  confirmed empirically by header inspection, not assumed from the sheet name, per the sibling
+  Eckart-sheet caution). Sheet contains only the `3N-6` internal vibrational rows per molecule (no T/R
+  externals), identified by `molecule`+`mode`(1-based sequential)+`freq` columns; molecule/mode ordering
+  in the sheet matches the engine's Vib-1/2/3 order by ascending frequency for both test molecules, so no
+  reordering was needed.
+  **Result: MATCH for all 6 modes checked, well within the 3 dp tolerance** (H2S bend/sym-stretch/
+  asym-stretch: Excel 0.06317/0.99945/0.99954 vs engine 0.063170/0.999451/0.999539; SF2: Excel
+  0.05399/0.91442/0.9446 vs engine 0.053990/0.914422/0.944605). Agreement is to ~5 significant figures
+  (residual ≤1e-5), i.e. an order of magnitude tighter than the 3 dp requirement — consistent with
+  minor geometry-precision differences between the Gaussian log's printed coordinates and whatever
+  precision produced the Excel workbook, not a formula/convention mismatch. **Conclusion: the Excel
+  `data_score` candidate column IS `s[V_S]` as implemented in `scoring.py`'s `Vscore`/`_bond_contributions`
+  — Phase 3's `excel_ingest.py` can map it directly with no transformation.** Added
+  `data/results/H2S_normal_scores.csv` and `data/results/SF2_normal_scores.csv` (new goldens for these
+  two library molecules, first time they've been run through the engine).
 - **2026-07-01 — Projection convention pinned + `src/projection.py` landed (Phase 0 + Phase 2's
   other half).** **Convention LOCKED:** the C2 normal-mode reference basis used to compare against
   benzene EMIT modes is mass-weighted by `sqrt(mass_A)` per atom (all 3 Cartesian components of a

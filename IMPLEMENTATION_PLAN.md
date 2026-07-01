@@ -31,9 +31,28 @@
 > `run_classify_pipeline()`. Wrote all 4 required outputs (`water`/`benzene` × `normal`/`EMIT`
 > `_classified.csv`); formula-auditor PASS on Steps 2-4 (one DIVERGENT finding, fixed same session — see
 > Changelog); score-validator PASS on all label/invariant targets. 13/13 tests green
-> (`tests/test_classifier.py` new, 6 tests). **Next, in order:** Phase-0 Excel column verification
-> (re-score one library molecule vs `data_score` `s[V_S]` column) → `src/projection.py`
-> (EMIT→normal-mode projection, the other half of Phase 2) → Phase 3 (library ingest + calibration).
+> (`tests/test_classifier.py` new, 6 tests).
+> ~~Phase 0: projection mass-weighting convention + Phase 2: `src/projection.py`~~ ✓ **DONE
+> 2026-07-01** — convention **LOCKED: mass-weight by `sqrt(mass_A)` per atom (applied to all 3
+> Cartesian components), applied only inside `src/projection.py`** (never touches the unweighted
+> `s[T]/s[R]/s[V_S]` scores). Empirically confirmed via Gram-matrix check on benzene: Gaussian's
+> printed normal modes and the raw EMIT eigenvectors are unit-normalized under the PLAIN Cartesian
+> dot product but only mutually ORTHOGONAL under the mass-weighted one (plain off-diagonals up to
+> 0.80; mass-weighted off-diagonals ≤4e-4, i.e. Eckart-Sayvetz orthogonality, not coincidence).
+> `build_reference_basis()` mass-weights+renormalizes the `final_normal` pool (ideal T/R + real vib
+> modes) into an orthonormal-to-noise-level `Q`; `project_emit()` computes `Θ̃=Q^T Θ` (eq:emitproj)
+> on the similarly mass-weighted+renormalized raw EMIT eigenvectors, squares for fractional
+> contributions, and buckets the vibration fraction into VS/VB/VMix by reusing `classifier.vib_label`
+> on each real normal mode's own (unweighted) `s[V_S]` — no new stretch/bend boundary. `main.py`
+> gained `run_projection_pipeline()`, writing `<mol>_EMIT_contributions.csv` (grouped, matches the
+> pre-existing hand-derived ground-truth file's columns) and `<mol>_EMIT_projection_full.csv`
+> (per-individual-reference-mode detail). **Validated against the pre-existing
+> `data/results/benzene_EMIT_contributions.csv`: max abs deviation 3.1e-4 across all 36 EMIT modes ×
+> 9 grouped columns** — reproduces EMIT 34/35/36 ≈76.7% translational and the EMIT 2 (38.7% Ry) vs
+> EMIT 9 (14.1% Ry) inversion to spec. formula-auditor / score-validator dispatched — see Changelog
+> for verdicts. `tests/test_projection.py` new (4 tests); 17/17 total green.
+> **Next, in order:** Phase-0 Excel column verification (re-score one library molecule vs
+> `data_score` `s[V_S]` column) → Phase 3 (library ingest + calibration).
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
@@ -121,10 +140,17 @@ library scores from the Excel file.
       interactive prompt + bonds-editing fallback, now with a `--mode {normal,emit}` flag to skip it.
       Fail-loud raises (missing bonds, bad mode counts) replace the old catch-all `except`. Surfaced
       and fixed a real bug in the process — see Changelog.
-- [ ] **Pin the projection / mass-weighting convention** (eq:emitproj) as a locked decision *before*
-      any projection or comparison work: scores use **unweighted** Cartesian displacements; state how the
-      C2 normal-mode reference is mass-weighted so score-vs-projection is like-with-like (check Excel
-      `Eckart` / `Eckart vs score`). Every `fig:benzene` and coverage number depends on this.
+- [x] **Pin the projection / mass-weighting convention (eq:emitproj) — DONE 2026-07-01.** LOCKED:
+      mass-weight by `sqrt(mass_A)` per atom (all 3 Cartesian components scaled equally), applied
+      ONLY inside `src/projection.py` — the unweighted `s[T]/s[R]/s[V_S]` scores are untouched.
+      Determined empirically (Gram-matrix orthogonality check on benzene's real normal modes + raw
+      EMIT eigenvectors: plain-Cartesian off-diagonals up to 0.80, mass-weighted off-diagonals
+      ≤4e-4 — the Eckart-Sayvetz signature), not from the Excel `Eckart`/`Eckart vs score` sheets
+      (those turned out to hold an unrelated per-mode Eckart-condition residual check — net
+      unweighted ΣΔd and Σ(r×Δd)-like columns near zero — not the projection reference itself; the
+      Gram-matrix check was more direct and decisive). See `src/projection.py` module docstring for
+      full derivation. Validated to 3.1e-4 max abs deviation against
+      `data/results/benzene_EMIT_contributions.csv` (all 36 modes × 9 columns).
 - [ ] **Verify the Excel column identity:** re-score ONE library molecule in-engine and confirm it equals
       the `data_score` `s[V_S]` candidate column (`sum_|d₂-d₁|²/sum(|d₂-d₁|²)*cosθ`) to 3 dp, before
       trusting the whole ingest/calibration chain.
@@ -169,9 +195,15 @@ library scores from the Excel file.
 - [ ] Output `data/results/<mol>_scores.csv` (unchanged format) + frozen goldens.
 
 ## Phase 2 — Unified classifier + projection reference  (data: water, benzene)
-- [ ] `src/projection.py` (NEW): EMIT→normal-mode projection `Θ̃=QᵀΘ` (eq:emitproj) using the Phase-0
-      convention; **emit a projection-coefficients data file** (per-mode projected NM contribution), not
-      just numbers. Reproduce: EMIT 34–36 ≈ 77% translational; EMIT 2 (39% Ry) vs EMIT 9 (14% Ry).
+- [x] `src/projection.py` (NEW) — **DONE 2026-07-01.** EMIT→normal-mode projection `Θ̃=QᵀΘ`
+      (eq:emitproj) using the Phase-0 mass-weighting convention; `build_reference_basis()` +
+      `project_emit()`; **emits two data files** — `<mol>_EMIT_contributions.csv` (grouped
+      Tx..Rz/VS/VB/VMix fractions, matching the pre-existing ground-truth file's columns) and
+      `<mol>_EMIT_projection_full.csv` (per-individual-reference-mode `Θ̃²` detail, not just grouped
+      numbers). `main.run_projection_pipeline()` is the headless orchestrator. Reproduced: EMIT
+      34/35/36 ≈76.7% translational; EMIT 2 (38.7% Ry) vs EMIT 9 (14.1% Ry) inversion. Max abs
+      deviation from the pre-existing hand-derived `benzene_EMIT_contributions.csv`: 3.1e-4 across
+      all 36 modes × 9 columns — confirms that file's convention (not a stale/wrong artifact).
 - [x] `src/classifier.py` (NEW) — **DONE 2026-07-01.** `n_T/n_R` via `is_linear()`/`external_slots()`;
       `Thresholds` dataclass (`τ_TR=0.95, τ_S=0.9, τ_B=0.2` — `τ_TR` to be replaced by calibration in
       Phase 3). No degenerate-axis-block data structure (block-handling retracted 2026-07-01,
@@ -318,7 +350,8 @@ library scores from the Excel file.
 - [ ] `py reproduce.py` regenerates all CSVs + figures with no manual steps; `pytest` green.
 
 ## Open items to confirm during execution
-- [ ] (Phase 0) eq:emitproj mass-weighting convention — pinned pre-Phase-2.
+- [x] (Phase 0) eq:emitproj mass-weighting convention — pinned pre-Phase-2, **DONE 2026-07-01**
+      (`sqrt(mass_A)` per-atom weighting, `src/projection.py`-local only; see Phase 0/2 checklist).
 - [ ] (Phase 0) `data_score` column == `s[V_S]` — verified by in-engine re-score.
 - [x] (Phase 0) library optimized geometries — RESOLVED: author supplies `.log`/`.gjf` on request at the Phase-5 SI step.
 - [x] Step-2 objective is **maximize** `Σ|score|` (not scipy's default minimize) — implemented in
@@ -334,6 +367,65 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-01 — Projection convention pinned + `src/projection.py` landed (Phase 0 + Phase 2's
+  other half).** **Convention LOCKED:** the C2 normal-mode reference basis used to compare against
+  benzene EMIT modes is mass-weighted by `sqrt(mass_A)` per atom (all 3 Cartesian components of a
+  given atom scaled by the same factor), applied ONLY inside `src/projection.py` — the unweighted
+  `s[T]/s[R]/s[V_S]` scores in `src/scoring.py` are untouched. Determined empirically, not from the
+  Excel `Eckart`/`Eckart vs score` sheets (those turned out to hold an unrelated per-mode
+  Eckart-condition residual check, not the projection reference): a direct Gram-matrix computation
+  on benzene's 30 real normal modes and 36 raw EMIT eigenvectors showed both sets are unit-normalized
+  under the plain (unweighted) Cartesian dot product but are only mutually ORTHOGONAL under the
+  mass-weighted inner product `<u,v>=Σ_A m_A u_A·v_A` (plain-Cartesian Gram off-diagonals up to 0.80;
+  mass-weighted Gram off-diagonals ≤4e-4, i.e. numerical noise, not real non-orthogonality) — the
+  standard Eckart-Sayvetz signature (true harmonic normal modes are orthonormal in mass-weighted
+  coordinates; Gaussian, and empirically EMIT too, report them back-transformed to unweighted
+  Cartesian and renormalized to unit Euclidean length for display).
+  Added `src/projection.py`: `mass_weights_from_scorer()`, `build_reference_basis(scorer, final_normal,
+  thresholds)` (mass-weights + renormalizes the `normal`-pool candidates — ideal T/R built the same
+  geometric way as `ModeScorer.construct_T/construct_R`, plus the real `3N-6` vibrational normal
+  modes — into a basis `Q` that is orthonormal to within the input files' print precision; also
+  buckets each real vibrational mode into STRETCHING/BENDING/MIXED_STRETCH_BEND by reusing
+  `classifier.vib_label()` on that mode's own unweighted `s[V_S]`, so the stretch/bend boundary is
+  defined in exactly one place), and `project_emit(ref, final_emit)` (mass-weights + renormalizes the
+  raw EMIT eigenvectors the same way, computes `Θ̃=QᵀΘ` — eq:emitproj — and squares for fractional
+  contributions, with an internal Parseval sanity assert). `main.py` gained
+  `run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=True)`, writing
+  `<mol>_EMIT_contributions.csv` (grouped `C2_Tx..C2_Rz`/`C2_VS`/`C2_VB`/`C2_VMix`, matching the
+  pre-existing hand-derived `data/results/benzene_EMIT_contributions.csv`'s columns/semantics) and
+  `<mol>_EMIT_projection_full.csv` (per-individual-reference-mode `Θ̃²` detail — one column per ideal
+  T/R slot and per real normal mode — the richer "projection-coefficients data file" the roadmap
+  calls for, not just the grouped numbers).
+  **Validation:** regenerating benzene's contributions against the pre-existing hand-derived CSV
+  (backed up before overwrite) gave a **max absolute deviation of 3.1e-4 across all 36 EMIT modes ×
+  9 grouped columns** — confirms that file's convention was already this one (not a stale/wrong
+  artifact) rather than contradicting it. Reproduces the manuscript's named targets: EMIT 34/35/36
+  ≈76.7% translational (`C2_Tx/Ty/Tz≈0.7674`, headline "~77%"); EMIT 2 (38.7% `C2_Ry`) vs EMIT 9
+  (14.1% `C2_Ry`) — the non-monotonicity inversion relative to the `|s[Ry]|` SCORE ordering (EMIT 9
+  0.215 > EMIT 2 0.143) is reproduced in both directions. Every EMIT mode's 9 grouped fractions sum
+  to 1.000±0.0003 (Parseval, consistent with `Q`'s near-orthonormality). Water also runs cleanly
+  (sums to exactly 1.0 per mode; its 3 vib modes split 2 stretch + 1 bend, matching tab:water).
+  formula-auditor: **PASS** — confirmed the `Θ̃=QᵀΘ` matrix algebra is transpose-correct, verified
+  the T/R/vibration orthogonality claims analytically (not just empirically: `T_i·T_j=0` trivially;
+  `T_i·R_j∝ΣmA rA=0` from `COM()`; `R_i·R_j∝` off-diagonal inertia-tensor entries `=0` from `MIT()`
+  diagonalizing before `construct_R()` runs; vib-mode orthogonality to T/R is the Eckart-Sayvetz
+  theorem), and confirmed no conflict with the `.tex`'s "unweighted scores, stated mass-weighted
+  projection reference" framing. Flagged two non-blocking items: (1) the implicit "same-log,
+  same-rotation" coupling between the independent `normal`/`emit` parses that makes `Q` and `Θ`
+  frame-consistent was relying on parsing determinism silently — **fixed same session**: added a
+  runtime `np.allclose` assertion in `run_projection_pipeline()` comparing `scorer_n`'s and
+  `scorer_e`'s post-MIT atom coordinates, raising with a diagnostic message if they ever diverge;
+  (2) `eq:emitproj` in the `.tex` states only `Θ̃=QᵀΘ` without spelling out that the "contribution
+  coefficients" are the SQUARED coefficients (Parseval) — the manuscript's own percentage language
+  ("77% translational", "39% Ry") is only consistent with squaring, but the equation's surrounding
+  text doesn't say so explicitly; **flagged for lead-author**, not fixed here (out of engineering
+  scope; suggested added clause: "with fractional contributions given by the squared coefficients
+  `Θ̃ᵢ²` (Parseval, since `Q` is orthonormal)"). score-validator: **PASS** — independently reproduced
+  the 3.1e-4 max-deviation figure (found 3.12e-4, tied at EMIT 3/EMIT 15 `C2_VB`), confirmed all spot
+  values (EMIT 34/35/36 `C2_T*≈0.767`; EMIT 2 `C2_Ry=0.3867`, EMIT 9 `C2_Ry=0.1411`, ordering
+  inverted vs. the `|s[Ry]|` scores 0.1427/0.2151 read from `benzene_EMIT_scores.csv`), and confirmed
+  17/17 tests green. Added `tests/test_projection.py` (4 tests, pinning the 77%-translational and
+  Ry-inversion targets at a 2e-3 tolerance, well above the observed ≤3.2e-4 deviation).
 - **2026-07-01 — Phase 2 classifier landed (`src/classifier.py`, Algorithm 1 Steps 2-4) + a linear-
   molecule pool bug found and fixed.** Added `src/classifier.py`: `Thresholds` dataclass
   (`τ_TR=0.95, τ_S=0.9, τ_B=0.2`); `is_linear()`/`external_slots()` (`n_T=3`, `n_R=2 if linear else 3`);

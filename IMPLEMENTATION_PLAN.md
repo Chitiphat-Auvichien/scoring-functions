@@ -24,11 +24,16 @@
 > `IntermediateIO` — that format is only ever used interactively as a bonds-editing hand-off, never a
 > numerical filter; the `EPS_DENOM` fix is what now deliberately does the noise-filtering job the
 > round-trip used to do by accident.
-> **Next, in order:** (6) Phase-0 Excel column verification (re-score one library molecule vs
-> `data_score` `s[V_S]` column) → then Phase 2 (classifier/projection), which now follows the
-> **2026-07-01 scope-revision** below (Gramicidin/Phase 4 deferred; degenerate-block assignment
-> retracted → plain Hungarian; τ renamed τ_TR/τ_S/τ_B; Phase 6 re-tiered) per
-> `JCC/JCC_manuscript_structure_scoped.md`.
+> ~~Phase 2: `src/classifier.py` (Algorithm 1)~~ ✓ **DONE 2026-07-01** — `classify_all_modes()`/
+> `classify_to_rows()` implement Steps 2-4 (plain one-to-one `linear_sum_assignment` maximizing
+> `Σ|score|`, two-gate purity, `vib_label` internal split + `s_AB`); `main.py` gained
+> `build_scorer_and_final()` (factored out of `score_modes()`, shared by both) and
+> `run_classify_pipeline()`. Wrote all 4 required outputs (`water`/`benzene` × `normal`/`EMIT`
+> `_classified.csv`); formula-auditor PASS on Steps 2-4 (one DIVERGENT finding, fixed same session — see
+> Changelog); score-validator PASS on all label/invariant targets. 13/13 tests green
+> (`tests/test_classifier.py` new, 6 tests). **Next, in order:** Phase-0 Excel column verification
+> (re-score one library molecule vs `data_score` `s[V_S]` column) → `src/projection.py`
+> (EMIT→normal-mode projection, the other half of Phase 2) → Phase 3 (library ingest + calibration).
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
@@ -167,28 +172,48 @@ library scores from the Excel file.
 - [ ] `src/projection.py` (NEW): EMIT→normal-mode projection `Θ̃=QᵀΘ` (eq:emitproj) using the Phase-0
       convention; **emit a projection-coefficients data file** (per-mode projected NM contribution), not
       just numbers. Reproduce: EMIT 34–36 ≈ 77% translational; EMIT 2 (39% Ry) vs EMIT 9 (14% Ry).
-- [ ] `src/classifier.py` (NEW): `n_T/n_R`; `Thresholds` (provisional `τ_TR=0.95, τ_S=0.9, τ_B=0.2` —
-      `τ_TR` to be replaced by calibration in Phase 3). No degenerate-axis-block data structure is
-      required (block-handling retracted 2026-07-01, `JCC_manuscript_structure_scoped.md` Decision 8).
-- [ ] Step 2 global assignment: plain one-to-one `linear_sum_assignment` over the `n_T+n_R` external
-      slots vs. all modes, **maximizing `Σ|score|`** (negate the cost matrix, or `maximize=True`).
-      **No block-constraint mechanism** — retracted 2026-07-01 (`JCC_manuscript_structure_scoped.md`
-      Decision 8): translation invariance holds along any axis for any molecule; a degenerate inertia
-      tensor's non-unique axes are a labeling convention (any deterministic eigensolver's fixed triple
-      works, scoring proceeds normally); and normal-mode T/R references are built directly from geometry
-      (Eckart/Sayvetz), so no assignment ambiguity exists there. Global assignment does genuine work
-      only for EMIT mode sets, and plain Hungarian handles those correctly with no special-casing.
-- [ ] **Step 3 two-gate purity (see Authoritative spec):** clean external iff `|s_slot|≥τ_TR` AND
-      `s[V_S]≤τ_B`; else `mixed_external` (flag + dominant slot + `s[V_S]`). Reuses existing constants.
-      Correctly flags 34/35 (stretching-mixed). **BLIND SPOT — EMIT 36** (A₂ᵤ out-of-plane bending,
-      `s[V_S]=0`) has a score signature identical to a pure z-translation, so the scores cannot flag it
-      (no bending observable). **Manuscript refinement (B8.4):** "EMIT 34–36 flagged" → "34/35 flagged
-      (stretching); 36 is the honest limit — its out-of-plane bending residual is invisible to the
-      reference-free scores and resolved only by projection." **DECISION X locked** (honest limitation;
-      no rigid-body residual). Discussion must note the scores capture genuine directional/geometrical
-      translational character — only magnitudes differ — so the label is correct about dominant character.
-- [ ] Step 4 internal split (stretching/bending/mixed) + attach `s_AB`.
-- [ ] Output `data/results/<mol>_classified.csv` (scores + label + annotations + `s_AB`).
+- [x] `src/classifier.py` (NEW) — **DONE 2026-07-01.** `n_T/n_R` via `is_linear()`/`external_slots()`;
+      `Thresholds` dataclass (`τ_TR=0.95, τ_S=0.9, τ_B=0.2` — `τ_TR` to be replaced by calibration in
+      Phase 3). No degenerate-axis-block data structure (block-handling retracted 2026-07-01,
+      `JCC_manuscript_structure_scoped.md` Decision 8) — confirmed by formula-auditor: no `axis_blocks()`/
+      `DEGEN_TOL` import anywhere in the module.
+- [x] Step 2 global assignment — **DONE.** Plain one-to-one `linear_sum_assignment` over the `n_T+n_R`
+      external slots vs. all modes, **maximizing `Σ|score|`** (`maximize=True`, with a sign-correct
+      `-cost`/minimize fallback for older scipy). **No block-constraint mechanism** — retracted
+      2026-07-01 (`JCC_manuscript_structure_scoped.md` Decision 8): translation invariance holds along
+      any axis for any molecule; a degenerate inertia tensor's non-unique axes are a labeling convention
+      (any deterministic eigensolver's fixed triple works, scoring proceeds normally); and normal-mode
+      T/R references are built directly from geometry (Eckart/Sayvetz), so no assignment ambiguity exists
+      there. Global assignment does genuine work only for EMIT mode sets (confirmed: water/benzene EMIT
+      2, 6, 9 are non-trivially assigned then flagged `MIXED_EXTERNAL_WITH_VIBRATION`), and plain
+      Hungarian handles those correctly with no special-casing.
+- [x] **Step 3 two-gate purity (see Authoritative spec) — DONE.** Clean external iff `|s_slot|≥τ_TR` AND
+      `s[V_S]≤τ_B`; else `MIXED_EXTERNAL_WITH_VIBRATION` (flag + dominant slot + `vib_label(s[V_S])`
+      annotation). Reuses existing constants. Correctly flags 34/35 (stretching-mixed;
+      `annotation="dominant_external=Tx; vibration=MIXED_STRETCH_BEND"` / `Ty`). **BLIND SPOT — EMIT 36**
+      (A₂ᵤ out-of-plane bending, `s[V_S]=0`) has a score signature identical to a pure z-translation, so
+      the scores cannot flag it (no bending observable) — reproduced exactly as `CLEAN_TRANSLATION`, per
+      Decision X (this is the correct, intentional output, not a bug). **Manuscript refinement (B8.4):**
+      "EMIT 34–36 flagged" → "34/35 flagged (stretching); 36 is the honest limit — its out-of-plane
+      bending residual is invisible to the reference-free scores and resolved only by projection."
+      **DECISION X locked** (honest limitation; no rigid-body residual). Discussion must note the scores
+      capture genuine directional/geometrical translational character — only magnitudes differ — so the
+      label is correct about dominant character.
+- [x] Step 4 internal split (stretching/bending/mixed) + attach `s_AB` — **DONE.** `vib_label()` applies
+      only to modes never claimed by any external slot in Step 2 (`classification is None` after Step 3);
+      modes flagged `MIXED_EXTERNAL_WITH_VIBRATION` get their vibrational character only inside the
+      annotation, never a second top-level label (formula-auditor confirmed no double-classification).
+      Per-bond `s_AB` attached only for `STRETCHING`/`MIXED_STRETCH_BEND` (formula-auditor flag: this
+      means stretching-flavored `MIXED_EXTERNAL_WITH_VIBRATION` modes, e.g. benzene EMIT 34/35, currently
+      carry no per-bond detail at all — self-consistent with the literal spec wording as written, but
+      worth a future author call if `fig:bondscores`/localization ever wants bond-level detail for the
+      flagged-external cases too; **not changed this session**, flagged here for later).
+- [x] Output `data/results/<mol>_classified.csv` (scores + label + annotations + `s_AB`) — **DONE for all
+      4 required combos:** `water_normal_classified.csv`, `water_EMIT_classified.csv`,
+      `benzene_normal_classified.csv`, `benzene_EMIT_classified.csv` (also verified for
+      `co2_mp2_3-21g_normal` as an extra linear-molecule check — see Changelog bug/fix). Columns: Mode,
+      Freq/Eigenvalue, Tx,Ty,Tz,Rx,Ry,Rz,V_Stretch, label, annotation, s_AB (semicolon-joined
+      `i-j:value`, 1-based atom indices, blank when not attached).
 - [ ] Figure `fig:benzene`: `s[V_S]` vs freq, and score vs projected NM contribution (highlight EMIT 2/9,
       34–36). **Caption/plot as flag-behavior & s[R] non-monotonicity — NOT a T/R-accuracy benchmark**
       (A5 spine guard: do not render it as a parity/accuracy plot).
@@ -296,7 +321,9 @@ library scores from the Excel file.
 - [ ] (Phase 0) eq:emitproj mass-weighting convention — pinned pre-Phase-2.
 - [ ] (Phase 0) `data_score` column == `s[V_S]` — verified by in-engine re-score.
 - [x] (Phase 0) library optimized geometries — RESOLVED: author supplies `.log`/`.gjf` on request at the Phase-5 SI step.
-- [ ] Step-2 objective is **maximize** `Σ|score|` (not scipy's default minimize).
+- [x] Step-2 objective is **maximize** `Σ|score|` (not scipy's default minimize) — implemented in
+      `src/classifier.py` via `linear_sum_assignment(cost, maximize=True)`; formula-auditor confirmed
+      sign correctness including the `-cost`/minimize fallback path.
 - [ ] V-score uses the **initial** bond direction `b̂^{i}`.
 - [ ] Degeneracy tolerance numeric value (axes by `λ_i`, modes by freq) — fix and document.
 - [ ] ~~Gramicidin bond-connectivity criterion (`TODO-DATA`): use `1grm.com` topology.~~ **DEFERRED
@@ -307,6 +334,53 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-01 — Phase 2 classifier landed (`src/classifier.py`, Algorithm 1 Steps 2-4) + a linear-
+  molecule pool bug found and fixed.** Added `src/classifier.py`: `Thresholds` dataclass
+  (`τ_TR=0.95, τ_S=0.9, τ_B=0.2`); `is_linear()`/`external_slots()` (`n_T=3`, `n_R=2 if linear else 3`);
+  `classify_all_modes(scorer, final, thresholds)` — Step 1 rescoring (delegates to
+  `ModeScorer.calculate_scores`/`score_bonds`, no new formulas), Step 2 plain one-to-one
+  `linear_sum_assignment(cost, maximize=True)` over the `n_T+n_R` slots vs. every mode in the pool (no
+  block-constraint mechanism, per the Decision-8 retraction), Step 3 two-gate purity
+  (`|s_slot|≥τ_TR` AND `s[V_S]≤τ_B` → `CLEAN_TRANSLATION`/`CLEAN_ROTATION`, else
+  `MIXED_EXTERNAL_WITH_VIBRATION` + `dominant_external=<slot>; vibration=<vib_label>` annotation), Step 4
+  `vib_label()` for modes never claimed by a slot (`STRETCHING`/`BENDING`/`MIXED_STRETCH_BEND`, per-bond
+  `s_AB` attached only for the stretching-flavored two). `classify_to_rows()` flattens to the CSV shape.
+  Factored `main.build_scorer_and_final()` out of the existing `score_modes()` (byte-identical output,
+  confirmed by score-validator) so both Step-1 scoring and the new `main.run_classify_pipeline()` build
+  the identical candidate pool from the same raw parse. Generated all 4 required outputs:
+  `data/results/{water,benzene}_{normal,EMIT}_classified.csv`.
+  **Validation:** water's 6 ideal T/R references → clean (Tx/Ty/Tz `CLEAN_TRANSLATION`, Rx/Ry/Rz
+  `CLEAN_ROTATION`); Vib 1 (bend, `V=0.061`) → `BENDING`; Vib 2/3 (stretches, `V=1.000`/`0.998`) →
+  `STRETCHING` with `s_AB` summing to `V` over the 2 O-H bonds. Benzene EMIT 34 (`|Tx|=1, V=0.667`) and
+  35 (`|Ty|=1, V=0.577`) → `MIXED_EXTERNAL_WITH_VIBRATION` (pass gate 1, fail gate 2); EMIT 36
+  (`|Tz|=1, V=0`) → `CLEAN_TRANSLATION`, the documented Decision-X blind spot (out-of-plane bending is
+  invisible to the two-gate test since `s[V_S]=0` for it too) — reproduced exactly as specified, not
+  "fixed." formula-auditor: PASS on Steps 2-4 mechanics (Hungarian correctness/direction, no block
+  machinery, two-gate exact form, no double-classification), with one **DIVERGENT** finding (see below).
+  score-validator: full PASS (all label/invariant targets, `score_modes()` byte-identical, 12/12 tests
+  green at review time).
+  **Bug found + fixed (formula-auditor):** for a linear molecule, `ModeScorer.construct_R()` always
+  builds 3 ideal rotation references, but `MIT()` places the smallest-moment (molecular) axis on the new
+  X axis, so the ideal "Rx" reference is an all-zero vector for a linear molecule — not a genuine external
+  mode (`n_R=2` should exclude it). Left unfiltered, it entered the candidate pool, was never claimed by
+  any Step-2 slot (`external_slots()` correctly omits Rx when linear), and fell through Step 4 to be
+  mislabeled `BENDING` (`V=0≤τ_B`) — a spurious `3N+1`-mode pool with a meaningless row (confirmed on
+  `co2_mp2_3-21g`, previously unexercised since no test ran a linear molecule through the classifier).
+  Fixed in `main.build_scorer_and_final()`: when `is_linear(scorer)`, drop the `"Rx"` entry from
+  `scorer.construct_R()`'s output before assembling `final`, so the on-axis placeholder never enters
+  either the Step-1 scores or the classifier's pool. Verified: `co2_mp2_3-21g` now yields exactly 9
+  rows (`3N`) with `Ry`/`Rz` clean and 2 real bends + 2 real stretches, no spurious `Rx` row; water/
+  benzene (neither linear) unaffected (row counts unchanged, byte-identical scores). Added
+  `test_co2_linear_no_spurious_onaxis_mode` regression test. Not yet resolved (flagged in the Phase-2
+  checklist for a future author call, not a bug per the literal current spec): stretching-flavored
+  `MIXED_EXTERNAL_WITH_VIBRATION` modes (e.g. benzene EMIT 34/35) currently get no per-bond `s_AB` at all,
+  since bond attachment is gated on the top-level classification being `STRETCHING`/`MIXED_STRETCH_BEND`
+  only — self-consistent with the spec as written, but a candidate gap if bond-level detail is later
+  wanted for the flagged-external cases too (e.g. for `fig:bondscores`/localization).
+  Added `tests/test_classifier.py` (6 tests, all green): water externals clean, water Vib1/2/3 split,
+  benzene EMIT 34/35 flagged with correct annotation, EMIT 36 clean (blind spot), the CO2 pool-size
+  regression, and `classify_to_rows()` column-shape check. Full suite: 13/13 green
+  (`py -m pytest tests/`).
 - **2026-07-01 — Manuscript scope revision (Gramicidin deferred; Decision-8 retraction; τ renamed;
   Phase 6 re-tiered).** `JCC/JCC_manuscript_structure_scoped.md` (01 July 2026) supersedes prior
   manuscript planning and forces five changes here:

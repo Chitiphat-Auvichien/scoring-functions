@@ -4,6 +4,7 @@ import pandas as pd
 
 from src.parser import GaussianParser, EMITParser, IntermediateIO
 from src.scoring import ModeScorer
+from src.classifier import classify_all_modes, classify_to_rows, is_linear
 
 # Column order for the results table / CSV.
 _SCORE_COLS = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_Stretch"]
@@ -51,12 +52,21 @@ def load_inputs(mol_name, mode_type, data_dir="data"):
     return raw, dirs
 
 
-def score_modes(raw, mode_type):
-    """Pure scoring core: align to principal axes, build ideal T/R modes (normal
-    only), and score every mode. Returns a list of result-row dicts.
+def build_scorer_and_final(raw, mode_type):
+    """Align to principal axes and build the candidate mode pool ('final').
+
+    Shared by score_modes() and classifier.run_classification() so both stages
+    construct the exact same mode list from the same raw parse:
+      - 'normal': ModeScorer.MIT rotates the molecule AND the mode vectors, and
+        the 3 ideal translations + 3 ideal rotations are prepended (they are
+        literally in the candidate pool, alongside the real vibrational modes).
+      - 'emit'  : MIT rotates the molecule only (EMIT modes already live in
+        principal axes); no ideal references are added -- all 3N raw EMIT
+        eigenvectors are the candidate pool.
 
     Raises ValueError if no bond connectivity is available (a missing bond list
     silently corrupts the V-score, so we fail loud rather than score garbage).
+    Returns (scorer, final) where final is a list of mode dicts.
     """
     if not raw["bonds"]:
         raise ValueError(
@@ -68,9 +78,31 @@ def score_modes(raw, mode_type):
     if mode_type == "normal":
         for i, m in enumerate(rotated):
             m["label"] = f"Vib {i+1}"
-        final = scorer.construct_T() + scorer.construct_R() + rotated
+        ideal_R = scorer.construct_R()
+        if is_linear(scorer):
+            # n_R = 2 for a linear molecule (spec). construct_R() always builds
+            # 3 ideal references, but MIT() places the linear (smallest-moment)
+            # axis on the new X axis, so the "Rx" reference is an all-zero
+            # vector -- an ill-defined placeholder, not a genuine external
+            # mode. Drop it before it enters the candidate pool: left in, it
+            # would fall through classify_all_modes' Step 2 (no slot claims
+            # it, since external_slots() correctly excludes Rx for linear
+            # molecules) into Step 4 and be mislabeled BENDING (V=0 <= tau_B).
+            ideal_R = [m for m in ideal_R if m["label"] != "Rx"]
+        final = scorer.construct_T() + ideal_R + rotated
     else:
         final = rotated
+    return scorer, final
+
+
+def score_modes(raw, mode_type):
+    """Pure scoring core: align to principal axes, build ideal T/R modes (normal
+    only), and score every mode. Returns a list of result-row dicts.
+
+    Raises ValueError if no bond connectivity is available (see
+    build_scorer_and_final).
+    """
+    scorer, final = build_scorer_and_final(raw, mode_type)
 
     rows = []
     for i, mode in enumerate(final):
@@ -96,6 +128,26 @@ def run_pipeline(mol_name, mode_type, data_dir="data", write=True):
     df = pd.DataFrame(score_modes(raw, mode_type))
     suffix = "normal" if mode_type == "normal" else "EMIT"
     output_file = os.path.join(dirs["results"], f"{mol_name}_{suffix}_scores.csv")
+    if write:
+        df.to_csv(output_file, index=False, float_format="%.4f")
+    return df, output_file
+
+
+def run_classify_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, write=True):
+    """Headless classify pipeline: load inputs -> classify_all_modes -> CSV.
+
+    Mirrors run_pipeline() but runs the full Algorithm 1 classifier
+    (src/classifier.py) instead of stopping at Step-1 scores. Returns
+    (DataFrame, output_path); raises on any missing input, missing bonds, or
+    wrong mode count (same fail-loud behaviour as load_inputs()/
+    build_scorer_and_final()).
+    """
+    raw, dirs = load_inputs(mol_name, mode_type, data_dir)
+    scorer, final = build_scorer_and_final(raw, mode_type)
+    scored = classify_all_modes(scorer, final, thresholds)
+    df = pd.DataFrame(classify_to_rows(scored))
+    suffix = "normal" if mode_type == "normal" else "EMIT"
+    output_file = os.path.join(dirs["results"], f"{mol_name}_{suffix}_classified.csv")
     if write:
         df.to_csv(output_file, index=False, float_format="%.4f")
     return df, output_file

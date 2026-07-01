@@ -3,7 +3,8 @@
 > Living checklist. Tick `[x]` as parts are completed; pick up unchecked items in any later session.
 > Companion to the JCC manuscript `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, the content plan
 > `JCC/JCC_manuscript_structure_JCCformat.pdf`, and the plan slides `JCC/Scoring_Manuscript_Plan_2026-06-29.pdf`.
-> Last updated: 2026-06-30 (revised after the seven-agent plan review — see Changelog).
+> Last updated: 2026-07-01 (scope revision: Gramicidin/companion-paper split, Decision-8 retraction,
+> τ renaming, Phase-6 re-tiering — see Changelog).
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -24,8 +25,9 @@
 > numerical filter; the `EPS_DENOM` fix is what now deliberately does the noise-filtering job the
 > round-trip used to do by accident.
 > **Next, in order:** (6) Phase-0 Excel column verification (re-score one library molecule vs
-> `data_score` `s[V_S]` column) → then Phase 2 (classifier/projection) — **but see the 2026-07-01
-> scope-revision Changelog entry below first**, which supersedes several Phase 2–4 items per the new
+> `data_score` `s[V_S]` column) → then Phase 2 (classifier/projection), which now follows the
+> **2026-07-01 scope-revision** below (Gramicidin/Phase 4 deferred; degenerate-block assignment
+> retracted → plain Hungarian; τ renamed τ_TR/τ_S/τ_B; Phase 6 re-tiered) per
 > `JCC/JCC_manuscript_structure_scoped.md`.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
@@ -67,19 +69,22 @@ library scores from the Excel file.
 - `s[V_S] = (1/Σ|Δb|²) Σ |Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}|`, `Δb_AB=d_B−d_A`; **`b̂^{i}` = the INITIAL
   (equilibrium-geometry) bond direction**, not the perturbed one; range `[0,1]`. Per-bond
   `s_AB = |Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}| / Σ_bonds|Δb|²` (global denominator) with `s[V_S]=Σ s_AB`.
-- **Algorithm 1** (PDF §B6.2): Step1 score → Step2 global one-to-one assignment over `n_T+n_R` external
-  slots **MAXIMIZING `Σ|score|`** (`linear_sum_assignment` minimizes → negate the cost / use
-  `maximize=True`), degenerate axis-blocks bound to degenerate mode-blocks **collectively** (not per
-  element) → Step3 **clean iff `|score|≥τ_pure` AND `s[V_S]≤τ_bend`** (directionally aligned AND
-  internally rigid), else `mixed_external` (flag + dominant slot + `s[V_S]`) →
-  Step4 `s[V_S]≥τ_stretch` stretching / `≤τ_bend` bending / else mixed. `n_T=3`, `n_R=2 if linear else 3`.
+- **Algorithm 1** (PDF §B6.2): Step1 score → Step2 global **plain one-to-one** assignment via
+  `linear_sum_assignment` over the `n_T+n_R` external slots vs. all modes, **MAXIMIZING `Σ|score|`**
+  (scipy minimizes by default → negate the cost matrix or use `maximize=True`). **No block-constraint
+  mechanism** (retracted 2026-07-01 per `JCC_manuscript_structure_scoped.md` Decision 8 — degenerate
+  inertia-tensor axis choice is a labeling convention, not an assignment ambiguity, and normal-mode T/R
+  references are constructed directly from geometry, never searched for) → Step3 **clean iff
+  `|score|≥τ_TR` AND `s[V_S]≤τ_B`** (directionally aligned AND internally rigid), else
+  `mixed_external` (flag + dominant slot + `s[V_S]`) → Step4 `s[V_S]≥τ_S` stretching / `≤τ_B`
+  bending / else mixed. `n_T=3`, `n_R=2 if linear else 3`.
   **Two-gate purity (refined 2026-06-30):** `s[T]/s[R]` are direction-only (read ±1 for amplitude-varying
   impure modes); the second gate uses `s[V_S]` to catch **stretching-type** external impurity. Benzene
   EMIT: 34/35 (E₁ᵤ, Tx/Ty=1, `s[V_S]=0.667/0.577`) correctly flagged. **KNOWN BLIND SPOT:** EMIT 36 (A₂ᵤ,
   Tz=1, `s[V_S]=0`) is out-of-plane **bending**-mixed (amplitude variation ⊥ the in-plane bonds → bending,
   no stretching), yet its score signature {Tz=1, rest 0, V_S=0} is **identical to a pure z-translation** —
   {s[T],s[R],s[V_S]} cannot distinguish them (no bending observable). The flag detects stretching-type
-  impurity only; bending-type is invisible (projection resolves it). Reuses τ_pure/τ_bend; for exact
+  impurity only; bending-type is invisible (projection resolves it). Reuses τ_TR/τ_B; for exact
   normal-mode externals (genuinely rigid, `s[V_S]=0`) the gate never fires (completeness intact).
   **DECISION (LOCKED 2026-06-30): X — honest limitation, no new machinery.** Framing: the scores measure
   **directional/geometrical** character; 34/35/36 genuinely have large translational character (every
@@ -89,9 +94,11 @@ library scores from the Excel file.
   correctly reports 36's dominant translational character; the magnitude-encoded bending residual is left
   to projection. 36 = the worked example of the score/projection boundary. (Y, a rigid-body residual, was
   rejected: it is projection onto the T/R subspace and reopens the substitutability objection.)
-- Conventions: `ε_disp=1e-8`; `unit(0):=0`; degeneracy tolerance groups inertia axes (by `λ_i`) & modes
-  (by frequency/eigenvalue) — **fix the numeric tolerance** (provisional `1e-3` relative; confirm).
-  `τ_pure` is taken from **calibration**, NOT hardcoded (PDF example uses 0.95).
+- Conventions: `ε_disp=1e-8`; `unit(0):=0`. Degeneracy-tolerance grouping of inertia axes/modes is
+  **no longer part of the assignment mechanism** (Decision 8, retracted 2026-07-01) — `DEGEN_TOL`
+  survives only as a general-purpose numeric constant (e.g. for the Phase-3 degenerate-mode-set sanity
+  check), not as an axis-block/mode-block binding requirement. `τ_TR` is taken from **calibration**,
+  NOT hardcoded (PDF example uses 0.95).
 
 ### Environment (verified)
 - Python 3.13 via `py`; numpy/pandas/scipy/matplotlib/openpyxl available.
@@ -124,7 +131,10 @@ library scores from the Excel file.
       removed the scattered `1e-6`/`1e-9`. Tscore cutoff moved 1e-6→1e-8 (water/benzene outputs unchanged).
       Rscore left untouched. (dataclass deferred to the classifier's `Thresholds`.)
 - [x] **Expose inertia data:** added `principal_axes()` / `axis_blocks()` accessors to `scoring.py`
-      (share `_build_inertia_tensor()` with `MIT`); classifier reads moments + axis-degeneracy blocks.
+      (share `_build_inertia_tensor()` with `MIT`). **Note (2026-07-01):** `axis_blocks()` is retained
+      as a diagnostic/introspection accessor only — Decision 8 retracts the requirement that the
+      classifier consume axis-degeneracy blocks for assignment; `classifier.py` uses plain
+      `linear_sum_assignment` over the full score table with no block-consumption step.
 
 ## Phase 1 — Score engine + score-level regression  (data: water, benzene, CO₂)  — **DO NOW**
 - [x] **`Rscore` = consensus form, confirmed/kept (FINAL 2026-06-30).** `s[R_Q]=(1/(N−N_Q)) Σ
@@ -157,13 +167,19 @@ library scores from the Excel file.
 - [ ] `src/projection.py` (NEW): EMIT→normal-mode projection `Θ̃=QᵀΘ` (eq:emitproj) using the Phase-0
       convention; **emit a projection-coefficients data file** (per-mode projected NM contribution), not
       just numbers. Reproduce: EMIT 34–36 ≈ 77% translational; EMIT 2 (39% Ry) vs EMIT 9 (14% Ry).
-- [ ] `src/classifier.py` (NEW): inertia degeneracy blocks; `n_T/n_R`; `Thresholds` (provisional
-      `τ_pure=0.95, τ_stretch=0.9, τ_bend=0.2` — τ_pure to be replaced by calibration in Phase 3).
-- [ ] Step 2 global assignment via `linear_sum_assignment` **maximizing `Σ|score|`** (negate / `maximize=True`),
-      with a **concrete, documented block-constrained mechanism** so a degenerate axis-block binds a
-      degenerate mode-block collectively (plain 1-to-1 will mis-assign Tₐ/Oₕ tops & degenerate pairs).
-- [ ] **Step 3 two-gate purity (see Authoritative spec):** clean external iff `|s_slot|≥τ_pure` AND
-      `s[V_S]≤τ_bend`; else `mixed_external` (flag + dominant slot + `s[V_S]`). Reuses existing constants.
+- [ ] `src/classifier.py` (NEW): `n_T/n_R`; `Thresholds` (provisional `τ_TR=0.95, τ_S=0.9, τ_B=0.2` —
+      `τ_TR` to be replaced by calibration in Phase 3). No degenerate-axis-block data structure is
+      required (block-handling retracted 2026-07-01, `JCC_manuscript_structure_scoped.md` Decision 8).
+- [ ] Step 2 global assignment: plain one-to-one `linear_sum_assignment` over the `n_T+n_R` external
+      slots vs. all modes, **maximizing `Σ|score|`** (negate the cost matrix, or `maximize=True`).
+      **No block-constraint mechanism** — retracted 2026-07-01 (`JCC_manuscript_structure_scoped.md`
+      Decision 8): translation invariance holds along any axis for any molecule; a degenerate inertia
+      tensor's non-unique axes are a labeling convention (any deterministic eigensolver's fixed triple
+      works, scoring proceeds normally); and normal-mode T/R references are built directly from geometry
+      (Eckart/Sayvetz), so no assignment ambiguity exists there. Global assignment does genuine work
+      only for EMIT mode sets, and plain Hungarian handles those correctly with no special-casing.
+- [ ] **Step 3 two-gate purity (see Authoritative spec):** clean external iff `|s_slot|≥τ_TR` AND
+      `s[V_S]≤τ_B`; else `mixed_external` (flag + dominant slot + `s[V_S]`). Reuses existing constants.
       Correctly flags 34/35 (stretching-mixed). **BLIND SPOT — EMIT 36** (A₂ᵤ out-of-plane bending,
       `s[V_S]=0`) has a score signature identical to a pure z-translation, so the scores cannot flag it
       (no bending observable). **Manuscript refinement (B8.4):** "EMIT 34–36 flagged" → "34/35 flagged
@@ -185,14 +201,16 @@ library scores from the Excel file.
       library covers exactly the `tab:ideal`/`tab:nonideal` molecules (else a manuscript table edit is forced).
 - [ ] **Run the classifier over the library** to attach *predicted* labels (incl. clean-T/R cells) —
       required for `fig:confusion` (reference labels alone can't form the matrix).
-- [ ] `src/calibrate.py` (NEW): derive `τ_stretch`,`τ_bend` from labeled distributions; `τ_pure` sweep +
+- [ ] `src/calibrate.py` (NEW): derive `τ_S`,`τ_B` from labeled distributions; `τ_TR` sweep +
       plateau; **persist the full τ-sweep curve** (label-change fraction + accuracy per τ) for
       `fig:sensitivity`; write `data/results/thresholds.json`; back-fill `Thresholds`. Define "plateau"
       quantitatively (give a numeric criterion).
 - [ ] **Label-level validation (now τ is frozen):** benzene EMIT 34–36 flagged `mixed_external`;
       confusion-matrix precision/recall vs lit labels (set a numeric acceptance floor); re-pin label
-      goldens. Add a **degenerate-block consistency** check (e.g. benzene EMIT 1–9 share eigenvalue → same
-      slot/label).
+      goldens. **Sanity check only (not a mechanism):** confirm plain one-to-one Hungarian assignment
+      happens to label degenerate mode sets consistently (e.g. benzene EMIT 1–9, sharing an eigenvalue)
+      as an emergent property of the scores — no block-special-casing is implemented or needed
+      (retracted 2026-07-01).
 - [ ] Figure `fig:confusion` (clean-category confusion matrix + precision/recall vs lit labels).
 - [ ] Figure `fig:bondscores` (bond score vs relative Δbond length, ideal vs non-ideal).
 - [ ] Figure `fig:boxplots` (freq, Δ|b|, `s[V_S]`; stretch vs bend).
@@ -200,15 +218,22 @@ library scores from the Excel file.
 - [ ] Figure `fig:sensitivity` (label-change fraction & accuracy vs τ; plateau).
 - [ ] Parity check vs Excel `box plots` / `CM` sheets (and spot-check the other figures' source data).
 
-## Phase 4 — Gramicidin A: scalability + `s_AB`  (data: 1grm)
-- [ ] **Budget a NumPy vectorization pass** on Step-1 scoring + `MIT` mode rotation (≈550 atoms × 1650
-      modes are currently pure-Python loops); measure early so the wall-clock `TODO-DATA` is a real number.
-- [ ] Run full pipeline on `1grm_MM_UFF.log` (1650 modes) with `1grm.com` connectivity; record wall-clock.
-- [ ] Output per-bond `s_AB` localization (e.g. carbonyl C–O, Mode 1316).
-- [ ] **Figure `fig:gramicidin`** (explicit task): (a) mode scores vs ascending frequency; (b) Mode-1316
-      carbonyl C–O `s_AB` localization over structure. Label as **demonstration**, not validated accuracy.
-- [ ] Comparison-with-projection coverage table + op-count/wall-clock. **Keep Phase 4 strictly
-      scale/cost + `s_AB`** — no label-correctness/accuracy claim (MM/UFF has no ground truth).
+## Phase 4 — DEFERRED to companion paper (Gramicidin A scalability; out of scope for this manuscript)
+> **Scope decision (2026-07-01, `JCC_manuscript_structure_scoped.md` Decision 5):** Gramicidin A
+> scalability/wall-clock/`fig:gramicidin`/per-bond `s_AB`-at-scale, transition-state/bond-breaking
+> characterization, and isotopic-substitution mode comparison are ALL deferred to a future companion
+> paper built around `s_AB` as a standalone analytical tool. **Why:** this paper's coverage claim
+> ("one framework classifies all 3N modes in one pass") does not depend on scale — water, the hydride
+> library, and benzene (normal + EMIT) fully support it. Nothing is lost from the core argument; only
+> the *empirical, at-scale* demonstration is deferred, and the manuscript's Conclusion states this
+> explicitly so the absence of a large system reads as a decision, not a gap.
+>
+> **This phase is recorded here, not deleted, so the absence is legible as intentional.** No gramicidin
+> work is active for this manuscript: not the NumPy vectorization pass, not the `1grm_MM_UFF.log`
+> pipeline run, not `s_AB` localization output, not `fig:gramicidin`, not the wall-clock comparison
+> table. `data/logs/1grm_MM_UFF.log` and `data/gjf/1grm.com` remain tracked in the repo (companion-paper
+> input) but are not consumed by anything in the current build order. Revisit this phase only when the
+> companion paper begins.
 
 ## Phase 5 — Orchestration, reproducibility, docs, submission assets
 - [ ] `reproduce.py` (NEW): regenerate every `data/results/*.csv` + `data/figures/*` from inputs, headless
@@ -223,19 +248,34 @@ library scores from the Excel file.
 - [ ] `README.md`: document classification workflow; resolve **JCE-vs-JCC** mismatch (README cites
       *J. Chem. Educ.* "paper I"; this is the JCC unified-framework paper).
 
-## Phase 6 — Strengthen for review (OPTIONAL / DEFERRED; decide after core works)
-> From expert-reviewer-jcc. Not required to reproduce the manuscript, but directly defends load-bearing
-> claims if a referee pushes. Revisit once Phases 1–5 produce data.
+## Phase 6 — Strengthen for review (RE-TIERED 2026-07-01; see Changelog)
+> From expert-reviewer-jcc, re-triaged after Decision 5 (Phase 4/Gramicidin deferred to the companion
+> paper) removed the paper's only scale/robustness demonstration — raising the weight the remaining
+> validation has to carry. Split into a **recommended-before-submission** tier and an **optional** tier.
+
+### Recommended before submission
 - [ ] **Flag precision/recall over ALL 36 benzene EMIT modes** (and library externals) against the C2
       projection reference — systematic flag-fidelity, vs the current anecdotal EMIT 2/9/34–36 (A4).
+      **Promoted:** with no large-system demonstration left in this paper, benzene EMIT is now the
+      paper's only stress test of the flagging mechanism — a 3-mode anecdotal spot-check can no longer
+      carry that load; the full 36-mode confusion set is needed.
+- [ ] **Validate the mixed-SB bucket** by irrep-degeneracy + CoM arguments; report the fraction of
+      lit-labeled modes landing in "mixed" (defends against the bending = low-stretch circularity
+      concern). **Promoted:** this is the direct evidentiary backbone for the manuscript's residual-risk
+      discipline that mixed-SB/flagged-external buckets be "validated by characterization and
+      consistency, never by an accuracy claim" — without this item that discipline is asserted but not
+      discharged.
 - [ ] **Out-of-sample / leave-one-molecule-out** evaluation of the τ-calibrated classifier — answers the
-      "reference-free vs trained-τ" objection that the sensitivity plateau alone does not.
-- [ ] **CoM-conservation evidence** (correlate central-atom amplitude / neighbor mass vs `s[V_S]`
-      degradation, TeH₂ vs Br₂O) backing the B8.3 "explained, not noisy" difficulty gradient.
+      "reference-free vs trained-τ" objection that the sensitivity plateau alone does not. **Promoted:**
+      with the computational-cost argument now the primary defense against "why not projection/PED," a
+      referee who accepts that argument pivots next to "are your thresholds actually reference-free, or
+      secretly fit to the test set" — this is the direct answer.
+
+### Optional (nice-to-have, not fatal if deferred)
 - [ ] **N-per-cell + confidence intervals** on the confusion matrix (thin bend counts invite a
       significance objection).
-- [ ] **Validate the mixed-SB bucket** by irrep-degeneracy + CoM arguments; report the fraction of
-      lit-labeled modes landing in "mixed" (defends against the bending = low-stretch circularity concern).
+- [ ] **CoM-conservation evidence** (correlate central-atom amplitude / neighbor mass vs `s[V_S]`
+      degradation, TeH₂ vs Br₂O) backing the B8.3 "explained, not noisy" difficulty gradient.
 
 ---
 
@@ -243,10 +283,13 @@ library scores from the Excel file.
 - [ ] **Score-level (Phase 1):** water matches `tab:water` to 3 dp; `Σ s_AB == s[V_S]` (1e-6); externals
       reach ±1.000 (`|x|≥0.9995`); ranges hold; CO₂ exercises `n_R=2`; benzene EMIT 34–36 `s[V_S]` and
       EMIT 2/9 `|s[Ry]|` to 3 dp. All frozen as goldens.
-- [ ] **Label-level (Phase 3, τ frozen):** benzene EMIT 34–36 flagged `mixed_external`; degenerate blocks
-      assigned consistently; confusion-matrix precision/recall ≥ floor; calibrated τ on the plateau.
+- [ ] **Label-level (Phase 3, τ frozen):** benzene EMIT 34–36 flagged `mixed_external`; degenerate mode
+      sets receive consistent labels as an emergent property of plain Hungarian assignment (no block
+      mechanism); confusion-matrix precision/recall ≥ floor; calibrated τ on the plateau.
 - [ ] Figures match Excel `box plots`/`CM` sheets (+ spot-checks for the rest).
-- [ ] Gramicidin run completes with timing + `s_AB`; numbers inserted where `.tex` has `TODO-DATA`.
+- [ ] ~~Gramicidin run completes with timing + `s_AB`; numbers inserted where `.tex` has `TODO-DATA`.~~
+      **REMOVED 2026-07-01** — Gramicidin deferred to the companion paper (see Phase 4 above); this
+      manuscript carries no gramicidin verification target.
 - [ ] `py reproduce.py` regenerates all CSVs + figures with no manual steps; `pytest` green.
 
 ## Open items to confirm during execution
@@ -256,13 +299,60 @@ library scores from the Excel file.
 - [ ] Step-2 objective is **maximize** `Σ|score|` (not scipy's default minimize).
 - [ ] V-score uses the **initial** bond direction `b̂^{i}`.
 - [ ] Degeneracy tolerance numeric value (axes by `λ_i`, modes by freq) — fix and document.
-- [ ] Gramicidin bond-connectivity criterion (`TODO-DATA`): use `1grm.com` topology.
-- [x] Flag-criterion: two-gate purity (`|s|≥τ_pure` AND `s[V_S]≤τ_bend`) flags stretching-type impurity (34/35). EMIT 36 out-of-plane bending blind spot RESOLVED as **Decision X** (honest limitation; scores report genuine directional/geometrical translational character, magnitudes differ; bending residual → projection). No rigid-body residual added.
+- [ ] ~~Gramicidin bond-connectivity criterion (`TODO-DATA`): use `1grm.com` topology.~~ **DEFERRED
+      2026-07-01** — moot for this manuscript (Phase 4 deferred to companion paper).
+- [x] Flag-criterion: two-gate purity (`|s|≥τ_TR` AND `s[V_S]≤τ_B`) flags stretching-type impurity (34/35). EMIT 36 out-of-plane bending blind spot RESOLVED as **Decision X** (honest limitation; scores report genuine directional/geometrical translational character, magnitudes differ; bending residual → projection). No rigid-body residual added.
 - [ ] Verify in Phase 2 the per-mode projected translational % for 34/35/36 (36 is NOT ~100% — it has out-of-plane bending despite `s[V_S]=0`; do not assume the "77%" applies uniformly).
 
 ---
 
 ## Changelog
+- **2026-07-01 — Manuscript scope revision (Gramicidin deferred; Decision-8 retraction; τ renamed;
+  Phase 6 re-tiered).** `JCC/JCC_manuscript_structure_scoped.md` (01 July 2026) supersedes prior
+  manuscript planning and forces five changes here:
+  (1) **Phase 4 (Gramicidin A) removed as an active phase, deferred to a future companion paper** built
+  around `s_AB` as a standalone tool — alongside transition-state/bond-breaking characterization and
+  isotopic-substitution mode comparison (Decision 5). This paper's coverage claim ("one framework
+  classifies all 3N modes in one pass") does not depend on scale — water + the hydride library +
+  benzene (normal + EMIT) fully support it — so nothing is lost from the core argument; only the
+  empirical at-scale demonstration is deferred. Recorded as an explicit "DEFERRED" phase, not deleted,
+  so the absence reads as a decision, not an oversight; `1grm_MM_UFF.log`/`1grm.com` stay tracked
+  (companion-paper input) but are out of scope for this manuscript.
+  (2) **"Degenerate-block assignment" retracted (Decision 8).** The earlier requirement that Step 2's
+  global assignment special-case degenerate inertia-tensor axis-blocks (for symmetric/spherical tops)
+  is INCORRECT and removed: translation never needs principal axes at all; a degenerate inertia
+  tensor's non-unique axes are a labeling convention fixed once by the eigensolver, not an assignment
+  ambiguity; and normal-mode T/R references are constructed directly from geometry (Eckart/Sayvetz),
+  never discovered by search, so no ambiguity exists there either. Step 2 is now **plain one-to-one**
+  `linear_sum_assignment` over all `n_T+n_R` external slots vs. all modes, maximizing `Σ|score|` — no
+  block-constraint data structure or mechanism, anywhere. It does genuine work only for unlabeled mode
+  sets (EMIT); for normal modes it remains confirmatory. `axis_blocks()` (Phase 0) is retained purely as
+  a diagnostic accessor, not consumed by the classifier. The Phase-3 "degenerate-block consistency
+  check" is downgraded from a required mechanism to a **sanity check**: confirming degenerate mode sets
+  (e.g. benzene EMIT 1–9) happen to receive consistent labels as an *emergent property* of plain
+  Hungarian assignment, not evidence of any block machinery (there is none).
+  (3) **Threshold renaming:** `τ_pure→τ_TR`, `τ_stretch→τ_S`, `τ_bend→τ_B` throughout (spec, Phase 2/3
+  checklist items, Verification, Open items) — cosmetic, no numeric/logic change.
+  (4) **Phase 6 re-tiered** (expert-reviewer-jcc advisory): with Gramicidin gone as the paper's only
+  scale/robustness demonstration, three items are promoted from optional to **recommended before
+  submission** — full 36-mode benzene-EMIT flag precision/recall (no longer anecdotal EMIT 2/9/34–36
+  only), mixed-SB bucket validation (irrep + CoM), and out-of-sample/leave-one-molecule-out threshold
+  evaluation. N-per-cell confidence intervals and CoM-conservation evidence remain optional.
+  (5) **Computational-cost section (`JCC_manuscript_structure_scoped.md` §8) is now the primary
+  defense** against "why not projection/PED" — with no large system in the paper, the three-stage
+  (construct/score/classify) op-count comparison carries more rebuttal weight than it would have
+  alongside a Gramicidin scale demo. Phase 5/6 work should treat that section's op-count derivation
+  (extending Appendix B to `s[T]`/`s[R]`) as a verification target, not just a manuscript exhibit.
+  See `JCC_manuscript_structure_scoped.md` Decisions 5/6/7/8 for full rationale. **Not yet done this
+  session (flagged for a future writing session):** the `.tex` itself (`JCC_man_scoring/
+  JCC_temp_LaTeXtemplate.tex`) still contains the old gramicidin subsection, `τ_pure/τ_stretch/τ_bend`
+  notation, and degenerate-block language — a `tex-data-sync` gap-list and a `lead-author` punch list
+  for that edit pass exist from this session's review but were deliberately not applied (the `.tex`
+  lives outside this git repo, per the note below, and deserves its own session with `check-tex`/
+  `check-figures` run afterward). Also flagged: Fig 4 needs a benzene ~400 cm⁻¹ C–C-stretch worked
+  example (currently only exists for ethane at 976 cm⁻¹ — a real content gap, not a relabeling), and
+  `fig:modemixing` likely needs additional panels for the irrep-degeneracy argument (currently prose-only,
+  using ethane not benzene).
 - **2026-07-01 — Headless refactor landed; EPS_DISP/EPS_DENOM Tscore bug found + fixed.** Completed the
   Phase-0 `run_pipeline` refactor left mid-verification at the end of the prior session. Verifying it
   (normal-mode CSVs unchanged; benzene/water EMIT CSVs shifted by more than rounding in a few rows, e.g.

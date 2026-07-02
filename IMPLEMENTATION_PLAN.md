@@ -3,8 +3,8 @@
 > Living checklist. Tick `[x]` as parts are completed; pick up unchecked items in any later session.
 > Companion to the JCC manuscript `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, the content plan
 > `JCC/JCC_manuscript_structure_JCCformat.pdf`, and the plan slides `JCC/Scoring_Manuscript_Plan_2026-06-29.pdf`.
-> Last updated: 2026-07-02 (Phase 6 item 1 done: systematic 36-mode benzene-EMIT flag
-> precision/recall + library-external check — see Changelog).
+> Last updated: 2026-07-02 (`fig:confusion` rebuilt as a two-tier rigorous/non-ideal figure +
+> fig:benzene panel (a) tau_S/tau_B drift fix — see Changelog).
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -362,15 +362,25 @@ library scores from the Excel file.
 - [x] **Label-level validation (now τ is frozen)** — **DONE 2026-07-02.** Benzene EMIT 34/35 flagged
       `MIXED_EXTERNAL_WITH_VIBRATION`, EMIT 36 the documented `CLEAN_TRANSLATION` blind spot — both
       re-verified under the calibrated (not just provisional) thresholds. Confusion-matrix
-      precision/recall via `confusion_matrix_stats()`: precision 1.0 all 4 categories; recall 1.0
-      (T/R), ≥0.95 (bend), 0.717 (stretch, 28.3% into MIXED, 0% into BEND) — numeric floor 0.95 applied
-      and reported honestly as not fully met (stretch recall only). Label goldens re-pinned in
-      `tests/test_calibrate.py`. **Sanity check done:** benzene EMIT 1–9 (degenerate 9-fold block) —
+      precision/recall via `confusion_matrix_stats()` **pooled over the WHOLE library**: precision 1.0
+      all 4 categories; recall 1.0 (T/R), ≥0.95 (bend), 0.717 (stretch, 28.3% into MIXED, 0% into BEND)
+      — numeric floor 0.95 applied and reported honestly as not fully met (stretch recall only). Label
+      goldens re-pinned in `tests/test_calibrate.py` (this pooled number is unchanged/still correct and
+      still tested there). **Sanity check done:** benzene EMIT 1–9 (degenerate 9-fold block) —
       deterministic, exactly 6 external-slot winners total, no over/under-assignment from the
       degeneracy — confirms no block-mechanism is needed (Decision 8), not evidence one exists.
-- [x] Figure `fig:confusion` (clean-category confusion matrix + precision/recall vs lit labels) —
-      **DONE 2026-07-02.** `src/figures.py::plot_confusion_matrix`; renders `confusion_matrix_stats()`
-      (calibrated thresholds) as-is. `data/figures/fig_confusion.{pdf,png}`.
+      **Superseded for manuscript/figure-facing purposes 2026-07-02** by the two-tier split directly
+      below (`ideal=='yes'` internal rows + all externals = rigorous ground truth; `ideal=='no'`
+      internal rows = non-ideal characterization) — see that Changelog entry for why pooling the two
+      populations into one accuracy number risks misreading intrinsic non-ideal stretch/bend mixing as
+      classifier error.
+- [x] Figure `fig:confusion` (two-tier: rigorous ground truth confusion matrix + precision/recall,
+      vs. non-ideal label retention/migration-to-mixed) — **REBUILT 2026-07-02** (originally a single
+      pooled-library matrix, **DONE 2026-07-02** same day; rebuilt same day after the ideal-vs-non-ideal
+      ground-truth-strength distinction surfaced). `src/figures.py::plot_confusion_matrix` now calls
+      `confusion_matrix_stats()` TWICE on two ad-hoc `ideal`-column filters of `library_scores.csv`
+      (no `calibrate.py` change needed — see Changelog for the full split and numbers).
+      `data/figures/fig_confusion.{pdf,png}` (same filename, overwritten; 2x2 layout, was 1x2).
 - [x] Figure `fig:bondscores` (bond score vs relative Δbond length, ideal vs non-ideal) —
       **DONE 2026-07-02.** `src/figures.py::plot_bond_scores`; parses `library_scores.csv`'s
       semicolon-joined per-bond `s_AB`/`rel_db` strings via new `_explode_bonds()` helper.
@@ -517,6 +527,58 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-02 — `fig:confusion` rebuilt two-tier (rigorous ground truth vs. non-ideal
+  characterization) + `fig:benzene` tau_S/tau_B drift fix, per figure-builder consistency audit.**
+  **Why:** the library's literature `ref_label` is exact group-theory ground truth only for
+  `ideal=='yes'` internal modes (and for every external T/R row, geometry-exact regardless of the
+  `ideal` tag) — for `ideal=='no'` molecules the label is a nominal/dominant-character literature
+  assignment, since genuine intrinsic stretch/bend mixing in non-ideal molecules is exactly the effect
+  this framework is built to detect (B8.3 CoM-softening). The prior single pooled confusion matrix
+  (precision 1.0 / recall 1.0,≥0.95,0.717 — see the Phase-3 label-level-validation bullet above) risked
+  being read as one rigorous accuracy claim. lead-author had already patched the manuscript prose with
+  a two-tier split; this change makes the FIGURE match the prose, replicating the same ad-hoc
+  `ideal`-column filter directly in `src/figures.py::plot_confusion_matrix` (calls
+  `src.calibrate.confusion_matrix_stats()` TWICE on filtered slices of `library_scores.csv` — no
+  `calibrate.py` code change needed, confirmed by formula-auditor).
+  - **Rigorous tier** (n=237: 146 external T/R rows [`kind=='external'`, geometry-exact regardless of
+    `ideal`] + 91 `ideal=='yes'` internal rows [50 bend, 41 stretch]): precision AND recall = 1.000 in
+    all 4 categories (translation/rotation/stretch/bend) — verified by direct re-run, not assumed.
+  - **Non-ideal tier** (n=422: `ideal=='no'` internal rows, 233 bend + 189 stretch): bend retains its
+    label 95.7% of the time (223/233), stretch 65.6% (124/189); **0% cross to the OPPOSITE clean
+    category** in either direction (0/233 bend→stretch, 0/189 stretch→bend) — 100% of the non-retained
+    remainder lands in the mixed bucket (10/233 bend, 65/189 stretch). Framed as validation-by-
+    characterization (directionality evidence for CoM-softening), NOT an accuracy claim.
+  - **New layout** (2x2, `data/figures/fig_confusion.{pdf,png}`, same filename overwritten): (a)
+    rigorous confusion matrix [top-left], (b) rigorous per-category precision/recall bars, all bars =
+    1.000 [top-right], (c) non-ideal confusion matrix (bend/stretch reference x
+    bend/mixed/stretch predicted) [bottom-left], (d) non-ideal stacked retained-vs-migrated-to-mixed
+    bars, with a whole-figure footer stating the 0%-opposite-crossing finding explicitly (avoids a
+    per-panel annotation that collided with the panel title at these bar heights during layout
+    iteration) [bottom-right]. Same shared `CATEGORY_COLOR`/`CATEGORY_LABEL`/colormap conventions as
+    the original single-panel version and every other figure.
+  - **Consistency audit (Task A) findings:** `COLORS`/`CATEGORY_COLOR`/`CATEGORY_MARKER`/`IDEAL_STYLE`
+    dicts are reused unchanged across all 6 figures — no drift found. **One real drift found and
+    fixed:** `fig:benzene` panel (a)'s reference dashed lines were hardcoded to the OLD provisional
+    `Thresholds()` class defaults (`tau_S=0.9`, `tau_B=0.2`, annotated "≈0.9"/"≈0.2") from before
+    Phase-3 calibration existed, while every other figure that shows tau (`fig:boxplots` panel (c),
+    `fig:modemixing`, `fig:sensitivity`) already used the frozen calibrated values
+    (`tau_S=0.90368`, `tau_B=0.17327`) — and `benzene_normal_classified.csv`'s own category colors in
+    that SAME panel were already computed under the calibrated thresholds (`classify_all_modes`
+    defaults to `Thresholds.calibrated()`), so the dashed lines no longer matched the marker colors
+    they were meant to explain. Fixed: `src/figures.py`'s module-level `TAU_S`/`TAU_B` now read from
+    `Thresholds.calibrated()`; panel-(a) annotations show the exact values (`tau_S=0.904`,
+    `tau_B=0.173`) instead of the stale rounded approximations. Panel (b) (EMIT 2/9 inversion, EMIT
+    34-36 flagged-external highlights, EMIT-36 Decision-X blind-spot framing) was NOT touched.
+    `fig:boxplots`/`fig:modemixing` distribution-only captions were checked and need no change (they
+    never compute precision/recall, so the ideal-vs-non-ideal ground-truth-strength distinction does
+    not apply to their framing).
+  - Regenerated all 6 figures via `python -m src.figures`; `pytest tests/` still 40/40 green (no
+    `calibrate.py`/`classifier.py` changes were made, so no golden-test churn).
+  - **Action item for lead-author** (not done here — out of scope for figure-builder): copy the
+    regenerated `fig_confusion.pdf` into `JCC/JCC_man_scoring/images/`; update the `fig:confusion`
+    caption to describe the new 2x2 rigorous/non-ideal layout instead of the old pooled 1x2 one; decide
+    whether the prose's own two-tier numeric writeup can now be shortened since the split is shown
+    directly in the figure.
 - **2026-07-02 — Phase 6 item 1: systematic flag precision/recall over ALL 36 benzene EMIT modes +
   library externals.** New `src/flag_validation.py` (`benzene_emit_flag_confusion()`,
   `library_external_flag_confusion()`, `run_flag_validation_pipeline()`), promoting the prior

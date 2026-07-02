@@ -130,11 +130,18 @@ CATEGORY_LABEL = {
     "MIXED_EXTERNAL_WITH_VIBRATION": "mixed external+vibration",
 }
 
-# Provisional classifier thresholds (src/classifier.py Thresholds defaults;
-# quoted here only for the reference dashed lines in fig:benzene panel (a) --
-# not refit, not invented).
-TAU_S = 0.9
-TAU_B = 0.2
+# Calibrated classifier thresholds (src/calibrate.py's frozen
+# data/results/thresholds.json, read via Thresholds.calibrated()), quoted
+# here only for the reference dashed lines in fig:benzene panel (a). These
+# used to be the provisional Thresholds() class defaults (0.9/0.2) hardcoded
+# before Phase-3 calibration existed; fixed 2026-07-02 (consistency audit) to
+# track the SAME calibrated values used everywhere else (fig:boxplots panel
+# (c), fig:modemixing, fig:sensitivity, and the classification that produced
+# benzene_normal_classified.csv's own category labels) -- not refit, not
+# invented, just no longer stale.
+_TAU = Thresholds.calibrated()
+TAU_S = _TAU.tau_S
+TAU_B = _TAU.tau_B
 
 
 def _style():
@@ -284,10 +291,10 @@ def plot_benzene_stress_test(
 
     ax_a.axhline(TAU_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
     ax_a.axhline(TAU_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-    ax_a.text(0.98, TAU_S, r"$\tau_{\mathrm{stretch}}\approx0.9$", ha="right",
+    ax_a.text(0.98, TAU_S, r"$\tau_S=$" + f"{TAU_S:.3f}", ha="right",
                va="bottom", fontsize=7, color=COLORS["threshold"],
                transform=ax_a.get_yaxis_transform())
-    ax_a.text(0.98, TAU_B, r"$\tau_{\mathrm{bend}}\approx0.2$", ha="right",
+    ax_a.text(0.98, TAU_B, r"$\tau_B=$" + f"{TAU_B:.3f}", ha="right",
                va="top", fontsize=7, color=COLORS["threshold"],
                transform=ax_a.get_yaxis_transform())
 
@@ -402,110 +409,227 @@ def plot_benzene_stress_test(
 
 
 # --------------------------------------------------------------------------
-# fig:confusion -- clean-category confusion matrix + precision/recall
+# fig:confusion -- two-tier clean-category confusion matrix + precision/
+# recall (rigorous ground truth) / retention-and-migration (non-ideal
+# validation-by-characterization)
 # --------------------------------------------------------------------------
+
+def _confusion_heatmap(ax, fig, tbl, ref_order, title):
+    """Shared heatmap renderer for one confusion-matrix tier. `tbl` must
+    already be reindexed to `ref_order` rows (columns are whatever buckets
+    are present for that tier -- rigorous and non-ideal tiers populate
+    different bucket sets, so no forced union of columns across tiers).
+    Returns the imshow handle (caller attaches its own colorbar).
+    """
+    vmax = max(1, tbl.values.max())
+    im = ax.imshow(tbl.values, cmap=COLORS["confusion_cmap"], aspect="auto",
+                    vmin=0, vmax=vmax)
+    for i in range(tbl.shape[0]):
+        for j in range(tbl.shape[1]):
+            v = int(tbl.values[i, j])
+            txt_color = "white" if v > 0.6 * vmax else "black"
+            ax.text(j, i, str(v), ha="center", va="center", fontsize=8,
+                     color=txt_color)
+
+    ax.set_xticks(range(len(tbl.columns)))
+    ax.set_xticklabels([CATEGORY_LABEL[PRED_BUCKET_TO_CATEGORY[c]] if c in
+                         PRED_BUCKET_TO_CATEGORY else c for c in tbl.columns],
+                        rotation=30, ha="right")
+    ax.set_yticks(range(len(tbl.index)))
+    ax.set_yticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[r]] for r in tbl.index])
+    for tick, r in zip(ax.get_yticklabels(), tbl.index):
+        tick.set_color(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[r]])
+    for tick, c in zip(ax.get_xticklabels(), tbl.columns):
+        cat = PRED_BUCKET_TO_CATEGORY.get(c)
+        if cat is not None:
+            tick.set_color(CATEGORY_COLOR[cat])
+    ax.set_xlabel("Predicted bucket")
+    ax.set_ylabel("Reference label")
+    ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
+    cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cb.set_label("n modes", fontsize=7.5)
+    cb.ax.tick_params(labelsize=6.5)
+    return im
+
 
 def plot_confusion_matrix(
     library_csv="data/results/library_scores.csv",
     out_dir="data/figures",
     label="fig_confusion",
 ):
-    """Build fig:confusion: (a) reference-label x predicted-bucket confusion
-    matrix over the whole ingested hydride library (both Excel-only and
-    geometry-backed rows), (b) per-category precision/recall against the
-    acceptance floor. Numbers come straight from
-    ``src.calibrate.confusion_matrix_stats`` (calibrated thresholds) -- this
-    function only renders them, never recomputes.
+    """Build fig:confusion as a TWO-TIER figure (rebuilt 2026-07-02; replaces
+    the earlier single pooled-matrix version -- see IMPLEMENTATION_PLAN.md
+    Changelog). The library's literature ``ref_label`` is exact group-theory
+    ground truth only for ``ideal == 'yes'`` internal modes (and for every
+    external T/R row, geometry-exact regardless of the ``ideal`` tag);
+    pooling ``ideal == 'no'`` internal modes into the same accuracy number
+    risks reading intrinsic stretch/bend mixing (the effect this framework is
+    built to detect, B8.3 CoM-softening) as classifier error. So this
+    function computes ``src.calibrate.confusion_matrix_stats`` TWICE, once
+    per tier, via the same ad-hoc ``ideal``-column filter the manuscript
+    prose already uses (no change to calibrate.py):
 
-    Shared-category reuse: row/column tick labels and panel-(b) bars are
-    colored with the SAME CATEGORY_COLOR used by fig:benzene (gray=clean
-    T/R, blue=bending, vermillion=stretching, teal=mixed stretch/bend,
-    purple=mixed external+vibration).
+      * Rigorous tier: every external (T/R) row + internal rows with
+        ``ideal == 'yes'`` -- true accuracy claim.
+      * Non-ideal tier: internal rows with ``ideal == 'no'`` only --
+        reframed as validation-by-characterization (label retention /
+        migration-to-mixed), not an accuracy claim.
+
+    Layout (2x2): (a) rigorous confusion matrix [top-left], (b) rigorous
+    per-category precision/recall bars, all == 1.000 [top-right],
+    (c) non-ideal confusion matrix, bend/stretch reference x
+    bend/mixed/stretch predicted bucket [bottom-left], (d) non-ideal
+    label-retention vs. migration-to-mixed bars, annotated with the 0%
+    opposite-clean-category-crossing finding [bottom-right].
+
+    Never recomputes scores -- only ``confusion_matrix_stats`` (already
+    computed from calibrated thresholds) is called, on two filtered slices
+    of the same ``library_scores.csv`` this module always reads.
     """
     _style()
     from src.calibrate import confusion_matrix_stats
 
     lib_df = pd.read_csv(library_csv)
     thresholds = Thresholds.calibrated()
-    stats = confusion_matrix_stats(lib_df, thresholds)
-    table = stats["confusion_table"]
 
-    ref_order = ["translation", "rotation", "stretch", "bend"]
-    pred_order = ["translation", "rotation", "stretch", "bend", "mixed", "mixed_external"]
-    pred_cols = [c for c in pred_order if c in table.columns] + \
-                [c for c in table.columns if c not in pred_order]
-    tbl = table.reindex(index=ref_order, columns=pred_cols, fill_value=0)
+    rigorous_df = lib_df[(lib_df["kind"] == "external") | (lib_df["ideal"] == "yes")]
+    nonideal_df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ideal"] == "no")]
 
-    fig, (ax_h, ax_p) = plt.subplots(1, 2, figsize=(7.2, 3.3),
-                                      gridspec_kw={"width_ratios": [1.2, 1.0]})
+    stats_r = confusion_matrix_stats(rigorous_df, thresholds)
+    stats_n = confusion_matrix_stats(nonideal_df, thresholds)
 
-    vmax = tbl.values.max()
-    im = ax_h.imshow(tbl.values, cmap=COLORS["confusion_cmap"], aspect="auto",
-                      vmin=0, vmax=vmax)
-    for i in range(tbl.shape[0]):
-        for j in range(tbl.shape[1]):
-            v = int(tbl.values[i, j])
-            txt_color = "white" if v > 0.6 * vmax else "black"
-            ax_h.text(j, i, str(v), ha="center", va="center", fontsize=7.5,
-                      color=txt_color)
+    fig, ((ax_ha, ax_pa), (ax_hb, ax_pb)) = plt.subplots(
+        2, 2, figsize=(7.4, 6.6), gridspec_kw={"width_ratios": [1.15, 1.0]})
 
-    ax_h.set_xticks(range(len(tbl.columns)))
-    ax_h.set_xticklabels([CATEGORY_LABEL[PRED_BUCKET_TO_CATEGORY[c]] if c in
-                           PRED_BUCKET_TO_CATEGORY else c for c in tbl.columns],
-                          rotation=30, ha="right")
-    ax_h.set_yticks(range(len(tbl.index)))
-    ax_h.set_yticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[r]] for r in tbl.index])
-    for tick, r in zip(ax_h.get_yticklabels(), tbl.index):
-        tick.set_color(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[r]])
-    for tick, c in zip(ax_h.get_xticklabels(), tbl.columns):
-        cat = PRED_BUCKET_TO_CATEGORY.get(c)
-        if cat is not None:
-            tick.set_color(CATEGORY_COLOR[cat])
-    ax_h.set_xlabel("Predicted bucket")
-    ax_h.set_ylabel("Reference label (symmetry / literature)")
-    ax_h.set_title("(a) Confusion matrix", loc="left", fontweight="bold", fontsize=9)
-    cb = fig.colorbar(im, ax=ax_h, fraction=0.046, pad=0.04)
-    cb.set_label("n modes", fontsize=8)
-    cb.ax.tick_params(labelsize=7)
+    # ================= Tier 1: rigorous (n=237) =================
+    ref_order_r = ["translation", "rotation", "stretch", "bend"]
+    table_r = stats_r["confusion_table"]
+    pred_order_r = ["translation", "rotation", "stretch", "bend"]
+    pred_cols_r = [c for c in pred_order_r if c in table_r.columns] + \
+                  [c for c in table_r.columns if c not in pred_order_r]
+    tbl_r = table_r.reindex(index=ref_order_r, columns=pred_cols_r, fill_value=0)
+    n_rigorous = int(tbl_r.values.sum())
+    _confusion_heatmap(ax_ha, fig, tbl_r, ref_order_r,
+                        f"(a) Rigorous ground truth (n={n_rigorous})")
 
-    cats = ["translation", "rotation", "stretch", "bend"]
-    x = np.arange(len(cats))
+    cats_r = ["translation", "rotation", "stretch", "bend"]
+    x_r = np.arange(len(cats_r))
     width = 0.35
-    precisions = [stats["per_category"][c]["precision"] for c in cats]
-    recalls = [stats["per_category"][c]["recall"] for c in cats]
-    bar_colors = [CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[c]] for c in cats]
-    ax_p.bar(x - width / 2, precisions, width, color=bar_colors,
-             edgecolor="black", linewidth=0.5, label="precision")
-    ax_p.bar(x + width / 2, recalls, width, color=bar_colors,
-             edgecolor="black", linewidth=0.5, hatch="///", label="recall")
-    ax_p.axhline(stats["acceptance_floor"], color=COLORS["threshold"], ls="--", lw=0.8)
-    ax_p.text(len(cats) - 0.5, stats["acceptance_floor"], "  floor",
-              va="bottom", ha="right", fontsize=7, color=COLORS["threshold"])
-    ax_p.set_xticks(x)
-    ax_p.set_xticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats],
-                         rotation=20, ha="right")
-    ax_p.set_ylim(0, 1.12)
-    ax_p.set_ylabel("Precision / recall")
-    ax_p.set_title("(b) Per-category precision/recall", loc="left",
+    precisions_r = [stats_r["per_category"][c]["precision"] for c in cats_r]
+    recalls_r = [stats_r["per_category"][c]["recall"] for c in cats_r]
+    bar_colors_r = [CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[c]] for c in cats_r]
+    bars_p = ax_pa.bar(x_r - width / 2, precisions_r, width, color=bar_colors_r,
+                        edgecolor="black", linewidth=0.5, label="precision")
+    bars_r = ax_pa.bar(x_r + width / 2, recalls_r, width, color=bar_colors_r,
+                        edgecolor="black", linewidth=0.5, hatch="///", label="recall")
+    # Precision == recall == 1.000 for every category here (that IS the
+    # rigorous-tier finding), so one centered "1.000" per category avoids
+    # overlapping duplicate labels above the two adjacent bars.
+    for xi, p, r in zip(x_r, precisions_r, recalls_r):
+        ax_pa.text(xi, max(p, r) + 0.03, f"{p:.3f}", ha="center", va="bottom",
+                   fontsize=7)
+    ax_pa.axhline(stats_r["acceptance_floor"], color=COLORS["threshold"], ls="--", lw=0.8)
+    ax_pa.text(len(cats_r) - 0.5, stats_r["acceptance_floor"], "  floor",
+               va="bottom", ha="right", fontsize=7, color=COLORS["threshold"])
+    ax_pa.set_xticks(x_r)
+    ax_pa.set_xticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_r],
+                          rotation=20, ha="right")
+    ax_pa.set_ylim(0, 1.18)
+    ax_pa.set_ylabel("Precision / recall")
+    ax_pa.set_title("(b) Rigorous precision/recall (all = 1.000)", loc="left",
                     fontweight="bold", fontsize=9)
-    ax_p.legend(loc="lower left", frameon=False, fontsize=7.5)
+    ax_pa.legend(loc="lower left", frameon=False, fontsize=7)
+
+    # ================= Tier 2: non-ideal (n=422) =================
+    ref_order_n = ["stretch", "bend"]
+    table_n = stats_n["confusion_table"]
+    pred_order_n = ["stretch", "bend", "mixed"]
+    pred_cols_n = [c for c in pred_order_n if c in table_n.columns] + \
+                  [c for c in table_n.columns if c not in pred_order_n]
+    tbl_n = table_n.reindex(index=ref_order_n, columns=pred_cols_n, fill_value=0)
+    n_nonideal = int(tbl_n.values.sum())
+    _confusion_heatmap(ax_hb, fig, tbl_n, ref_order_n,
+                        f"(c) Non-ideal characterization (n={n_nonideal})")
+
+    cats_n = ["bend", "stretch"]
+    retention_n = [stats_n["per_category"][c]["recall"] for c in cats_n]
+    migration_n = [stats_n["per_category"][c]["mixed_fraction"] for c in cats_n]
+    opposite_n = []  # explicit 0% opposite-clean-category crossing, per tbl_n
+    for c in cats_n:
+        opp = "stretch" if c == "bend" else "bend"
+        n_ref = stats_n["per_category"][c]["n_ref"]
+        n_opp = int(tbl_n.loc[c, opp]) if opp in tbl_n.columns else 0
+        opposite_n.append(n_opp / n_ref if n_ref else float("nan"))
+
+    # Segment labels are numeric-only (no in-panel legend): the "retained"
+    # (bend/stretch-colored) vs. "migrated to mixed" (teal) color coding
+    # reuses the SAME CATEGORY_COLOR swatches panel (c)'s tick labels just
+    # showed two columns over, so a redundant legend here would only add
+    # clutter. Thin segments (e.g. bend's 0.043 migrated slice) get their
+    # label placed just ABOVE the bar instead of centered inside it, so text
+    # never overflows a segment shorter than the label's own height.
+    x_n = np.arange(len(cats_n))
+    bar_colors_n = [CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[c]] for c in cats_n]
+    ax_pb.bar(x_n, retention_n, 0.5, color=bar_colors_n,
+              edgecolor="black", linewidth=0.5)
+    ax_pb.bar(x_n, migration_n, 0.5, bottom=retention_n,
+              color=COLORS["mixed"], alpha=0.85, edgecolor="black", linewidth=0.5)
+    THIN = 0.08  # segments shorter than this (axis fraction) get an outside label
+    for xi, ret, mig in zip(x_n, retention_n, migration_n):
+        ax_pb.text(xi, ret / 2, f"retained\n{ret:.3f}", ha="center", va="center",
+                   fontsize=7, color="white", fontweight="bold")
+        if mig >= THIN:
+            ax_pb.text(xi, ret + mig / 2, f"mixed\n{mig:.3f}", ha="center",
+                       va="center", fontsize=7, color="white", fontweight="bold")
+        else:
+            ax_pb.text(xi, ret + mig + 0.015, f"mixed: {mig:.3f}", ha="center",
+                       va="bottom", fontsize=7, color=COLORS["mixed"],
+                       fontweight="bold")
+    ax_pb.set_xticks(x_n)
+    ax_pb.set_xticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_n])
+    ax_pb.set_xlim(-0.55, 1.55)
+    ax_pb.set_ylim(0, 1.12)
+    ax_pb.set_ylabel("Fraction of reference-labeled modes")
+    ax_pb.set_title("(d) Non-ideal retention vs. migration", loc="left",
+                    fontweight="bold", fontsize=9)
 
     fig.tight_layout()
+    # Whole-figure footer: the 0%-opposite-crossing finding applies to BOTH
+    # non-ideal categories and is the point of tier 2, so it is stated once
+    # here (figure-level caption line) rather than as a per-panel annotation
+    # that collided with panel (d)'s title at these bar heights.
+    fig.text(
+        0.5, 0.005,
+        (f"Non-ideal tier (n={n_nonideal}): 0% of bend or stretch reference-labeled "
+         f"modes crossed to the OPPOSITE clean category "
+         f"(bend→stretch={opposite_n[0]:.1%}, stretch→bend={opposite_n[1]:.1%}); "
+         "100% of the non-retained remainder lands in the mixed bucket."),
+        ha="center", va="bottom", fontsize=6.8, style="italic", color="#333333",
+    )
     pdf_path, png_path = _savefig(fig, out_dir, label)
     plt.close(fig)
 
     summary = {
         "pdf": pdf_path, "png": png_path,
+        "layout": ("2x2: (a) rigorous confusion matrix, (b) rigorous "
+                   "precision/recall bars, (c) non-ideal confusion matrix, "
+                   "(d) non-ideal retention/migration bars -- REPLACES the "
+                   "earlier single pooled-matrix fig:confusion."),
         "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL for "
                                "CLEAN_TRANSLATION/CLEAN_ROTATION/STRETCHING/"
-                               "BENDING/MIXED_STRETCH_BEND/"
-                               "MIXED_EXTERNAL_WITH_VIBRATION -- same mapping "
+                               "BENDING/MIXED_STRETCH_BEND -- same mapping "
                                "as fig:benzene."),
-        "confusion_table": tbl.to_dict(),
-        "precision": dict(zip(cats, precisions)),
-        "recall": dict(zip(cats, recalls)),
-        "acceptance_floor": stats["acceptance_floor"],
-        "floor_met": stats["floor_met"],
+        "rigorous_n": n_rigorous,
+        "rigorous_confusion_table": tbl_r.to_dict(),
+        "rigorous_precision": dict(zip(cats_r, precisions_r)),
+        "rigorous_recall": dict(zip(cats_r, recalls_r)),
+        "acceptance_floor": stats_r["acceptance_floor"],
+        "rigorous_floor_met": stats_r["floor_met"],
+        "nonideal_n": n_nonideal,
+        "nonideal_confusion_table": tbl_n.to_dict(),
+        "nonideal_retention": dict(zip(cats_n, retention_n)),
+        "nonideal_migration_to_mixed": dict(zip(cats_n, migration_n)),
+        "nonideal_opposite_category_crossing": dict(zip(cats_n, opposite_n)),
     }
     return summary
 

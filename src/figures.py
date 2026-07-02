@@ -17,6 +17,13 @@ All 6 manuscript figures are implemented: ``plot_benzene_stress_test``
 (``fig:boxplots``), ``plot_mode_mixing`` (``fig:modemixing``), and
 ``plot_sensitivity`` (``fig:sensitivity``).
 
+``plot_benzene_normal_modes`` is a 7th, standalone figure (no ``fig:`` label
+of its own yet -- pending lead-author's rewrite of the "Benzene normal
+modes" section): the descriptive worked-example companion to fig:benzene's
+EMIT stress test, showing all 36 real normal modes with the ring-breathing
+(mode 12) / mixed S-B (mode 19) / C-H stretch (mode 30) worked examples
+called out. It does not modify or replace ``plot_benzene_stress_test``.
+
 Cross-figure visual consistency (one meaning per color/marker, paper-wide)
 --------------------------------------------------------------------------
 Every figure that encodes a classification CATEGORY (clean translation/
@@ -415,6 +422,163 @@ def plot_benzene_stress_test(
         "panel_b_emit34_36_scores": fy,
         "panel_b_emit34_36_contributions": fx,
         "panel_b_emit34_36_vstretch": fvs,
+    }
+    return summary
+
+
+# --------------------------------------------------------------------------
+# Benzene normal-mode worked-example gallery -- descriptive companion to
+# fig:benzene (which stays framed around the EMIT stress test). Standalone,
+# single-column figure for the reworked "Benzene normal modes" section
+# (JCC/Scoring_Manuscript_Plan_2026-07-02.pdf, "Results & Discussion focus":
+# a descriptive worked-example gallery, not a second accuracy report).
+# --------------------------------------------------------------------------
+
+# The 3 author-confirmed worked-example modes (IMPLEMENTATION_PLAN.md
+# "Benzene normal modes" step (a), done by lead-engineer in
+# src/benzene_validation.py Task E / benzene_worked_examples.csv) plus mode
+# 19 (already-identified SB example, untouched by that task). Frequencies/
+# V_Stretch are read live from ``normal_csv`` (single source of truth) --
+# this dict only supplies the descriptive name + non-overlapping callout
+# anchor (axes-fraction) for each, chosen by inspecting the 36-point
+# scatter's empty regions (see plot_benzene_normal_modes docstring).
+_WORKED_EXAMPLE_MODES = {
+    "Vib 12": {"short": "12", "name": "ring-breathing", "callout": (0.68, 0.95)},
+    "Vib 19": {"short": "19", "name": "mixed S/B", "callout": (0.66, 0.46)},
+    "Vib 30": {"short": "30", "name": "C-H stretch", "callout": (0.55, 0.62)},
+}
+
+
+def plot_benzene_normal_modes(
+    normal_csv="data/results/benzene_normal_classified.csv",
+    out_dir="data/figures",
+    label="fig_benzene_normal",
+):
+    """Build the benzene normal-mode worked-example gallery: ``s[V_S]`` vs.
+    frequency for all 36 real normal modes (6 external T/R + 30 internal),
+    colored/marked by the full T/R/S/B/SB classification scheme (the exact
+    ``CATEGORY_COLOR``/``CATEGORY_MARKER``/``CATEGORY_LABEL`` mapping shared
+    with ``fig:benzene`` panel (a) and every other figure -- not redefined
+    here), with the 3 author-confirmed worked-example modes called out:
+    mode 12 (992.6 cm-1, ring-breathing), mode 19 (1319.3 cm-1, mixed S/B),
+    and mode 30 (3223.2 cm-1, representative C-H stretch).
+
+    This is a NEW, separate figure from ``plot_benzene_stress_test``
+    (``fig:benzene``, which stays framed around the EMIT stress test and is
+    not touched here) -- the descriptive companion for the reworked
+    "Benzene normal modes" section (IMPLEMENTATION_PLAN.md, benzene-normal-
+    modes 3-step sequence, step (b); step (a) identified the mode indices,
+    step (c) is lead-author's narrative rewrite around this figure).
+
+    Each highlighted mode gets an enlarged, black-outlined marker plus a
+    dashed leader line to a text callout box (same idiom as fig:benzene
+    panel (b)'s EMIT 34-36 callout) rather than an inline label, since 3
+    plain text labels among 36 points would either collide with neighboring
+    points or each other -- callout anchors were placed by hand in empty
+    plot regions (verified by rendering, not guessed blind).
+    """
+    _style()
+    normal = pd.read_csv(normal_csv)
+
+    fig, ax = plt.subplots(figsize=(3.8, 3.6))
+
+    seen_labels = set()
+    for _, row in normal.iterrows():
+        cat = classification_bucket(row["label"])
+        color = CATEGORY_COLOR.get(cat, "black")
+        marker = CATEGORY_MARKER.get(cat, "o")
+        leg_label = CATEGORY_LABEL.get(cat, cat) if cat not in seen_labels else None
+        seen_labels.add(cat)
+        ax.scatter(row["Freq"], row["V_Stretch"], color=color, marker=marker, s=26,
+                   edgecolors="black", linewidths=0.3, zorder=3, label=leg_label)
+
+    ax.axhline(TAU_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
+    ax.axhline(TAU_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
+    ax.text(0.98, TAU_S, r"$\tau_S=$" + f"{TAU_S:.3f}", ha="right",
+            va="bottom", fontsize=7, color=COLORS["threshold"],
+            transform=ax.get_yaxis_transform())
+    ax.text(0.98, TAU_B, r"$\tau_B=$" + f"{TAU_B:.3f}", ha="right",
+            va="top", fontsize=7, color=COLORS["threshold"],
+            transform=ax.get_yaxis_transform())
+
+    # -- Worked-example callouts: mode 12 (ring-breathing), 19 (mixed S/B),
+    # 30 (C-H stretch). Each gets an enlarged black-outlined marker (still
+    # the category's own color/shape -- consistency, not a new encoding)
+    # plus a dashed leader to an off-point text box giving frequency +
+    # s[V_S] readout.
+    worked_rows = {}
+    for mode_id, meta in _WORKED_EXAMPLE_MODES.items():
+        row = normal.loc[normal["Mode"] == mode_id].iloc[0]
+        worked_rows[mode_id] = row
+        cat = classification_bucket(row["label"])
+        color = CATEGORY_COLOR[cat]
+        marker = CATEGORY_MARKER[cat]
+        # White halo first: the C-H-stretch cluster (modes 25-30) sits within
+        # ~40 cm-1 of itself, so mode 30's enlarged marker can otherwise show
+        # a sliver of its un-highlighted neighbor (e.g. mode 28/29) peeking
+        # out from behind it. A solid white backing marker (drawn just under
+        # the highlight, on top of everything else) guarantees a clean badge
+        # regardless of how tightly packed the underlying points are.
+        ax.scatter(row["Freq"], row["V_Stretch"], color="white", marker=marker,
+                   s=150, edgecolors="white", linewidths=0, zorder=4.5)
+        ax.scatter(row["Freq"], row["V_Stretch"], color=color, marker=marker,
+                   s=95, edgecolors="black", linewidths=1.2, zorder=5)
+
+        xy_axes = meta["callout"]
+        ax.annotate(
+            "", xy=(row["Freq"], row["V_Stretch"]), xycoords="data",
+            xytext=xy_axes, textcoords="axes fraction",
+            arrowprops=dict(arrowstyle="-", color=color, lw=0.9, ls="--",
+                            shrinkA=0, shrinkB=5),
+            zorder=4,
+        )
+        callout_text = (
+            f"{meta['short']}: {meta['name']}\n"
+            f"{row['Freq']:.1f}" + r" cm$^{-1}$" + f", "
+            r"$s[\mathrm{V_S}]$" + f"={row['V_Stretch']:.3f}"
+        )
+        ax.text(xy_axes[0], xy_axes[1], callout_text, transform=ax.transAxes,
+                fontsize=6.7, ha="center", va="center",
+                bbox=dict(boxstyle="round,pad=0.32", fc="white", ec=color, lw=0.9),
+                zorder=6)
+
+    ax.set_xlabel(r"Frequency (cm$^{-1}$)")
+    ax.set_ylabel(r"$s[\mathrm{V_S}]$")
+    ax.set_ylim(-0.05, 1.15)
+    ax.set_xlim(-120, normal["Freq"].max() * 1.06)
+    # Anchored between the tau_B and tau_S lines (mirrors fig:benzene panel
+    # (a)'s "center right" placement, which sits in that same gap) rather
+    # than the default "upper left", which would otherwise put the
+    # threshold line's full-width dashes straight through the legend text --
+    # this frequency range's low-freq bending cluster leaves that band empty
+    # on the left.
+    ax.legend(loc="center left", bbox_to_anchor=(0.0, 0.52), frameon=False,
+              handletextpad=0.3, labelspacing=0.3, borderaxespad=0.2, fontsize=7)
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary = {
+        "pdf": pdf_path, "png": png_path,
+        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_MARKER/"
+                               "CATEGORY_LABEL for the full T/R/S/B/SB "
+                               "scheme -- same mapping as fig:benzene panel "
+                               "(a); a NEW figure, fig:benzene itself is "
+                               "untouched."),
+        "n_points": len(normal),
+        "freq_range": (float(normal["Freq"].min()), float(normal["Freq"].max())),
+        "vs_range": (float(normal["V_Stretch"].min()), float(normal["V_Stretch"].max())),
+        "tau_S": TAU_S, "tau_B": TAU_B,
+        "worked_examples": {
+            mode_id: {
+                "freq": float(row["Freq"]),
+                "V_Stretch": float(row["V_Stretch"]),
+                "label": row["label"],
+                "name": _WORKED_EXAMPLE_MODES[mode_id]["name"],
+            }
+            for mode_id, row in worked_rows.items()
+        },
     }
     return summary
 
@@ -972,6 +1136,7 @@ def plot_sensitivity(
 if __name__ == "__main__":
     fns = [
         ("fig:benzene", plot_benzene_stress_test),
+        ("benzene-normal-modes gallery (no fig: label yet)", plot_benzene_normal_modes),
         ("fig:confusion", plot_confusion_matrix),
         ("fig:bondscores", plot_bond_scores),
         ("fig:boxplots", plot_boxplots),

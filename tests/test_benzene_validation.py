@@ -26,7 +26,7 @@ import pandas as pd                                                # noqa: E402
 
 from src.benzene_validation import (                               # noqa: E402
     benzene_normal_reference_detail, benzene_normal_reference_summary,
-    benzene_mixed_bond_diagnostic, MOLECULE,
+    benzene_mixed_bond_diagnostic, benzene_worked_examples, MOLECULE,
 )
 from src.classifier import MIXED_STRETCH_BEND, BENDING               # noqa: E402
 
@@ -142,6 +142,50 @@ def test_benzene_mixed_bond_diagnostic_detects_near_degenerate_complementary_pai
         assert row["complementary"]
         assert row["cc_pattern_correlation"] < -0.9, (i, j, row["cc_pattern_correlation"])
         assert row["delta_freq"] < 0.05
+
+
+def test_benzene_worked_examples_identifies_ring_breathing_and_ch_stretch():
+    """Manuscript claim (Scoring_Manuscript_Plan_2026-07-02.pdf step 3a): pins
+    the two newly-identified named worked-example mode indices, protected the
+    same way mode 13/14/19/23/24 are pinned above. Ring-breathing = mode 12
+    (992.58 cm-1, literature ~992 cm-1, V_Stretch==1.0000, essentially all of
+    it on the 6 C-C ring bonds, uniform to <0.3% CV). Representative C-H
+    stretch = mode 30 (3223.17 cm-1, the highest-frequency STRETCHING mode,
+    V_Stretch==1.0000, essentially all of it on the 6 C-H bonds, non-
+    degenerate/isolated in frequency)."""
+    df = benzene_worked_examples(_lib())
+    by_role = df.set_index("role")
+
+    assert int(by_role.loc["ring_breathing", "mode_index"]) == 12
+    assert abs(by_role.loc["ring_breathing", "freq"] - 992.5825) < 0.01
+    assert abs(by_role.loc["ring_breathing", "V_Stretch"] - 1.0) < 1e-6
+    assert by_role.loc["ring_breathing", "cc_fraction_of_V"] > 0.95
+    assert by_role.loc["ring_breathing", "cc_cv"] < 0.02  # uniform across all 6 C-C bonds
+    assert by_role.loc["ring_breathing", "ch_total"] < 0.02  # negligible C-H character
+
+    assert int(by_role.loc["ch_stretch", "mode_index"]) == 30
+    assert abs(by_role.loc["ch_stretch", "freq"] - 3223.172) < 0.01
+    assert abs(by_role.loc["ch_stretch", "V_Stretch"] - 1.0) < 1e-6
+    assert by_role.loc["ch_stretch", "ch_total"] > 0.95  # dominant C-H character
+    assert by_role.loc["ch_stretch", "cc_total"] < 0.02  # negligible C-C character
+    # Well separated in frequency from the ring-breathing pick, and (unlike
+    # the 26/27, 28/29 near-degenerate pairs among the other S-labeled modes)
+    # not itself part of a near-degenerate pair.
+    assert by_role.loc["ch_stretch", "freq"] - by_role.loc["ring_breathing", "freq"] > 2000
+    assert by_role.loc["ch_stretch", "near_degenerate_partner"] is None
+
+
+def test_benzene_worked_examples_raises_if_fewer_than_two_stretch_modes():
+    lib_df = _lib().copy()
+    mask = (lib_df["molecule"] == MOLECULE) & (lib_df["predicted_label"] == "S")
+    idxs = lib_df[mask].index
+    # Collapse all but one STRETCHING mode into BENDING, leaving only 1.
+    lib_df.loc[idxs[1:], "predicted_label"] = BENDING
+    try:
+        benzene_worked_examples(lib_df)
+        assert False, "expected ValueError with fewer than 2 STRETCHING modes"
+    except ValueError:
+        pass
 
 
 def test_benzene_mixed_bond_diagnostic_raises_if_no_mixed_modes():

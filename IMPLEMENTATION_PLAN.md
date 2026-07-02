@@ -225,36 +225,58 @@
 > --stat` showing 0 insertions/deletions, same byte counts, only embedded PDF metadata differs). No
 > stale/raw label strings (e.g. `"Tx*"`, `"SB"`) found anywhere a descriptive English label was
 > expected. 51/51 tests still green. Committed + pushed.
-> **In flight (2026-07-02):** `lead-author` dispatched to (a) fix the `.tex`'s literal
-> `\textsc{clean_translation}`-style label references to the new short symbols, and (b) align the
-> manuscript against **`JCC/Scoring_Manuscript_Plan_2026-07-02.pdf`** — the newer structure doc (one
-> day after `..._2026-07-01.pdf`) which adds specific Results & Discussion CONTENT requirements beyond
-> section order, not yet confirmed done as of this update:
->   - **Ideal vs. non-ideal section:** confirm the prose explicitly states "pure S/B labels for
->     non-ideal molecules are not true references — they are based on ideal molecules" (should already
->     match the two-tier confusion-matrix work); add a scope note if missing: the library covers all
->     shapes but assumes one-central-atom molecules for the pure-S/B ideal reference to hold cleanly,
->     and that SB (mixed) character delocalizes more in larger molecules.
->   - **Benzene normal modes:** the slide wants the score-vs-frequency distribution explicitly
->     compared against named worked-example modes — a ring-breathing mode, some SB (mixed) modes, and a
->     C-H stretching mode. **NOT YET IDENTIFIED which specific mode indices these are** in
->     `data/results/benzene_normal_classified.csv`/`library_scores.csv` — this needs a `lead-engineer`
->     (or `chemist`) pass to identify by symmetry/frequency signature (ring-breathing is typically the
->     lowest-frequency totally-symmetric A1g-type mode; C-H stretching is the highest-frequency STRETCHING-
->     labeled mode, likely one of mode_index 25-30 per the existing validation numbers) — do not guess
->     this in prose without a computed identification. Also unclear whether the existing `fig:benzene`
->     (framed as the EMIT stress test) can be reused/repurposed for this section's "score distribution
->     over frequencies" figure, or whether a NEW dedicated figure is needed — flagged, not resolved.
->   - **Benzene EMIT modes:** confirm the τ_B-specific flagging framing and the "extreme case that
->     rarely occurs" limitation note are both explicit (likely already true from the earlier reframing
->     this session, just needs confirming against the newer doc's exact wording).
-> **After lead-author reports back:** likely follow-up dispatches — `lead-engineer` to identify/compute
-> the ring-breathing and C-H-stretching worked-example mode indices for benzene (a small, well-scoped
-> analysis, not a new pipeline), then `figure-builder` if a new benzene score-vs-frequency figure is
-> confirmed needed (distinct from `fig:benzene`'s EMIT-stress-test framing). Then Phase 5 (`reproduce.py`
-> orchestrator wiring; SI Cartesian-geometry export; graphical TOC) and the remaining two Phase 6
-> recommended items (mixed-SB bucket CoM-argument half; leave-one-molecule-out τ evaluation). The
-> `fig:modemixing` irrep-degeneracy sub-panel gap remains BLOCKED pending confirmation, not built.
+> ~~`lead-author`: fix literal old-label quotes in the `.tex`~~ ✓ **DONE 2026-07-02** — every
+> `\textsc{clean_translation}`-style literal quote (including ones in `fig:flowchart`/`alg:classify`
+> that would otherwise have contradicted the Results section) updated to the new short symbols
+> (`\texttt{Tz}`, `\texttt{S}`/`\texttt{B}`/`\texttt{SB}`, `\texttt{Tx*}`), consistent with the
+> document's existing `\texttt{}` convention for code-like tokens. Compiles clean, 28 pages.
+> **GAP FOUND after a direct read of the manuscript (2026-07-02, main-session read, not just an agent
+> report) — the real reason the manuscript still read "like the old version":** the "Ideal vs.
+> non-ideal" section and the "Benzene normal modes" section immediately after it both lead with
+> confusion-matrix-style recall numbers (95.7%/65.6%, then 6/6/7/7/18-23) — structurally repetitive,
+> not a content bug. Per `JCC/Scoring_Manuscript_Plan_2026-07-02.pdf` (the current authoritative
+> structure doc), benzene-normal-modes is supposed to serve a DIFFERENT narrative role: a descriptive
+> worked-example gallery (full T/R/S/B/SB classification across the whole frequency range, with named
+> illustrative modes: a ring-breathing mode, an SB mode, a C-H stretch), not a second accuracy report.
+> The existing validation numbers are good evidence and should stay, but as supporting detail under
+> the descriptive frame, not the section's lead.
+> **CONFIRMED PLAN (author consulted 2026-07-02, both open questions resolved):**
+>   1. **H2O section:** wire in `JCC/JCC_man_scoring/images/NormalModes_Water.jpg` (already supplied by
+>      the author — a labeled 3x3 grid of Tx/Ty/Tz/Rx/Ry/Rz/δ/νs/νas displacement-vector diagrams,
+>      matching `tab:water`'s notation exactly) next to `tab:water`. Pure `lead-author` text/figure-wiring
+>      task, no new figure-builder computation needed (the image is a hand-made illustrative diagram).
+>   2. **Ideal vs. non-ideal section:** CONFIRMED already aligned (two-tier confusion matrix, the
+>      non-true-reference caveat, and the one-central-atom/delocalization scope note are all present and
+>      correctly worded) — no further action. `fig:confusion` STAYS COMBINED as one 4-panel figure
+>      (author confirmed 2026-07-02: splitting into separate `fig:confusion`/`fig:retention` figures, as
+>      the deck's bullet list loosely suggests, would separate closely-related panels with no reader
+>      benefit — keep the current 2x2 layout).
+>   3. **Benzene normal modes — the real work, strict dependency order, do not parallelize:**
+>      (a) **`lead-engineer` FIRST:** identify, by computation (not guessing), specific mode indices for
+>      two new worked examples from `data/results/benzene_normal_classified.csv`/`library_scores.csv`:
+>      a genuine ring-breathing mode (benzene's classic totally-symmetric mode, historically ~992 cm⁻¹ —
+>      check which of the 7 `STRETCHING`-labeled modes shows a uniform, high-magnitude contribution
+>      across all six C-C ring bonds via `s_AB`, the same signature pattern already used to characterize
+>      mode 19's uniform SB character in `tab:benzenemixed`) and a representative C-H stretching mode
+>      (likely the highest-frequency `STRETCHING`-labeled mode). The SB worked example is already in
+>      hand and needs no new identification: mode 19 (1319.27 cm⁻¹), already described in the current
+>      text as "a totally symmetric ring-distortion combination."
+>      (b) **`figure-builder` SECOND (after (a) lands):** build a NEW score-vs-frequency figure for
+>      benzene's 36 normal modes, distinct from `fig:benzene` (which stays framed around the EMIT stress
+>      test and must not be repurposed/changed), visually calling out the 3 named modes (ring-breathing,
+>      mode 19, C-H stretch).
+>      (c) **`lead-author` THIRD (after (a) and (b) land):** rewrite the benzene-normal-modes section's
+>      narrative to lead with the descriptive worked-example framing anchored on the new figure, folding
+>      the existing 6/6, 7/7, 18/23 numbers in as supporting evidence rather than the section's opening
+>      frame. Do not lose the existing bond-level SB analysis (`tab:benzenemixed`, the degenerate-pair
+>      correlation numbers) — that content is correct and valuable, it just needs to sit under the new
+>      framing rather than being the section's own lead-in statistics.
+>   4. **Benzene EMIT modes:** CONFIRMED already aligned (τ_B-specific two-gate framing and the "extreme
+>      case that rarely occurs" limitation note are both explicit) — no further action.
+> **After this benzene-normal-modes work lands:** Phase 5 (`reproduce.py` orchestrator wiring; SI
+> Cartesian-geometry export; graphical TOC) and the remaining two Phase 6 recommended items (mixed-SB
+> bucket CoM-argument half; leave-one-molecule-out τ evaluation). The `fig:modemixing` irrep-degeneracy
+> sub-panel gap remains BLOCKED pending confirmation, not built.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).

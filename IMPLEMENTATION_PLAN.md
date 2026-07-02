@@ -272,17 +272,30 @@
 >      ch_min/max/cv, near_degenerate_partner, partner_freq_diff). Two new regression tests in
 >      `tests/test_benzene_validation.py` pin mode 12/30 as manuscript claims (same protection level as
 >      the existing 13/14/19/23/24 pins). **53/53 tests green.**
->      (b) **`figure-builder` SECOND (next up):** build a NEW score-vs-frequency figure for benzene's 36
->      normal modes, distinct from `fig:benzene` (which stays framed around the EMIT stress test and must
->      not be repurposed/changed), visually calling out the 3 named modes (ring-breathing = mode 12,
->      mode 19, C-H stretch = mode 30) — read them from `data/results/benzene_worked_examples.csv`
->      (+ mode 19 from `benzene_mixed_bond_diagnostic.csv`), not re-derived.
->      (c) **`lead-author` THIRD (after (a) and (b) land):** rewrite the benzene-normal-modes section's
->      narrative to lead with the descriptive worked-example framing anchored on the new figure, folding
->      the existing 6/6, 7/7, 18/23 numbers in as supporting evidence rather than the section's opening
->      frame. Do not lose the existing bond-level SB analysis (`tab:benzenemixed`, the degenerate-pair
->      correlation numbers) — that content is correct and valuable, it just needs to sit under the new
->      framing rather than being the section's own lead-in statistics.
+>      (b) ~~`figure-builder` SECOND: build a NEW score-vs-frequency figure for benzene's 36 normal
+>      modes~~ ✓ **DONE 2026-07-02.** New `src/figures.py::plot_benzene_normal_modes` (standalone, no
+>      `fig:` label yet — pending (c)); reads `data/results/benzene_normal_classified.csv` directly
+>      (single source of truth for Freq/V_Stretch/label — `benzene_worked_examples.csv` was consulted
+>      for context but the plotted numbers come live from the classified CSV, not re-derived). Single-
+>      column scatter of all 36 modes (6 external T/R + 30 internal), full T/R/S/B/SB classification via
+>      the shared `CATEGORY_COLOR`/`CATEGORY_MARKER`/`CATEGORY_LABEL` dicts (same mapping as fig:benzene
+>      panel (a) — routes each raw `label` through `classification_bucket()` first), calibrated
+>      `tau_S`/`tau_B` threshold lines via `Thresholds.calibrated()`. Modes 12/19/30 get an enlarged
+>      black-outlined marker (white halo behind it first, since mode 30 sits in a tight ~40 cm⁻¹-wide
+>      C-H-stretch cluster with modes 25-29 and would otherwise show a sliver of its un-highlighted
+>      neighbor peeking out) plus a dashed-leader callout box with frequency + `s[V_S]` readout, same
+>      idiom as fig:benzene panel (b)'s EMIT 34-36 callout. Legend anchored between the tau_B/tau_S lines
+>      (`loc="center left", bbox_to_anchor=(0.0, 0.52)`) rather than the default "upper left", which
+>      otherwise put the tau_S dashed line straight through the legend text (this distribution's empty
+>      band differs from fig:benzene panel (a)'s, so "center right" doesn't clear it the same way).
+>      `plot_benzene_stress_test`/`fig:benzene` itself is untouched (diff to `src/figures.py` is purely
+>      additive). `data/figures/fig_benzene_normal.{pdf,png}`. 53/53 tests still green.
+>      (c) **`lead-author` THIRD (next up, after (a) and (b) land):** rewrite the benzene-normal-modes
+>      section's narrative to lead with the descriptive worked-example framing anchored on the new
+>      figure, folding the existing 6/6, 7/7, 18/23 numbers in as supporting evidence rather than the
+>      section's opening frame. Do not lose the existing bond-level SB analysis (`tab:benzenemixed`, the
+>      degenerate-pair correlation numbers) — that content is correct and valuable, it just needs to sit
+>      under the new framing rather than being the section's own lead-in statistics.
 >   4. **Benzene EMIT modes:** CONFIRMED already aligned (τ_B-specific two-gate framing and the "extreme
 >      case that rarely occurs" limitation note are both explicit) — no further action.
 > **After this benzene-normal-modes work lands:** Phase 5 (`reproduce.py` orchestrator wiring; SI

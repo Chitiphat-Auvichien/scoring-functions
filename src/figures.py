@@ -476,6 +476,15 @@ def plot_benzene_stress_test(
 # this dict only supplies the descriptive name + non-overlapping callout
 # anchor (axes-fraction) for each, chosen by inspecting the 36-point
 # scatter's empty regions (see plot_benzene_normal_modes docstring).
+#
+# REMOVED 2026-07-02 (follow-up correction, same day as the legend-dedup
+# fix): the enlarged-marker + dashed-leader-line + callout-text-box
+# annotations for these 3 modes were pulled from the rendered figure per the
+# author's review -- pointing annotations for modes 12/19/30 will be added
+# manually later, possibly alongside a separate depicted-normal-modes figure.
+# This dict itself is left defined (unused) since nothing else in the
+# codebase references it and it documents which 3 modes were identified in
+# step (a); safe to delete later if it becomes dead-code clutter.
 _WORKED_EXAMPLE_MODES = {
     "Vib 12": {"short": "12", "name": "ring-breathing", "callout": (0.68, 0.95)},
     "Vib 19": {"short": "19", "name": "mixed S/B", "callout": (0.66, 0.46)},
@@ -490,12 +499,9 @@ def plot_benzene_normal_modes(
 ):
     """Build the benzene normal-mode worked-example gallery: ``s[V_S]`` vs.
     frequency for all 36 real normal modes (6 external T/R + 30 internal),
-    colored/marked by the full T/R/S/B/SB classification scheme (the exact
-    ``CATEGORY_COLOR``/``CATEGORY_MARKER``/``CATEGORY_LABEL`` mapping shared
-    with ``fig:benzene`` panel (a) and every other figure -- not redefined
-    here), with the 3 author-confirmed worked-example modes called out:
-    mode 12 (992.6 cm-1, ring-breathing), mode 19 (1319.3 cm-1, mixed S/B),
-    and mode 30 (3223.2 cm-1, representative C-H stretch).
+    colored by the full T/R/S/B/SB classification scheme (``CATEGORY_COLOR``/
+    ``CATEGORY_LABEL`` mapping shared with ``fig:benzene`` panel (a) and every
+    other figure -- not redefined here).
 
     This is a NEW, separate figure from ``plot_benzene_stress_test``
     (``fig:benzene``, which stays framed around the EMIT stress test and is
@@ -504,26 +510,40 @@ def plot_benzene_normal_modes(
     modes 3-step sequence, step (b); step (a) identified the mode indices,
     step (c) is lead-author's narrative rewrite around this figure).
 
-    Each highlighted mode gets an enlarged, black-outlined marker plus a
-    dashed leader line to a text callout box (same idiom as fig:benzene
-    panel (b)'s EMIT 34-36 callout) rather than an inline label, since 3
-    plain text labels among 36 points would either collide with neighboring
-    points or each other -- callout anchors were placed by hand in empty
-    plot regions (verified by rendering, not guessed blind).
+    Styling (follow-up correction, 2026-07-02, same day as the earlier
+    legend-dedup fix -- author's second visual review of the rendered
+    image):
+
+      * ONE marker shape (circle, ``marker="o"``) for every point regardless
+        of category, matching ``plot_bond_scores``/``plot_boxplots``/
+        ``plot_mode_mixing``'s established convention that shape is not used
+        as a second, redundant encoding of a distinction color already
+        carries -- ``CATEGORY_MARKER``'s per-category shapes are NOT used
+        here despite still existing for ``fig:confusion``.
+      * All markers rendered HOLLOW (``IDEAL_STYLE["no"]`` applied
+        uniformly), for cross-figure visual consistency with the ideal/
+        non-ideal hollow convention used elsewhere -- there is no ideal/
+        non-ideal axis within one molecule's own normal modes, so this is a
+        blanket style choice, not a faceted legend split.
+      * No enlarged/highlighted markers, dashed leader lines, or callout
+        text boxes for modes 12/19/30 -- this is now a plain, clean,
+        unannotated scatter (that worked-example annotation block was
+        removed; mode-pointing annotations will be added manually later).
     """
     _style()
     normal = pd.read_csv(normal_csv)
 
     fig, ax = plt.subplots(figsize=(3.8, 3.6))
 
-    # Legend dedup: translation/rotation share the identical gray-X color +
-    # marker (CATEGORY_COLOR/CATEGORY_MARKER map both to the same encoding --
-    # see that dict's comment above, "always meant to be ONE combined
-    # meaning"), so a naive per-`cat` dedup (keying on "translation" and
-    # "rotation" separately) puts two visually-identical entries ("clean
-    # translation", "clean rotation") in the legend -- confusing, and unlike
-    # every other category here which gets one entry per distinct color+
-    # shape. No other figure in this module builds a legend mixing
+    # Legend dedup: translation/rotation share the identical gray color
+    # (CATEGORY_COLOR maps both to the same gray -- see that dict's comment
+    # above, "always meant to be ONE combined meaning"; both also now render
+    # as the same hollow gray circle since marker shape is no longer
+    # category-specific here), so a naive per-`cat` dedup (keying on
+    # "translation" and "rotation" separately) puts two visually-identical
+    # entries ("clean translation", "clean rotation") in the legend --
+    # confusing, and unlike every other category here which gets one entry
+    # per distinct color. No other figure in this module builds a legend mixing
     # translation+rotation (fig:confusion's tick labels are a structurally
     # different case -- matrix ROWS need the distinct text since they label
     # different ground-truth categories, not a redundant visual encoding), so
@@ -535,64 +555,44 @@ def plot_benzene_normal_modes(
     seen_labels = set()
     for _, row in normal.iterrows():
         cat = classification_bucket(row["label"])
-        color = CATEGORY_COLOR.get(cat, "black")
-        marker = CATEGORY_MARKER.get(cat, "o")
         leg_key = _LEGEND_MERGE_KEY.get(cat, cat)
         leg_text = _LEGEND_MERGE_TEXT.get(leg_key, CATEGORY_LABEL.get(cat, cat))
         leg_label = leg_text if leg_key not in seen_labels else None
         seen_labels.add(leg_key)
-        ax.scatter(row["Freq"], row["V_Stretch"], color=color, marker=marker, s=26,
-                   edgecolors="black", linewidths=0.3, zorder=3, label=leg_label)
+        # ONE consistent marker shape (circle) for every point, all rendered
+        # hollow (IDEAL_STYLE["no"], applied uniformly -- no ideal/non-ideal
+        # axis within one molecule's own normal modes, just cross-figure
+        # visual-consistency styling). Color (CATEGORY_COLOR, via
+        # _marker_kwargs) is the only category encoding, matching
+        # plot_bond_scores/plot_boxplots/plot_mode_mixing's established
+        # "shape is not a redundant second encoding" convention.
+        kw = _marker_kwargs(cat, ideal_flag="no", marker="o")
+        ax.scatter(row["Freq"], row["V_Stretch"], s=26, zorder=3,
+                   label=leg_label, **kw)
 
     ax.axhline(TAU_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
     ax.axhline(TAU_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-    ax.text(0.98, TAU_S, r"$\tau_S=$" + f"{TAU_S:.3f}", ha="right",
+    # Threshold labels (follow-up correction, 2026-07-02): previously placed
+    # with va="bottom"/va="top" flush against each dashed line, which made
+    # the text visually overlap/touch the line itself. Nudged a fixed
+    # distance (0.045 in axes-fraction y, comfortably clear at this panel's
+    # y-range) above tau_S and below tau_B respectively, so both labels sit
+    # in open space next to (not on top of) their line -- verified by
+    # rendering the regenerated PNG.
+    # tau_S's label is anchored on the LEFT (x=0.02) rather than the right
+    # (x=0.98, matched by tau_B below): the S/stretch cluster sits at high
+    # frequency AND near s[V_S]=1.0, i.e. exactly the upper-right corner --
+    # a right-anchored tau_S label collided with those data points even
+    # after being pushed clear of the dashed line itself (checked by
+    # rendering). The upper-left corner is empty at this height, so the
+    # label is anchored there instead.
+    y_offset = 0.045
+    ax.text(0.02, TAU_S + y_offset, r"$\tau_S=$" + f"{TAU_S:.3f}", ha="left",
             va="bottom", fontsize=7, color=COLORS["threshold"],
             transform=ax.get_yaxis_transform())
-    ax.text(0.98, TAU_B, r"$\tau_B=$" + f"{TAU_B:.3f}", ha="right",
+    ax.text(0.98, TAU_B - y_offset, r"$\tau_B=$" + f"{TAU_B:.3f}", ha="right",
             va="top", fontsize=7, color=COLORS["threshold"],
             transform=ax.get_yaxis_transform())
-
-    # -- Worked-example callouts: mode 12 (ring-breathing), 19 (mixed S/B),
-    # 30 (C-H stretch). Each gets an enlarged black-outlined marker (still
-    # the category's own color/shape -- consistency, not a new encoding)
-    # plus a dashed leader to an off-point text box giving frequency +
-    # s[V_S] readout.
-    worked_rows = {}
-    for mode_id, meta in _WORKED_EXAMPLE_MODES.items():
-        row = normal.loc[normal["Mode"] == mode_id].iloc[0]
-        worked_rows[mode_id] = row
-        cat = classification_bucket(row["label"])
-        color = CATEGORY_COLOR[cat]
-        marker = CATEGORY_MARKER[cat]
-        # White halo first: the C-H-stretch cluster (modes 25-30) sits within
-        # ~40 cm-1 of itself, so mode 30's enlarged marker can otherwise show
-        # a sliver of its un-highlighted neighbor (e.g. mode 28/29) peeking
-        # out from behind it. A solid white backing marker (drawn just under
-        # the highlight, on top of everything else) guarantees a clean badge
-        # regardless of how tightly packed the underlying points are.
-        ax.scatter(row["Freq"], row["V_Stretch"], color="white", marker=marker,
-                   s=150, edgecolors="white", linewidths=0, zorder=4.5)
-        ax.scatter(row["Freq"], row["V_Stretch"], color=color, marker=marker,
-                   s=95, edgecolors="black", linewidths=1.2, zorder=5)
-
-        xy_axes = meta["callout"]
-        ax.annotate(
-            "", xy=(row["Freq"], row["V_Stretch"]), xycoords="data",
-            xytext=xy_axes, textcoords="axes fraction",
-            arrowprops=dict(arrowstyle="-", color=color, lw=0.9, ls="--",
-                            shrinkA=0, shrinkB=5),
-            zorder=4,
-        )
-        callout_text = (
-            f"{meta['short']}: {meta['name']}\n"
-            f"{row['Freq']:.1f}" + r" cm$^{-1}$" + f", "
-            r"$s[\mathrm{V_S}]$" + f"={row['V_Stretch']:.3f}"
-        )
-        ax.text(xy_axes[0], xy_axes[1], callout_text, transform=ax.transAxes,
-                fontsize=6.7, ha="center", va="center",
-                bbox=dict(boxstyle="round,pad=0.32", fc="white", ec=color, lw=0.9),
-                zorder=6)
 
     ax.set_xlabel(r"Frequency (cm$^{-1}$)")
     ax.set_ylabel(r"$s[\mathrm{V_S}]$")
@@ -613,24 +613,27 @@ def plot_benzene_normal_modes(
 
     summary = {
         "pdf": pdf_path, "png": png_path,
-        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_MARKER/"
-                               "CATEGORY_LABEL for the full T/R/S/B/SB "
-                               "scheme -- same mapping as fig:benzene panel "
-                               "(a); a NEW figure, fig:benzene itself is "
-                               "untouched."),
+        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL for the "
+                               "full T/R/S/B/SB scheme -- same mapping as "
+                               "fig:benzene panel (a); a NEW figure, "
+                               "fig:benzene itself is untouched. ONE marker "
+                               "shape (circle) for all points, all rendered "
+                               "hollow (IDEAL_STYLE['no']) -- consistency fix, "
+                               "2026-07-02 follow-up: CATEGORY_MARKER's "
+                               "per-category shapes are no longer used here "
+                               "(color is the only category encoding, "
+                               "matching fig:bondscores/fig:boxplots/"
+                               "fig:modemixing's convention)."),
         "n_points": len(normal),
         "freq_range": (float(normal["Freq"].min()), float(normal["Freq"].max())),
         "vs_range": (float(normal["V_Stretch"].min()), float(normal["V_Stretch"].max())),
         "tau_S": TAU_S, "tau_B": TAU_B,
-        "worked_examples": {
-            mode_id: {
-                "freq": float(row["Freq"]),
-                "V_Stretch": float(row["V_Stretch"]),
-                "label": row["label"],
-                "name": _WORKED_EXAMPLE_MODES[mode_id]["name"],
-            }
-            for mode_id, row in worked_rows.items()
-        },
+        "worked_example_annotations": ("REMOVED 2026-07-02 (author visual "
+                                        "review, follow-up correction) -- "
+                                        "modes 12/19/30 are no longer "
+                                        "highlighted/annotated in this "
+                                        "figure; pointing annotations will "
+                                        "be added manually later."),
     }
     return summary
 

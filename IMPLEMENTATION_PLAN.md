@@ -483,6 +483,23 @@
 > needed); `JCC_SI_computational_cost.pdf` 7 pages, `JCC_SI_sensitivity.pdf` 2 pages, both clean
 > independent builds. All three PDFs copied back to `JCC/JCC_man_scoring/`. No `src/` code changed; no
 > test suite impact.
+> **2026-07-02 (follow-up correction, same day as the legend-dedup fix above):** author's second visual
+> review of `fig_benzene_normal` flagged 3 more issues, all fixed in `plot_benzene_normal_modes`: (1)
+> marker shape unified to `marker="o"` for every point (was `CATEGORY_MARKER`'s per-category X/o/s/^/P
+> shapes) — color-only category encoding now matches `fig:bondscores`/`fig:boxplots`/`fig:modemixing`'s
+> established convention, via `_marker_kwargs()`; (2) all markers now rendered hollow
+> (`IDEAL_STYLE["no"]` applied uniformly — no ideal/non-ideal axis within one molecule's own normal
+> modes, just cross-figure visual consistency); (3) `τ_S`/`τ_B` threshold-line text labels repositioned
+> off the dashed lines (`τ_B` nudged below its line; `τ_S` nudged above its line AND moved to the
+> left/upper-left corner, since a right-anchored `τ_S` label collided with the high-frequency S/stretch
+> data cluster sitting at s[V_S]≈1.0 — checked by rendering, not assumed); (4) removed the enlarged-
+> marker + dashed-leader-line + callout-text-box annotation block for modes 12/19/30 entirely — figure is
+> now a plain unannotated scatter (`_WORKED_EXAMPLE_MODES` left defined, unused, no other reference in
+> the codebase). Regenerated `fig_benzene_normal.{pdf,png}` only; 53/53 tests still green. **Flag for
+> next agent (`lead-author`/manuscript-side):** `fig:benzenenormal`'s LaTeX caption still names the 3
+> worked-example callouts ("mode 12... mode 19... mode 30...") that no longer exist in the image —
+> caption needs rewording to note that pointing/callout annotations for those modes will be added
+> manually later, not describe callouts that aren't there.
 
 ## Context
 

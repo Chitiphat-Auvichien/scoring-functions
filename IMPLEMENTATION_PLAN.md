@@ -212,11 +212,16 @@
 > corruption). Do NOT re-dispatch a fresh `lead-engineer` for this without checking working-tree state
 > first — the pattern this session (and the 2026-07-02 Phase-3 session before it) both confirm:
 > interrupted-by-limit work is usually recoverable, not lost.
-> **Next, in order (once the rename settles):** dispatch `figure-builder` to re-render all 6 figures
-> (their legends currently show the OLD label text baked in from before this rename) and `lead-author`
-> to update the `.tex`'s literal `\textsc{clean_translation}`-style label references + the benzene table
-> to the new short symbols — see `project_jcc-manuscript.md`/`project_jcc-scoring-program.md` memory for
-> detail. Then Phase 5 (`reproduce.py` orchestrator wiring; SI Cartesian-geometry export; graphical TOC)
+> ~~`figure-builder`: re-render all 6 figures after the label rename~~ ✓ **DONE 2026-07-02** — ran
+> `py -m src.figures`, visually inspected all 6 regenerated PNGs (legend/annotation text unchanged:
+> `CATEGORY_LABEL` string VALUES like "clean translation"/"bending" never changed, only the dict keys
+> did, so the rendered content is pixel-identical to the pre-rename PDFs — confirmed via `git diff
+> --stat` showing 0 insertions/deletions, same byte counts, only embedded PDF metadata differs). No
+> stale/raw label strings (e.g. `"Tx*"`, `"SB"`) found anywhere a descriptive English label was
+> expected. 51/51 tests still green. Committed + pushed.
+> **Next:** `lead-author` to update the `.tex`'s literal `\textsc{clean_translation}`-style label
+> references + the benzene table to the new short symbols — see `project_jcc-manuscript.md`/
+> `project_jcc-scoring-program.md` memory for detail. Then Phase 5 (`reproduce.py` orchestrator wiring; SI Cartesian-geometry export; graphical TOC)
 > and the remaining two Phase 6 recommended items (mixed-SB bucket CoM-argument half; leave-one-molecule-out
 > τ evaluation). The two previously-flagged pending gaps (fig:modemixing irrep-degeneracy sub-panel;
 > possible new benzene low-frequency C-C stretch panel) remain BLOCKED pending lead-author/tex-data-sync
@@ -627,6 +632,13 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-02 — Re-rendered all 6 manuscript figures after the label-vocabulary rename
+  (presentation-only regen, not a new figure/analysis).** Ran `py -m src.figures`; all 6 regenerated
+  without error. Visually inspected every PNG: legend/annotation text is unchanged from before the
+  rename (`CATEGORY_LABEL` string VALUES like `"clean translation"`/`"bending"` never changed, only
+  the dict keys did — `git diff --stat` on the 6 PDFs shows 0 insertions/deletions and identical byte
+  counts, confirming the rendered content is pixel-identical, only embedded PDF metadata differs).
+  No stale/raw label strings found. `py -m pytest tests/` stayed 51/51 green throughout.
 - **2026-07-02 — Label-vocabulary rename: classifier output labels are now short and axis-specific
   (author-directed design decision, not a bug fix). Recovered from a session-limit interruption
   mid-rename; nothing was lost.** Old scheme: `CLEAN_TRANSLATION`/`CLEAN_ROTATION` (generic, axis-blind)/

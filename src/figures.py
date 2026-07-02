@@ -152,27 +152,27 @@ CATEGORY_MARKER = {
 }
 
 # FIXED 2026-07-02 (IMPLEMENTATION_PLAN.md queued item 2): the internal
-# stretch/bend/mixed classifications now display the SAME short symbols the
+# stretch/bend/mixed classifications display the SAME short symbols the
 # classifier itself emits (src.classifier.STRETCHING="S"/BENDING="B"/
 # MIXED_STRETCH_BEND="SB") and the manuscript prose/tab:benzenemixed use
 # (`\texttt{S}`/`\texttt{B}`/`\texttt{SB}`), instead of spelling them out.
-# Chosen gloss form: bare "S"/"B"/"SB" alone read as too cryptic in a
-# standalone legend/tick label with no surrounding caption text to lean on
-# (these figures are also viewed as bare PNGs, not just inside the compiled
-# paper), so each symbol carries a one-time, in-figure "(word)" gloss baked
-# directly into the label text itself -- e.g. "S (stretching)" -- rather
-# than bare "S" plus a caption-only gloss (which only lead-author could add,
-# and only for the LaTeX-compiled view). translation/rotation are untouched:
-# the manuscript has no single-letter T/R bucket symbol to match (its actual
-# short labels are axis-specific, "Tx".."Rz"), so "clean translation"/"clean
-# rotation" stay as the pre-existing long form. `mixed_external` similarly
-# has no short symbol in the manuscript prose and is left unchanged.
+# REVERTED 2026-07-02 (author visual review, same day): a same-day attempt to
+# gloss each symbol in-figure ("S (stretching)" etc.) was reviewed and judged
+# too long for a standalone legend/tick label -- reverted back to the bare
+# short symbol. The gloss is instead added ONCE, in the LaTeX caption text
+# (lead-author's job, not baked into the raster), rather than repeated on
+# every legend/tick occurrence across 5 figures. translation/rotation are
+# untouched: the manuscript has no single-letter T/R bucket symbol to match
+# (its actual short labels are axis-specific, "Tx".."Rz"), so "clean
+# translation"/"clean rotation" stay as the pre-existing long form.
+# `mixed_external` similarly has no short symbol in the manuscript prose and
+# is left unchanged.
 CATEGORY_LABEL = {
     "translation": "clean translation",
     "rotation": "clean rotation",
-    "bend": "B (bending)",
-    "stretch": "S (stretching)",
-    "mixed": "SB (mixed S/B)",
+    "bend": "B",
+    "stretch": "S",
+    "mixed": "SB",
     "mixed_external": "mixed external+vibration",
 }
 
@@ -905,23 +905,25 @@ def plot_bond_scores(
     # One consistent marker shape (circle) for every legend entry -- color
     # (stretching/bending) and fill (ideal/non-ideal) are the only two
     # encodings here; shape no longer redundantly re-encodes stretch/bend.
-    # Labels use the short S/B symbol + gloss ("S (stretching)"), matching
-    # CATEGORY_LABEL's 2026-07-02 fix (queued item 2) -- this legend is
-    # custom-built (not sourced from CATEGORY_LABEL, since it also encodes
-    # ideal/non-ideal), so the same wording is applied by hand here.
+    # Labels use the bare short S/B symbol, matching CATEGORY_LABEL's
+    # 2026-07-02 revert (author visual review: an in-figure "(word)" gloss
+    # was tried the same day and judged too long -- reverted to bare symbols,
+    # gloss deferred to the LaTeX caption) -- this legend is custom-built
+    # (not sourced from CATEGORY_LABEL, since it also encodes ideal/
+    # non-ideal), so the same bare wording is applied by hand here.
     legend_elems = [
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor=COLORS["stretching"], markeredgecolor=COLORS["stretching"],
-               markersize=6, label="S (stretching), ideal"),
+               markersize=6, label="S, ideal"),
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor="none", markeredgecolor=COLORS["stretching"],
-               markersize=6, label="S (stretching), non-ideal"),
+               markersize=6, label="S, non-ideal"),
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor=COLORS["bending"], markeredgecolor=COLORS["bending"],
-               markersize=6, label="B (bending), ideal"),
+               markersize=6, label="B, ideal"),
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor="none", markeredgecolor=COLORS["bending"],
-               markersize=6, label="B (bending), non-ideal"),
+               markersize=6, label="B, non-ideal"),
     ]
     ax.legend(handles=legend_elems, loc="upper left", frameon=False, fontsize=6.8,
               handletextpad=0.4, labelspacing=0.4, borderaxespad=0.2)
@@ -973,13 +975,15 @@ def plot_boxplots(
                        lib_df["ideal"].isin(("yes", "no"))].copy()
 
     groups = [("bend", "yes"), ("stretch", "yes"), ("bend", "no"), ("stretch", "no")]
-    # S/B symbol + gloss ("B (bending)"/"S (stretching)"), matching
-    # CATEGORY_LABEL's 2026-07-02 short-notation fix (queued item 2) and
-    # every other figure's terminology (fig:confusion, fig:bondscores,
-    # fig:modemixing, fig:benzene_normal). Before that fix these were the
-    # bare long forms ("bending"/"stretching"); before THAT they were the
-    # bare short forms "bend"/"stretch" -- this is a third iteration, now
-    # settled on the classifier/manuscript's actual "S"/"B" vocabulary.
+    # Bare S/B symbol, matching CATEGORY_LABEL's settled short-notation
+    # vocabulary and every other figure's terminology (fig:confusion,
+    # fig:bondscores, fig:modemixing, fig:benzene_normal). History: these
+    # were originally the bare short forms "bend"/"stretch"; briefly became
+    # the bare long forms ("bending"/"stretching"); briefly became glossed
+    # short forms ("B (bending)"/"S (stretching)") on 2026-07-02; that gloss
+    # was reverted the same day after author visual review judged it too
+    # long for a tick label -- settled on the classifier/manuscript's bare
+    # "S"/"B" symbol, gloss deferred to the LaTeX caption only.
     # Stacking "(ideal)"/"(non-ideal)" onto every one of the 4 per-panel
     # tick labels (as tried first, pre-2026-07-02) made adjacent 2-line
     # labels visually run together in this narrow a panel (3 panels sharing
@@ -988,7 +992,7 @@ def plot_boxplots(
     # narrow, plus a single shared "ideal"/"non-ideal" group annotation
     # (with an under-bracket) spanning each pair, which only has to appear
     # ONCE per pair rather than once per box.
-    group_labels = ["B (bending)", "S (stretching)", "B (bending)", "S (stretching)"]
+    group_labels = ["B", "S", "B", "S"]
     # Positions: gap 1.3 within a bend/stretch pair, gap 1.6 between the
     # ideal pair (1,2) and non-ideal pair (3,4) -- sized (see
     # IMPLEMENTATION_PLAN.md 2026-07-02 changelog entry) so neither the
@@ -1031,13 +1035,13 @@ def plot_boxplots(
             flier.set_markeredgecolor(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[ref]])
 
         ax.set_xticks(positions)
-        # rotation=30/ha="right" (added with the 2026-07-02 S/B-gloss switch,
-        # queued item 2): the longer "S (stretching)"/"B (bending)" labels
-        # collided horizontally at this position spacing (previously fine
-        # for the shorter bare "bending"/"stretching" words) -- rotating
-        # matches the same idiom fig:confusion's heatmap ticks already use,
-        # verified collision-free by rendering.
-        ax.set_xticklabels(group_labels, fontsize=6.5, rotation=30, ha="right")
+        # Horizontal, unrotated (reverted 2026-07-02 alongside the gloss
+        # revert above): the 30 deg rotation was only needed to avoid
+        # collisions with the longer glossed "S (stretching)"/"B (bending)"
+        # labels; bare single-character "S"/"B" labels have no collision
+        # risk at this position spacing and read cleaner flat, verified by
+        # rendering.
+        ax.set_xticklabels(group_labels, fontsize=6.5)
         ax.set_xlim(positions[0] - 0.7, positions[-1] + 0.7)
         ax.set_ylabel(ylabel)
         ax.set_title(title, loc="left", fontweight="bold", fontsize=9)

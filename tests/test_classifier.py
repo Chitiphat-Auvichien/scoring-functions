@@ -10,6 +10,19 @@ BENDING/STRETCHING/STRETCHING, and benzene EMIT 34/35 (stretching-mixed
 externals) vs EMIT 36 (the documented out-of-plane-bending blind spot, which
 is INTENTIONALLY reported CLEAN_TRANSLATION -- see IMPLEMENTATION_PLAN.md
 Decision X) resolve as designed.
+
+Threshold policy (decided Phase 3, 2026-07): this file explicitly pins
+Thresholds() -- the hardcoded PROVISIONAL constants (tau_TR=0.95, tau_S=0.9,
+tau_B=0.2) -- rather than relying on classify_all_modes()'s default (which
+now auto-loads the Phase-3 CALIBRATED values via Thresholds.calibrated() when
+data/results/thresholds.json exists). This keeps these regression goldens
+fixed and reproducible even if a future recalibration (e.g. an expanded
+library) changes thresholds.json's numbers. The calibrated-threshold behavior
+is independently re-verified against the SAME targets in
+tests/test_calibrate.py, which loads Thresholds.calibrated() explicitly --
+see that file for the confirmation that calibration did not change any of
+these labels (tau_S 0.9->0.90368, tau_B 0.2->0.17327, tau_TR unchanged at
+0.95; every target below is robust to that shift).
 """
 import os
 import sys
@@ -19,18 +32,22 @@ sys.path.insert(0, ROOT)
 
 from main import load_inputs, build_scorer_and_final              # noqa: E402
 from src.classifier import (                                       # noqa: E402
-    classify_all_modes, classify_to_rows,
+    classify_all_modes, classify_to_rows, Thresholds,
     CLEAN_TRANSLATION, CLEAN_ROTATION, MIXED_EXTERNAL_WITH_VIBRATION,
     STRETCHING, BENDING, MIXED_STRETCH_BEND,
 )
 
 TOL = 5e-4  # 3 decimal places
 
+# Explicit provisional thresholds -- see module docstring for why this file
+# does not rely on classify_all_modes()'s calibrated-by-default resolution.
+_PROVISIONAL = Thresholds()
+
 
 def _classify(mol, mode_type):
     raw, _ = load_inputs(mol, mode_type, os.path.join(ROOT, "data"))
     scorer, final = build_scorer_and_final(raw, mode_type)
-    scored = classify_all_modes(scorer, final)
+    scored = classify_all_modes(scorer, final, _PROVISIONAL)
     return {m["name"]: m for m in scored}
 
 

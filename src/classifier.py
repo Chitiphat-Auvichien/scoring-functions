@@ -32,10 +32,17 @@ Step 4  every mode NOT assigned an external slot in Step 2: vib_label(s[V_S])
 n_T = 3; n_R = 2 if linear else 3 (linear: smallest principal moment ~= 0).
 """
 
+import json
+import os
 from dataclasses import dataclass
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
+
+# Phase-3 calibration output (src/calibrate.py). Thresholds.calibrated() reads
+# this if present; Thresholds() below remains the explicit, hardcoded
+# provisional fallback for a fresh clone / before Phase 3 has been run.
+DEFAULT_CALIBRATION_PATH = os.path.join("data", "results", "thresholds.json")
 
 
 # --- Classification labels ---------------------------------------------
@@ -57,15 +64,43 @@ LINEAR_TOL = 1e-6
 
 @dataclass
 class Thresholds:
-    """Step 2/3/4 thresholds (provisional; to be replaced by Phase-3 calibration).
+    """Step 2/3/4 thresholds.
 
     tau_TR : purity bar for a clean external (near 1; PDF example 0.95).
     tau_S  : stretching bar on s[V_S] (>= -> STRETCHING).
     tau_B  : bending bar on s[V_S] (<= -> BENDING); also gate 2 of Step 3.
+
+    The defaults below (0.95 / 0.9 / 0.2) are the PROVISIONAL constants used
+    before Phase-3 calibration existed -- kept here, unchanged, as the
+    explicit hardcoded fallback (`Thresholds()`), not overwritten by
+    calibration. Phase-3's calibrated values (derived in src/calibrate.py from
+    the hydride library's literature stretch/bend labels + a tau_TR
+    sensitivity sweep; see IMPLEMENTATION_PLAN.md) are loaded on demand via
+    `Thresholds.calibrated()`, which classify_all_modes() now uses as its
+    default when `thresholds=None` is passed and data/results/thresholds.json
+    exists (falling back to these same provisional numbers if it does not --
+    e.g. a fresh clone before Phase 3 has been run). This split is
+    deliberate: tests/test_classifier.py pins `Thresholds()` explicitly, so
+    those regression goldens stay fixed to these exact numbers even if a
+    future recalibration (new library data) changes thresholds.json; the
+    calibrated behavior has its own dedicated tests
+    (tests/test_calibrate.py) that load Thresholds.calibrated() explicitly.
     """
     tau_TR: float = 0.95
     tau_S: float = 0.9
     tau_B: float = 0.2
+
+    @classmethod
+    def calibrated(cls, path=DEFAULT_CALIBRATION_PATH):
+        """Load the Phase-3 calibrated thresholds from `path` if it exists;
+        otherwise fall back to the provisional class defaults above (no
+        warning -- running before Phase 3 has produced thresholds.json is an
+        expected, supported state, not an error)."""
+        if os.path.exists(path):
+            with open(path) as f:
+                data = json.load(f)
+            return cls(tau_TR=data["tau_TR"], tau_S=data["tau_S"], tau_B=data["tau_B"])
+        return cls()
 
 
 def is_linear(scorer, tol=LINEAR_TOL):
@@ -123,7 +158,9 @@ def classify_all_modes(scorer, final, thresholds=None):
     final : list of mode dicts {frequency, vector, label?, is_emit?}
         The full candidate pool (ideal T/R + vibrational modes for 'normal';
         raw EMIT eigenvectors for 'emit') -- exactly what score_modes() scores.
-    thresholds : Thresholds, optional (defaults to the provisional constants).
+    thresholds : Thresholds, optional. Defaults to Thresholds.calibrated() --
+        the Phase-3 calibrated values if data/results/thresholds.json exists,
+        else the same provisional constants as Thresholds().
 
     Returns
     -------
@@ -134,7 +171,7 @@ def classify_all_modes(scorer, final, thresholds=None):
     'annotation' is "dominant_external=<slot>; vibration=<vib_label>" for
     MIXED_EXTERNAL_WITH_VIBRATION modes; "" otherwise.
     """
-    thresholds = thresholds or Thresholds()
+    thresholds = thresholds or Thresholds.calibrated()
     n_T, n_R, slots = external_slots(scorer)
 
     # ---- Step 1: score every mode (+ per-bond s_AB) ----

@@ -500,6 +500,14 @@
 > worked-example callouts ("mode 12... mode 19... mode 30...") that no longer exist in the image —
 > caption needs rewording to note that pointing/callout annotations for those modes will be added
 > manually later, not describe callouts that aren't there.
+> **2026-07-02 (stale-caption fix, `lead-author`) -- DONE, closes the flag above.** Copied the freshly
+> regenerated `fig_benzene_normal.pdf` into `JCC/JCC_man_scoring/images/` (overwriting the stale copy).
+> Reworded `fig:benzenenormal`'s caption: replaced the false "are called out" claim with "are discussed
+> in the text as worked examples ... ; [TODO: manually add enlarged-marker/leader-line callouts for
+> these three points in the figure]", matching the doc's existing `[TODO: ...]` idiom (acknowledgments,
+> ORCID). Verified the body-text paragraphs narrating modes 12/19/30 read correctly standalone (prose
+> only, no dependence on figure annotations) -- left unchanged. Recompiled (OneDrive-safe scratch-dir
+> latexmk): 32 pages before -> 32 pages after, zero undefined references/citations.
 
 ## Context
 

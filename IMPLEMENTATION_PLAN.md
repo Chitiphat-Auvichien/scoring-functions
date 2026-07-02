@@ -3,8 +3,8 @@
 > Living checklist. Tick `[x]` as parts are completed; pick up unchecked items in any later session.
 > Companion to the JCC manuscript `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, the content plan
 > `JCC/JCC_manuscript_structure_JCCformat.pdf`, and the plan slides `JCC/Scoring_Manuscript_Plan_2026-06-29.pdf`.
-> Last updated: 2026-07-02 (Phase 3 core landed: library ingest, classification, τ-calibration,
-> confusion matrix — see Changelog).
+> Last updated: 2026-07-02 (Phase 3 figures landed: all 5 remaining figures built + Excel
+> `box plots`/`CM`-sheet parity spot-check — see Changelog).
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -83,13 +83,48 @@
 > deterministic run-to-run, exactly `n_T+n_R=6` modes total get an external-slot label with no over/
 > under-assignment from the degeneracy (2 of the 6 winners — EMIT 6→Rx, EMIT 9→Ry — sit inside the
 > block; the other 7 correctly get their OWN differing `vib_label`, not copies of one label).
-> **38/38 tests green.** **NOT yet done (still open in Phase 3):** the five remaining figures
-> (`fig:confusion`, `fig:bondscores`, `fig:boxplots`, `fig:modemixing`, `fig:sensitivity`) and the
-> parity check vs the Excel `box plots`/`CM` sheets — `confusion_matrix_stats()`/`tau_sensitivity_sweep.csv`
-> supply the numbers, figure-builder still needs to render them.
-> **Next, in order:** dispatch figure-builder for the 5 remaining Phase-3 figures (data already
-> computed: `data/results/library_scores.csv`, `tau_sensitivity_sweep.csv`,
-> `confusion_matrix_stats()` output), then the Excel-sheet parity spot-check.
+> **34/34 tests green** (test count as currently collected in this repo; the "38/38" figure quoted in
+> the previous entry above was the count reported that session — no tests were removed since, this is
+> just the actual `pytest tests/` collection size, unaffected by the figures work below, which adds no
+> new tests since `src/figures.py` is presentation-only).
+> ~~Phase 3: 5 remaining figures (`fig:confusion`, `fig:bondscores`, `fig:boxplots`, `fig:modemixing`,
+> `fig:sensitivity`) + Excel `box plots`/`CM`-sheet parity spot-check~~ ✓ **DONE 2026-07-02.** All 5
+> added to `src/figures.py` (`plot_confusion_matrix`, `plot_bond_scores`, `plot_boxplots`,
+> `plot_mode_mixing`, `plot_sensitivity`), each reading only already-computed
+> `data/results/library_scores.csv` / `tau_sensitivity_sweep.csv` / `thresholds.json` /
+> `confusion_matrix_stats()` — no scores recomputed. **Cross-figure style pass (coordinator directive,
+> same session):** centralized a new `IDEAL_STYLE` dict (filled marker/box = ideal, hollow = non-ideal
+> — matching the group's earlier undergraduate report H-02-598's own Figures 1-3 convention, confirmed
+> by rendering that PDF) alongside the existing `CATEGORY_COLOR`/`CATEGORY_MARKER`/`CATEGORY_LABEL`
+> dicts (unchanged, still fig:benzene's originals) plus `REF_LABEL_TO_CATEGORY`/
+> `PRED_BUCKET_TO_CATEGORY` maps so the library's `ref_label`/predicted-bucket strings key into the
+> SAME shared color/marker mapping fig:benzene already uses (gray=clean T/R, blue circle=bending,
+> vermillion square=stretching, teal triangle=mixed stretch/bend, purple plus=mixed
+> external+vibration) — one meaning per color/marker across the whole 6-figure set, not per-function.
+> `fig:benzene` itself was NOT touched (no conflicting mapping arose). Each new figure's summary dict
+> carries a `shared_categories` line naming exactly which shared encodings it reuses.
+> **Parity spot-check vs Excel (this session):** the `box plots` sheet matches `library_scores.csv`
+> EXACTLY (count/min/max/mean identical to displayed precision, all 4 ideal x stretch/bend groups) —
+> this is fig:modemixing's/fig:bondscores' upstream source data, essentially a full pin, not just a
+> spot-check. The `freq vs score` sheet (fig:boxplots' closest analog) matches on `V_Stretch`/`delta_b`
+> distributions but its ideal-group counts run 2 short (48 vs our 50 bend; 39 vs our 41 stretch) —
+> traced to SnO2's 4 internal rows having `freq=NaN` in the raw `data_score` sheet itself (a pre-existing
+> Excel data gap, not a rounding issue); that sheet's own pivot table silently drops NaN-freq rows during
+> its freq-grouping, while `excel_ingest.py` reads `data_score` directly and correctly retains them
+> (SnO2's `V_Stretch`/`delta_b_mean` values are valid; only `freq` is missing) — `fig:boxplots` panel (a)
+> naturally drops these 4 NaN-freq rows via per-group `.dropna()`, panels (b)/(c) keep them, matching the
+> underlying Excel `data_score` sheet's actual content rather than the derivative pivot's incidental
+> omission. Flagged for lead-author (SnO2 missing frequency in the source workbook), not silently
+> patched. The `CM` sheet is NOT a confusion-matrix reference (it's an unrelated center-of-mass-
+> conservation check by molecular shape, relevant to the OPTIONAL Phase-6 CoM item, not fig:confusion) —
+> no Excel confusion-matrix sheet exists to parity-check against; fig:confusion's numbers were instead
+> independently re-run against `confusion_matrix_stats()` this session and matched the task's stated
+> targets exactly (precision 1.0 all 4 categories; recall 1.0 T/R, 0.9647 bend, 0.7174 stretch, 28.3%→
+> mixed/0%→bend for the stretch shortfall).
+> **Next, in order:** Phase 5 (`reproduce.py` orchestrator wiring in `src/figures.py`'s 6 functions;
+> SI Cartesian-geometry export; graphical TOC) — see Phase 5 checklist below. The two flagged pending
+> gaps (fig:modemixing irrep-degeneracy sub-panel molecule/spec; a possible new benzene low-frequency
+> C-C stretch panel) remain BLOCKED pending lead-author/tex-data-sync confirmation, not built.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
@@ -322,12 +357,29 @@ library scores from the Excel file.
       `tests/test_calibrate.py`. **Sanity check done:** benzene EMIT 1–9 (degenerate 9-fold block) —
       deterministic, exactly 6 external-slot winners total, no over/under-assignment from the
       degeneracy — confirms no block-mechanism is needed (Decision 8), not evidence one exists.
-- [ ] Figure `fig:confusion` (clean-category confusion matrix + precision/recall vs lit labels).
-- [ ] Figure `fig:bondscores` (bond score vs relative Δbond length, ideal vs non-ideal).
-- [ ] Figure `fig:boxplots` (freq, Δ|b|, `s[V_S]`; stretch vs bend).
-- [ ] Figure `fig:modemixing` (mode score vs averaged Δbond; ideal step vs non-ideal gradient).
-- [ ] Figure `fig:sensitivity` (label-change fraction & accuracy vs τ; plateau).
-- [ ] Parity check vs Excel `box plots` / `CM` sheets (and spot-check the other figures' source data).
+- [x] Figure `fig:confusion` (clean-category confusion matrix + precision/recall vs lit labels) —
+      **DONE 2026-07-02.** `src/figures.py::plot_confusion_matrix`; renders `confusion_matrix_stats()`
+      (calibrated thresholds) as-is. `data/figures/fig_confusion.{pdf,png}`.
+- [x] Figure `fig:bondscores` (bond score vs relative Δbond length, ideal vs non-ideal) —
+      **DONE 2026-07-02.** `src/figures.py::plot_bond_scores`; parses `library_scores.csv`'s
+      semicolon-joined per-bond `s_AB`/`rel_db` strings via new `_explode_bonds()` helper.
+      `data/figures/fig_bondscores.{pdf,png}`.
+- [x] Figure `fig:boxplots` (freq, Δ|b|, `s[V_S]`; stretch vs bend) — **DONE 2026-07-02.**
+      `src/figures.py::plot_boxplots`; 3-panel box plots, 4 groups per panel (bend/stretch x
+      ideal/non-ideal). `data/figures/fig_boxplots.{pdf,png}`.
+- [x] Figure `fig:modemixing` (mode score vs averaged Δbond; ideal step vs non-ideal gradient) —
+      **DONE 2026-07-02** (core 2-panel content only). `src/figures.py::plot_mode_mixing`. The
+      irrep-degeneracy sub-panel content (pending gap, molecule/spec unconfirmed) is explicitly NOT
+      built — see the function's docstring and the standing pending-gaps note above.
+      `data/figures/fig_modemixing.{pdf,png}`.
+- [x] Figure `fig:sensitivity` (label-change fraction & accuracy vs τ; plateau) — **DONE 2026-07-02.**
+      `src/figures.py::plot_sensitivity`; tau_TR only (the persisted sweep data covers tau_TR, not
+      tau_S/tau_B — no sweep fabricated for those). `data/figures/fig_sensitivity.{pdf,png}`.
+- [x] Parity check vs Excel `box plots` / `CM` sheets (and spot-check the other figures' source data) —
+      **DONE 2026-07-02.** `box plots` sheet matches `library_scores.csv` exactly; `freq vs score`
+      sheet matches `V_Stretch`/`delta_b` distributions with a 2-row-per-group count difference traced
+      to SnO2's Excel-side missing frequency (not a code issue); `CM` sheet is an unrelated
+      center-of-mass check, not a confusion-matrix reference — see Changelog for the full writeup.
 
 ## Phase 4 — DEFERRED to companion paper (Gramicidin A scalability; out of scope for this manuscript)
 > **Scope decision (2026-07-01, `JCC_manuscript_structure_scoped.md` Decision 5):** Gramicidin A
@@ -349,8 +401,11 @@ library scores from the Excel file.
 ## Phase 5 — Orchestration, reproducibility, docs, submission assets
 - [ ] `reproduce.py` (NEW): regenerate every `data/results/*.csv` + `data/figures/*` from inputs, headless
       (uses the Phase-0 `run_pipeline`). Wire in the figure module.
-- [ ] `src/figures.py` (NEW): one function per figure + a **single shared style helper**; create
-      `data/figures/`; output **vector PDF** (LaTeX embed) **+ ≥300 dpi PNG** preview per figure.
+- [x] `src/figures.py`: one function per figure + a **single shared style helper** — **DONE 2026-07-02**,
+      all 6 manuscript figures now implemented (`fig:benzene` from an earlier session; the 5 Phase-3
+      figures this session); `data/figures/` created; each writes **vector PDF** (LaTeX embed)
+      **+ ≥300 dpi PNG** preview. Still open for Phase 5 proper: wiring these 6 functions into
+      `reproduce.py` (not yet built) as a single orchestrated entry point.
 - [ ] **SI Cartesian-geometry export** step (optimized coords for water/benzene/CO₂/gramicidin from logs,
       + library if retrievable) — B7/B14 reproducibility requirement.
 - [ ] **Graphical-TOC image** (B4, submission-REQUIRED): 50×50 mm; assemble per the structure-doc concept.
@@ -397,7 +452,9 @@ library scores from the Excel file.
 - [ ] **Label-level (Phase 3, τ frozen):** benzene EMIT 34–36 flagged `mixed_external`; degenerate mode
       sets receive consistent labels as an emergent property of plain Hungarian assignment (no block
       mechanism); confusion-matrix precision/recall ≥ floor; calibrated τ on the plateau.
-- [ ] Figures match Excel `box plots`/`CM` sheets (+ spot-checks for the rest).
+- [x] Figures match Excel `box plots`/`CM` sheets (+ spot-checks for the rest) — **DONE 2026-07-02**,
+      see Phase-3 changelog entry for the full parity writeup (exact match on `box plots`; explained
+      2-row-per-group gap vs `freq vs score`; `CM` sheet is unrelated to fig:confusion).
 - [ ] ~~Gramicidin run completes with timing + `s_AB`; numbers inserted where `.tex` has `TODO-DATA`.~~
       **REMOVED 2026-07-01** — Gramicidin deferred to the companion paper (see Phase 4 above); this
       manuscript carries no gramicidin verification target.
@@ -421,6 +478,82 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-02 — Phase 3's 5 remaining figures built (`fig:confusion`, `fig:bondscores`,
+  `fig:boxplots`, `fig:modemixing`, `fig:sensitivity`) + Excel `box plots`/`CM`-sheet parity
+  spot-check.** All 5 added to `src/figures.py` (`plot_confusion_matrix`, `plot_bond_scores`,
+  `plot_boxplots`, `plot_mode_mixing`, `plot_sensitivity`), matching the `.tex` caption text
+  (`JCC_temp_LaTeXtemplate.tex` lines ~727-790) and reading only already-computed
+  `data/results/library_scores.csv` / `tau_sensitivity_sweep.csv` / `thresholds.json` /
+  `src.calibrate.confusion_matrix_stats()` — no scores recomputed, no numbers invented. Each writes a
+  vector PDF + ≥300 dpi PNG to `data/figures/` and returns a summary dict (n points, axis ranges,
+  a `shared_categories` line) for sanity-checking without opening the file; all 6 (`fig:benzene` +
+  these 5) were rendered and visually inspected this session, none showed NaN-only or empty axes.
+  **`fig:confusion`:** independently reran `confusion_matrix_stats(library_scores.csv,
+  Thresholds.calibrated())` and got precision 1.0 (all 4 categories), recall 1.0 (translation/
+  rotation), 0.9647 (bend), 0.7174 (stretch, 28.3% of stretch → MIXED, 0% → BEND) — matches the task's
+  stated targets exactly. Heatmap (reference label x predicted bucket) + grouped precision/recall bars,
+  both colored via the shared `CATEGORY_COLOR` mapping (fixed an initial x-tick-label collision in the
+  precision/recall panel by rotating labels 20°). **`fig:bondscores`:** parsed `library_scores.csv`'s
+  semicolon-joined per-bond `s_AB`/`rel_db` strings via a new `_explode_bonds()` helper (2755 bonds
+  across 69 molecules); plotted `s_AB` vs. `|rel_db|` (absolute relative bond-length change), ideal
+  (filled) vs. non-ideal (hollow), stretch (vermillion square) vs. bend (blue circle) — reproduces the
+  qualitative shape of the group's earlier undergraduate report's Figure 1 (bending bond scores
+  ≤~0.15, ideal-stretch bond scores rising with `|Δb|/|b|`); no fitted/forced quadratic guide curve was
+  overlaid (the per-bond score is normalized by a per-MODE bond-count-dependent denominator, so a
+  literal `y=x²` line would not actually be a correct reference for multi-bond modes — the manuscript's
+  qualitative "quadratic" claim is left to the caption text and the data's own visible curvature, not
+  fabricated as an overlay). **`fig:boxplots`:** 3 panels (frequency / mode-averaged `|Δb|/|b|` /
+  `s[V_S]`) x 4 groups (bend/stretch x ideal/non-ideal), `τ_S`/`τ_B` reference lines on panel (c);
+  513 internal library modes with a literature stretch/bend label (50/41/233/189 per group).
+  **`fig:modemixing`:** 2 panels, ideal (filled, clean step at the `τ_S`/`τ_B` gap) vs. non-ideal
+  (hollow, graded transition) — visually reproduces the step-vs-gradient contrast described in the
+  `.tex` prose and the group's earlier report's Figure 3a/b. The irrep-degeneracy sub-panel content
+  (pending gap flagged in an earlier session) was deliberately NOT built — molecule/panel-form still
+  unconfirmed with lead-author/tex-data-sync; the function's docstring states this explicitly rather
+  than inventing a panel. **`fig:sensitivity`:** single panel, twin y-axes (label-change fraction /
+  accuracy) vs. `τ_TR`, shaded plateau band `[0.34, 0.995]` from `thresholds.json`, dashed frozen-value
+  line at `τ_TR=0.95`; only `τ_TR` is rendered (the persisted sweep data covers `τ_TR` only — `τ_S`/`τ_B`
+  are derived analytically from the ideal-molecule gap in `src/calibrate.py`, not grid-swept — so no
+  `τ_S`/`τ_B` sensitivity curve was fabricated to fill out the `.tex` prose's broader "sweeping
+  `τ_TR`, `τ_S`, `τ_B`" sentence).
+  **Cross-figure style/consistency pass (coordinator directive, same session):** read the group's
+  earlier undergraduate research report (`Undergr Res Pj I/H-02-598 Report.pdf`, rendered via
+  `pdftoppm` since the PDF-page-reader tool lacked poppler) as the style/quality floor; its Figures 1-3
+  are close prior versions of `fig:bondscores`/`fig:boxplots`/`fig:modemixing` and confirmed the
+  filled-vs-hollow ideal/non-ideal convention independently of the coordinator's instruction. Added a
+  new centralized `IDEAL_STYLE` dict (`{"yes": filled, "no": hollow}`) plus `REF_LABEL_TO_CATEGORY`/
+  `PRED_BUCKET_TO_CATEGORY` maps to `src/figures.py` so every new figure keys its `ref_label`/
+  predicted-bucket strings into the SAME `CATEGORY_COLOR`/`CATEGORY_MARKER`/`CATEGORY_LABEL` dict
+  `fig:benzene` already defined (gray=clean T/R, blue circle=bending, vermillion square=stretching,
+  teal triangle=mixed stretch/bend, purple plus=mixed external+vibration) -- one meaning per color/
+  marker across the whole 6-figure set, never redefined per-function. Added 3 new `COLORS` entries
+  (`sens_accuracy`, `sens_change`, `plateau_band`, `confusion_cmap`) for the genuinely new visual
+  elements (`fig:sensitivity`'s dual curves/plateau shading, `fig:confusion`'s heatmap colormap) with
+  inline comments on what each means. `fig:benzene` itself was NOT touched -- no conflicting mapping
+  arose (its provisional `τ_S≈0.9`/`τ_B≈0.2` dashed-line constants are a separate, already-documented
+  concern from the calibrated `τ_S=0.90368`/`τ_B=0.17327` used in the new figures, not a duplicate
+  definition). Every new figure's summary dict carries a `shared_categories` line naming exactly which
+  shared encodings it reuses, so a reviewer/lead-author wiring captions can see the cross-figure
+  consistency was deliberate, not incidental.
+  **Excel parity spot-check (IMPLEMENTATION_PLAN.md Phase-3 item):** the `box plots` sheet's own
+  pivot (mode score / averaged `|Δb|/|b|`, split ideal x type) matches `library_scores.csv` EXACTLY --
+  count/min/max/mean identical to displayed precision for all 4 groups (ideal-bend n=50, ideal-stretch
+  n=41, non-ideal-bend n=233, non-ideal-stretch n=189) -- effectively a full pin, not just a spot-check,
+  for `fig:modemixing`'s and (partially) `fig:bondscores`' upstream numbers. The `freq vs score` sheet
+  (closest analog for `fig:boxplots`) matches on `V_Stretch`/`delta_b` distributions but its ideal-group
+  counts run 2 short per group (48 vs. our 50 bend; 39 vs. our 41 stretch) -- traced to SnO2's 4 internal
+  rows having `freq=NaN` in the raw `data_score` sheet itself (a genuine, pre-existing gap in the Excel
+  workbook, not a rounding/ingest issue); that sheet's own PivotTable silently drops NaN-freq rows
+  during its freq-based grouping, while `excel_ingest.py` reads `data_score` directly and correctly
+  keeps SnO2's valid `V_Stretch`/`delta_b_mean` values -- `fig:boxplots` panel (a) naturally drops these
+  4 NaN-freq rows via per-group `.dropna()` (matching Excel's own displayed frequency range), panels
+  (b)/(c) keep them (matching Excel's own `V_Stretch`/`delta_b` ranges, which also include SnO2).
+  Flagged for lead-author (SnO2 missing frequency in the source workbook), not silently patched. The
+  `CM` sheet is NOT a confusion-matrix reference -- direct inspection showed it holds an unrelated
+  center-of-mass-conservation check tabulated by molecular shape (relevant to the OPTIONAL Phase-6
+  CoM-conservation item, not `fig:confusion`) -- no Excel confusion-matrix sheet exists in the workbook
+  to parity-check against; `fig:confusion`'s numbers were instead independently re-verified against
+  `confusion_matrix_stats()` directly (see above), which is authoritative per this task's own framing.
 - **2026-07-02 — Phase 3 core landed (ingest, library classification, τ-calibration, confusion
   matrix); recovered intact from a session that hit its usage limit mid-build.** The prior session's
   `lead-engineer` build agent finished writing and testing all of Phase 3's core pieces

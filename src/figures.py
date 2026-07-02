@@ -51,6 +51,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+import matplotlib.patheffects as pe
 
 from src.classifier import (
     Thresholds, vib_label, classification_bucket,
@@ -69,8 +70,19 @@ COLORS = {
     "mixed": "#009E73",      # teal      -- MIXED_STRETCH_BEND
     "mixed_ext": "#CC79A7",  # purple    -- MIXED_EXTERNAL_WITH_VIBRATION
     "background": "#BBBBBB", # light gray-- unhighlighted context points
-    "highlight_r": "#E69F00",# orange    -- s[R] inversion (EMIT 2 / 9)
-    "highlight_t": "#0072B2",# blue      -- flagged external (EMIT 34-36)
+    # highlight_r/highlight_t (fixed 2026-07-02 consistency pass): the
+    # previous values (#E69F00 orange -- too close to stretching's #D55E00
+    # vermillion; #0072B2 blue -- an EXACT duplicate of the bending color,
+    # despite this callout being about translation) both clashed with the
+    # established CATEGORY_COLOR vocabulary. Replaced with the two remaining
+    # unclaimed hues in the extended Okabe-Ito colorblind-safe palette
+    # (yellow, black) -- every other Okabe-Ito hue is already claimed by a
+    # CATEGORY_COLOR or a fig:sensitivity color (see palette note below), so
+    # these are genuinely free and mutually distinct from all five category
+    # colors (external gray, bending blue, stretching vermillion, mixed teal,
+    # mixed_ext purple) and from each other.
+    "highlight_r": "#F0E442",# yellow    -- s[R] inversion (EMIT 2 / 9)
+    "highlight_t": "#000000",# black     -- flagged external (EMIT 34-36)
     "threshold": "#555555",  # dark gray -- tau reference lines (all figures)
     # -- New, figure-specific-but-shared-key colors (fig:sensitivity / fig:confusion) --
     "sens_accuracy": "#56B4E9",   # sky blue  -- accuracy curve, fig:sensitivity
@@ -206,15 +218,27 @@ def _savefig(fig, out_dir, label):
     return pdf_path, png_path
 
 
-def _marker_kwargs(category, ideal_flag=None):
+def _marker_kwargs(category, ideal_flag=None, marker=None):
     """Shared per-point marker styling for a classification `category`
     (key into CATEGORY_COLOR/CATEGORY_MARKER), optionally faceted by
     `ideal_flag` ('yes'/'no'/None) via the shared IDEAL_STYLE encoding
     (filled = ideal, hollow = non-ideal). Returns a dict ready to splat into
     ax.scatter(...).
+
+    `marker` optionally overrides the category's own CATEGORY_MARKER shape.
+    Used by fig:bondscores/fig:modemixing, where stretch-vs-bend is already
+    fully distinguished by color (this function's `category` argument), so
+    varying marker SHAPE on top of it would be redundant, over-encoded
+    2-factor-in-one-dimension styling -- those two callers pass
+    ``marker="o"`` to force one consistent shape for every point regardless
+    of category, leaving color (category) and fill (ideal_flag) as the only
+    two encodings. CATEGORY_MARKER itself is untouched -- fig:benzene_normal
+    and fig:confusion still legitimately vary marker shape by category there,
+    since they distinguish >2 mutually-exclusive buckets in one figure.
     """
     color = CATEGORY_COLOR[category]
-    marker = CATEGORY_MARKER[category]
+    if marker is None:
+        marker = CATEGORY_MARKER[category]
     if ideal_flag is None:
         return dict(marker=marker, facecolors=color, edgecolors=color,
                     linewidths=0.5, alpha=0.85)
@@ -329,15 +353,27 @@ def plot_benzene_stress_test(
                  color=COLORS["highlight_r"], marker="D", s=55,
                  edgecolors="black", linewidths=0.5, zorder=5,
                  label=r"EMIT 2 / 9 ($R_y$ inversion)")
-    ax_b.annotate(
+    ann_r = ax_b.annotate(
         "", xy=(e9["C2_Ry"], abs(e9["Ry"])), xytext=(e2["C2_Ry"], abs(e2["Ry"])),
-        arrowprops=dict(arrowstyle="->", color=COLORS["highlight_r"], lw=1.1),
+        arrowprops=dict(arrowstyle="->", color=COLORS["highlight_r"], lw=1.4),
         zorder=4,
     )
+    # highlight_r is now yellow (#F0E442), which has poor contrast as a bare
+    # line on a white background -- a thin black halo (path effect) keeps the
+    # arrow legible without changing its color (matches the black-edged
+    # yellow diamond marker's own contrast treatment above).
+    ann_r.arrow_patch.set_path_effects(
+        [pe.Stroke(linewidth=2.0, foreground="black"), pe.Normal()])
+    # EMIT 9's label offset moved from (6,-10) (lower-right of its marker --
+    # exactly where the E2->E9 arrow approaches, and the arrow's new black
+    # halo, thicker than the old plain thin line, made the two visually
+    # collide) to (-8,12) (upper-left, clear of the arrow's approach
+    # direction) -- verified by rendering (2026-07-02 consistency pass).
     ax_b.annotate("EMIT 2", (e2["C2_Ry"], abs(e2["Ry"])),
                   xytext=(6, 6), textcoords="offset points", fontsize=7)
     ax_b.annotate("EMIT 9", (e9["C2_Ry"], abs(e9["Ry"])),
-                  xytext=(6, -10), textcoords="offset points", fontsize=7)
+                  xytext=(-6, 8), textcoords="offset points", fontsize=7,
+                  ha="right")
 
     # -- Highlight 2: flagged external modes, EMIT 34/35/36. By symmetry
     # (Tx/Ty/Tz translation) these three coincide exactly at the same
@@ -673,12 +709,12 @@ def plot_confusion_matrix(
                         edgecolor="black", linewidth=0.5, label="precision")
     bars_r = ax_pa.bar(x_r + width / 2, recalls_r, width, color=bar_colors_r,
                         edgecolor="black", linewidth=0.5, hatch="///", label="recall")
-    # Precision == recall == 1.000 for every category here (that IS the
-    # rigorous-tier finding), so one centered "1.000" per category avoids
-    # overlapping duplicate labels above the two adjacent bars.
-    for xi, p, r in zip(x_r, precisions_r, recalls_r):
-        ax_pa.text(xi, max(p, r) + 0.03, f"{p:.3f}", ha="center", va="bottom",
-                   fontsize=7)
+    # Per-category "1.000" value labels were dropped (2026-07-02 consistency
+    # pass): every category's precision AND recall is exactly 1.000 here --
+    # that number is already stated once in the panel title ("all = 1.000"),
+    # so 4 identical repeated labels directly above the bars were pure
+    # redundant clutter, and their claimed vertical space is exactly what the
+    # legend needs (see below) -- removing them fixes both problems at once.
     ax_pa.axhline(stats_r["acceptance_floor"], color=COLORS["threshold"], ls="--", lw=0.8)
     ax_pa.text(len(cats_r) - 0.5, stats_r["acceptance_floor"], "  floor",
                va="bottom", ha="right", fontsize=7, color=COLORS["threshold"])
@@ -689,7 +725,13 @@ def plot_confusion_matrix(
     ax_pa.set_ylabel("Precision / recall")
     ax_pa.set_title("(b) Rigorous precision/recall (all = 1.000)", loc="left",
                     fontweight="bold", fontsize=9)
-    ax_pa.legend(loc="lower left", frameon=False, fontsize=7)
+    # loc="lower left" (previous) sat directly above the rotated x-tick
+    # labels ("clean translation" etc.), visually crowding/overlapping them.
+    # Moved to "upper left": clear of the tick labels (well below the axis)
+    # and, now that the redundant per-bar "1.000" labels are gone, also clear
+    # of any bar annotation -- verified by rendering (2026-07-02 consistency
+    # pass).
+    ax_pa.legend(loc="upper left", frameon=False, fontsize=7)
 
     # ================= Tier 2: non-ideal (n=422) =================
     ref_order_n = ["stretch", "bend"]
@@ -797,8 +839,14 @@ def plot_bond_scores(
     """Build fig:bondscores: per-bond score s_AB vs. the absolute relative
     change in bond length, for every bond in every internal mode of the
     hydride library, split ideal (filled) vs. non-ideal (hollow) and
-    stretching (vermillion square) vs. bending (blue circle) -- reusing the
-    shared CATEGORY_COLOR/CATEGORY_MARKER and IDEAL_STYLE encodings.
+    stretching (vermillion) vs. bending (blue) -- reusing the shared
+    CATEGORY_COLOR and IDEAL_STYLE encodings. All points use ONE consistent
+    marker shape (circle) regardless of stretch/bend: color already fully
+    distinguishes that 2-way split, so varying marker shape on top of it
+    would be redundant over-encoding of the same distinction (fixed
+    2026-07-02 consistency pass; CATEGORY_MARKER's square/circle shapes are
+    still used elsewhere, e.g. fig:confusion/fig:benzene_normal, where shape
+    legitimately distinguishes >2 buckets).
     """
     _style()
     lib_df = pd.read_csv(library_csv)
@@ -813,7 +861,7 @@ def plot_bond_scores(
             sub = bonds[(bonds["ideal"] == ideal_flag) & (bonds["ref_label"] == ref)]
             if sub.empty:
                 continue
-            kw = _marker_kwargs(cat, ideal_flag)
+            kw = _marker_kwargs(cat, ideal_flag, marker="o")
             ax.scatter(sub["abs_rel_db"], sub["s_AB"], s=14,
                        zorder=3 if ideal_flag == "yes" else 2, **kw)
 
@@ -822,17 +870,20 @@ def plot_bond_scores(
     ax.set_xlim(-0.03, bonds["abs_rel_db"].max() * 1.05)
     ax.set_ylim(-0.03, 1.05)
 
+    # One consistent marker shape (circle) for every legend entry -- color
+    # (stretching/bending) and fill (ideal/non-ideal) are the only two
+    # encodings here; shape no longer redundantly re-encodes stretch/bend.
     legend_elems = [
-        Line2D([0], [0], marker=CATEGORY_MARKER["stretch"], color="none",
+        Line2D([0], [0], marker="o", color="none",
                markerfacecolor=COLORS["stretching"], markeredgecolor=COLORS["stretching"],
                markersize=6, label="stretching, ideal"),
-        Line2D([0], [0], marker=CATEGORY_MARKER["stretch"], color="none",
+        Line2D([0], [0], marker="o", color="none",
                markerfacecolor="none", markeredgecolor=COLORS["stretching"],
                markersize=6, label="stretching, non-ideal"),
-        Line2D([0], [0], marker=CATEGORY_MARKER["bend"], color="none",
+        Line2D([0], [0], marker="o", color="none",
                markerfacecolor=COLORS["bending"], markeredgecolor=COLORS["bending"],
                markersize=6, label="bending, ideal"),
-        Line2D([0], [0], marker=CATEGORY_MARKER["bend"], color="none",
+        Line2D([0], [0], marker="o", color="none",
                markerfacecolor="none", markeredgecolor=COLORS["bending"],
                markersize=6, label="bending, non-ideal"),
     ]
@@ -845,12 +896,14 @@ def plot_bond_scores(
 
     summary = {
         "pdf": pdf_path, "png": png_path,
-        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_MARKER for "
-                               "STRETCHING (vermillion square)/BENDING (blue "
-                               "circle) and the shared IDEAL_STYLE filled="
-                               "ideal/hollow=non-ideal encoding -- same "
-                               "mapping as fig:benzene / fig:boxplots / "
-                               "fig:modemixing."),
+        "shared_categories": ("reuses CATEGORY_COLOR for STRETCHING "
+                               "(vermillion)/BENDING (blue); ONE marker shape "
+                               "(circle) for all points (color already "
+                               "distinguishes stretch/bend, so shape is not "
+                               "redundantly reused here) and the shared "
+                               "IDEAL_STYLE filled=ideal/hollow=non-ideal "
+                               "encoding -- same mapping as fig:benzene / "
+                               "fig:boxplots / fig:modemixing."),
         "n_bonds": len(bonds),
         "n_molecules": bonds["molecule"].nunique(),
         "x_range": (float(bonds["abs_rel_db"].min()), float(bonds["abs_rel_db"].max())),
@@ -884,7 +937,28 @@ def plot_boxplots(
                        lib_df["ideal"].isin(("yes", "no"))].copy()
 
     groups = [("bend", "yes"), ("stretch", "yes"), ("bend", "no"), ("stretch", "no")]
-    group_labels = ["bend\n(ideal)", "stretch\n(ideal)", "bend\n(non-ideal)", "stretch\n(non-ideal)"]
+    # Long forms ("bending"/"stretching"), matching CATEGORY_LABEL and every
+    # other figure's terminology (fig:confusion, fig:bondscores,
+    # fig:modemixing, fig:benzene_normal) -- fixed 2026-07-02 consistency
+    # pass; these used to be the short forms "bend"/"stretch", the one
+    # inconsistent label vocabulary in the figure set. Stacking "(ideal)"/
+    # "(non-ideal)" onto every one of the 4 per-panel tick labels (as tried
+    # first) made adjacent 2-line labels visually run together in this
+    # narrow a panel (3 panels sharing a ~7.4in figure) regardless of
+    # spacing/font tweaks -- switched instead to a two-level tick scheme:
+    # short primary labels ("bending"/"stretching" only, comfortably
+    # narrow) plus a single shared "ideal"/"non-ideal" group annotation
+    # (with an under-bracket) spanning each pair, which only has to appear
+    # ONCE per pair rather than once per box.
+    group_labels = ["bending", "stretching", "bending", "stretching"]
+    # Positions: gap 1.3 within a bend/stretch pair, gap 1.6 between the
+    # ideal pair (1,2) and non-ideal pair (3,4) -- sized (see
+    # IMPLEMENTATION_PLAN.md 2026-07-02 changelog entry) so neither the
+    # "bending"/"stretching" tick-label text nor the pair-level "ideal"/
+    # "non-ideal" bracket labels below them collide, verified by rendering.
+    positions = [1.0, 2.3, 3.9, 5.2]
+    pair_spans = [(positions[0], positions[1], "ideal"),
+                  (positions[2], positions[3], "non-ideal")]
 
     panels = [
         ("freq", r"Frequency (cm$^{-1}$)", "(a) Frequency"),
@@ -892,13 +966,13 @@ def plot_boxplots(
         ("V_Stretch", r"$s[\mathrm{V_S}]$", "(c) Mode score"),
     ]
 
-    fig, axes = plt.subplots(1, 3, figsize=(7.4, 3.2))
+    fig, axes = plt.subplots(1, 3, figsize=(7.4, 3.3))
     for ax, (col, ylabel, title) in zip(axes, panels):
         data = []
         for ref, ideal_flag in groups:
             vals = internal.loc[(internal.ref_label == ref) & (internal.ideal == ideal_flag), col].dropna().values
             data.append(vals)
-        bp = ax.boxplot(data, positions=range(1, 5), widths=0.6, showfliers=True,
+        bp = ax.boxplot(data, positions=positions, widths=0.9, showfliers=True,
                          patch_artist=True,
                          flierprops=dict(marker="o", markersize=2.5, alpha=0.5, linewidth=0),
                          medianprops=dict(color="black", linewidth=1.0))
@@ -918,18 +992,42 @@ def plot_boxplots(
             flier.set_markerfacecolor(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[ref]])
             flier.set_markeredgecolor(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[ref]])
 
-        ax.set_xticks(range(1, 5))
-        ax.set_xticklabels(group_labels, fontsize=7)
+        ax.set_xticks(positions)
+        ax.set_xticklabels(group_labels, fontsize=6.5)
+        ax.set_xlim(positions[0] - 0.7, positions[-1] + 0.7)
         ax.set_ylabel(ylabel)
         ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
 
-    # tau_S / tau_B reference lines on panel (c) only.
+        # Pair-level "ideal"/"non-ideal" bracket + label, in the axes'
+        # x-data/y-axes-fraction mixed transform so it sits at a fixed
+        # vertical offset below the primary tick labels regardless of each
+        # panel's own y-data range. clip_on=False since this offset is
+        # deliberately outside the data area (bbox_inches="tight" on save
+        # still captures it).
+        trans = ax.get_xaxis_transform()
+        for lo, hi, text in pair_spans:
+            mid = (lo + hi) / 2
+            ax.plot([lo - 0.45, hi + 0.45], [-0.28, -0.28], transform=trans,
+                    color="#555555", lw=0.7, clip_on=False)
+            ax.plot([lo - 0.45, lo - 0.45], [-0.28, -0.24], transform=trans,
+                    color="#555555", lw=0.7, clip_on=False)
+            ax.plot([hi + 0.45, hi + 0.45], [-0.28, -0.24], transform=trans,
+                    color="#555555", lw=0.7, clip_on=False)
+            ax.annotate(text, xy=(mid, -0.34), xycoords=trans, ha="center",
+                        va="top", fontsize=7.5, style="italic",
+                        color="#333333", annotation_clip=False)
+
+    # tau_S / tau_B reference lines on panel (c) only. Extra right-hand xlim
+    # padding (vs. the other two panels) so the tau labels have clear room
+    # and don't sit flush against the panel's right edge.
     th = Thresholds.calibrated()
+    axes[2].set_xlim(positions[0] - 0.7, positions[-1] + 1.05)
     axes[2].axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8)
     axes[2].axhline(th.tau_B, color=COLORS["threshold"], ls="--", lw=0.8)
-    axes[2].text(4.55, th.tau_S, r"$\tau_S$", ha="left", va="center", fontsize=7,
+    tau_label_x = positions[-1] + 0.55
+    axes[2].text(tau_label_x, th.tau_S, r"$\tau_S$", ha="left", va="center", fontsize=7,
                  color=COLORS["threshold"])
-    axes[2].text(4.55, th.tau_B, r"$\tau_B$", ha="left", va="center", fontsize=7,
+    axes[2].text(tau_label_x, th.tau_B, r"$\tau_B$", ha="left", va="center", fontsize=7,
                  color=COLORS["threshold"])
 
     fig.tight_layout()
@@ -967,8 +1065,11 @@ def plot_mode_mixing(
     """Build fig:modemixing: (a) ideal molecules -- V_Stretch vs.
     mode-averaged |Delta b|/|b|| shows a clean step function; (b) non-ideal
     molecules -- the same axes show a graded transition. Both panels reuse
-    the shared STRETCHING/BENDING category colors+markers; ideal (a) is all
-    filled, non-ideal (b) is all hollow, per the shared IDEAL_STYLE.
+    the shared STRETCHING/BENDING category colors; ideal (a) is all filled,
+    non-ideal (b) is all hollow, per the shared IDEAL_STYLE. All points use
+    ONE consistent marker shape (circle) regardless of stretch/bend -- color
+    already fully distinguishes that split, so shape is not redundantly
+    reused here (fixed 2026-07-02 consistency pass).
 
     NOTE (pending gap, IMPLEMENTATION_PLAN.md / figure-builder standing
     report): this renders only the two-panel ideal-step-vs-non-ideal-
@@ -995,7 +1096,7 @@ def plot_mode_mixing(
             sub = internal[(internal.ideal == ideal_flag) & (internal.ref_label == ref)]
             if sub.empty:
                 continue
-            kw = _marker_kwargs(cat, ideal_flag)
+            kw = _marker_kwargs(cat, ideal_flag, marker="o")
             ax.scatter(sub["delta_b_mean"], sub["V_Stretch"], s=20,
                        label=CATEGORY_LABEL[cat], **kw)
         ax.axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
@@ -1021,11 +1122,12 @@ def plot_mode_mixing(
     n_nonideal = int((internal.ideal == "no").sum())
     summary = {
         "pdf": pdf_path, "png": png_path,
-        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_MARKER for "
-                               "STRETCHING/BENDING and the shared IDEAL_STYLE "
-                               "filled=ideal/hollow=non-ideal encoding -- "
-                               "same mapping as fig:benzene / fig:bondscores "
-                               "/ fig:boxplots."),
+        "shared_categories": ("reuses CATEGORY_COLOR for STRETCHING/BENDING; "
+                               "ONE marker shape (circle) for all points "
+                               "(color already distinguishes stretch/bend) "
+                               "and the shared IDEAL_STYLE filled=ideal/"
+                               "hollow=non-ideal encoding -- same mapping as "
+                               "fig:benzene / fig:bondscores / fig:boxplots."),
         "n_ideal_modes": n_ideal,
         "n_nonideal_modes": n_nonideal,
         "tau_S": th.tau_S, "tau_B": th.tau_B,

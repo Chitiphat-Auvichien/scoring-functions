@@ -24,6 +24,23 @@
 > "S2. τ_TR Threshold-Sensitivity Analysis"), still growing (full score tables, Cartesian coordinates, and
 > other content already promised in the main text's "Supporting Information" subsection still need to be
 > added too) — do the merge once that content is in, not before, to avoid re-merging repeatedly.
+> **2026-07-03 (lead-engineer, README.md rewrite):** Phase 5 checklist item done — `README.md` rewritten
+> from scratch against a direct read of the current code (not assumption): confirmed `main.py`'s CLI is
+> still only `-m`/`--molecule` + `--mode {normal,emit}` (no `--classify`/`--emit-projection`/`--library`/
+> `--figures` subcommands exist yet — still Phase-5 outstanding work, checklist line left unchecked for
+> that specific item); the classification/projection/library/calibration pipelines are reachable today
+> only as importable Python functions (`main.run_classify_pipeline`/`run_projection_pipeline`,
+> `src.excel_ingest.run_ingest_pipeline`, `src.calibrate.run_calibration_pipeline`), and figures via
+> `python -m src.figures` (confirmed against `src/figures.py`'s `__main__` block, 8 PNG/PDF pairs).
+> Overview section reframed around the current scope (Step-1 scoring + Steps 2-4 classification into 6
+> categories, EMIT projection, library calibration, figures) and both papers described as an evolving
+> two-manuscript codebase (Paper I / JCE still "submitted", Paper II / JCC "in preparation" — neither
+> superseding the other, per `CLAUDE.md`'s "What this repository is"). Kept the existing accurate Step
+> 1-5 basic-scoring workflow verbatim; added a new "Classification, EMIT Projection, Calibration, and
+> Figures" section with verified code snippets. Citation section now lists both papers honestly (JCC has
+> no citation yet, said so plainly). Noted `openpyxl` as an undeclared `requirements.txt` dependency of
+> `src/excel_ingest.py` in the Installation section rather than silently editing `requirements.txt`
+> itself (out of this task's scope). No code changed, no tests affected.
 > **2026-07-03 (lead-author, whole-document precision editing pass):** Author reviewed the compiled PDF
 > and requested a batch fix across `JCC_temp_LaTeXtemplate.tex`; all 8 items done, both SI docs still
 > compile clean, main doc page count unchanged (32 pages before/after):
@@ -866,8 +883,8 @@ library scores from the Excel file.
 - [ ] **Graphical-TOC image** (B4, submission-REQUIRED): 50×50 mm; assemble per the structure-doc concept.
 - [ ] Fill the **Gaussian revision/year** `TODO-DATA` (line 463) and correct the inconsistent citation.
 - [ ] `main.py`: add `--classify`, `--emit-projection`, `--library`, `--figures` subcommands.
-- [ ] `README.md`: document classification workflow; resolve **JCE-vs-JCC** mismatch (README cites
-      *J. Chem. Educ.* "paper I"; this is the JCC unified-framework paper).
+- [x] `README.md`: document classification workflow; resolve **JCE-vs-JCC** mismatch (README cites
+      *J. Chem. Educ.* "paper I"; this is the JCC unified-framework paper). **DONE 2026-07-03.**
 
 ## Phase 6 — Strengthen for review (RE-TIERED 2026-07-01; see Changelog)
 > From expert-reviewer-jcc, re-triaged after Decision 5 (Phase 4/Gramicidin deferred to the companion

@@ -16,6 +16,52 @@
 > for the full writeup. Caption-side S/B/SB gloss text (from the prior update) still outstanding.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-03 (lead-author, whole-document precision editing pass):** Author reviewed the compiled PDF
+> and requested a batch fix across `JCC_temp_LaTeXtemplate.tex`; all 8 items done, both SI docs still
+> compile clean, main doc page count unchanged (32 pages before/after):
+> 1. **Table 4 (`tab:water`) sizing** — root cause was a missing `\small` before its `\resizebox`'d
+>    tabular (every sibling resizebox table has `\small`; water's didn't, so resizebox scaled the
+>    normal-size table up instead of down). Added `\small`; now matches sibling tables' footprint.
+> 2. **Paragraph indentation** — root cause found: `\captionof{figure}{...}` (used for the 7
+>    non-floated pseudo-figures, `\begin{center}...\end{center}` + `\captionof`, not `\begin{figure}`)
+>    calls the `caption` package's `\caption@parboxrestore@light`, which sets `\parindent\z@` with NO
+>    surrounding group — so the FIRST `\captionof` in the document permanently zeroed `\parindent` for
+>    every subsequent paragraph for the rest of the document. Fixed by wrapping each of the 7
+>    `\captionof{...}\label{...}` calls in its own `{...}` group so the assignment is properly scoped
+>    and restored. This was the actual bug; there were no stray `\noindent`s to remove.
+> 3. **Math notation audit** — (a) all `\mathbf{}`/`\bm{}` converted to `\boldsymbol{}` throughout (main
+>    tex only; SI left as-is except the `\Q` macro, item d); (b) bare math-italic T/R/V and $\nu_s$/$\nu_{as}$
+>    wrapped `\mathrm{}` (labels), $Q$ left italic (variable); (c) single-atom-index subscripts
+>    (`d_A`, `r_A`, `m_A`) converted to superscripts (`d^A` style) matching the SI convention,
+>    bond-pair `_{AB}` subscripts left untouched; (d) `\hat{Q}` → `\boldsymbol{\hat{Q}}` everywhere in
+>    main tex (inline, no new macro); SI's `\newcommand{\Q}{\hat{Q}}` redefined to
+>    `\newcommand{\Q}{\boldsymbol{\hat{Q}}}` (single-point fix, ~15 uses); reworded the $\hat Q$
+>    introduction to clarify it denotes a generic axis unit vector (in the $\hat\imath/\hat\jmath/\hat k$
+>    sense), not literally "the x/y/z axes"; (e) bare `s[\mathrm{T}]`/`s[\mathrm{R}]` (generic/placeholder
+>    uses, ~15 instances) → `s[\mathrm{T}_Q]`/`s[\mathrm{R}_Q]`, `Q` italic.
+> 4. **Spacing after figure captions** — added `\medskip` after all 7 wrapped `\captionof` blocks
+>    (same edit as item 2 also fixes this).
+> 5. **Figure 8 placeholder** — shortened the long 3-panel numeric spec to two lines; box no longer
+>    overfills.
+> 6. **Figure 2 (water) overfill** — `NormalModes_Water.jpg` width reduced `0.95\columnwidth` →
+>    `0.78\columnwidth`; the page-13 `Overfull \vbox (40.4pt too high)` is gone (confirmed in compile log
+>    diff against pre-edit log). Table 4 shrinking (item 1) also freed vertical room on that page.
+> 7. **Prose style pass** — reduced colon/semicolon/em-dash-heavy sentences to plainer ones across
+>    Methodology, Results & Discussion (heaviest edit load, incl. the dense EMIT-stress-test and
+>    computational-cost paragraphs), and Conclusions; left correctly-used colons (list intro) and the
+>    Introduction's semicolon list (`...unambiguous; on the normal modes of benzene...; and, without
+>    retuning...`) alone since those are legitimate uses.
+> 8. **`\emph{}` pruning** — removed 10 non-load-bearing instances (routine adjectives/duplicates:
+>    "unit", "relative", "degree", duplicate "consensus", duplicate "how much", "exact", "classify",
+>    "Water"/"Benzene" dataset-name emphasis, "ideal"); kept ~34 that are genuine term-definitions,
+>    logical-weight words (not/only/none), or the intentional italicized-topic-sentence device used for
+>    the "design points"/"intrinsic limitations"/"three scoping statements" lists.
+> Also copied `figure-builder`'s regenerated `fig_confusion.pdf` (Tx/Ty/Tz-style tick labels shortened to
+> T/R) into `JCC/JCC_man_scoring/images/` per that agent's handoff. Verified: zero undefined refs/citations;
+> the only remaining overfull-box warnings are the two pre-existing, unrelated ones (GTOC placeholder line
+> ~102, and a ~1pt sub-visible one inside the Fig. 8 placeholder box) plus a benign `Float too large`
+> notice for the Algorithm float, which drifts to the same end-of-document page in the ORIGINAL,
+> unedited PDF too (confirmed by diffing text-extracted originals) — not introduced by this pass.
 > **2026-07-02 (figure-builder, author follow-up fix):** `fig:confusion` tick labels for
 > translation/rotation shortened to "T"/"R" (figure-local `_CONFUSION_LABEL` override in
 > `plot_confusion_matrix`/`_confusion_heatmap`; `CATEGORY_LABEL` itself unchanged) and the

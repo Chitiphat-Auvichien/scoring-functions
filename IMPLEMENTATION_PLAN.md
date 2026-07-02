@@ -9,8 +9,9 @@
 > newest-dated one unless told otherwise). Any agent working on the manuscript's Results & Discussion
 > section (`lead-author` especially, but also `figure-builder`/`lead-engineer` when their output feeds a
 > specific section) should be pointed at this file, not an older one.
-> Last updated: 2026-07-02 (both queued figure fixes below — footer-text readability + S/B/SB notation —
-> are now DONE; see RESUME HERE for the full writeup. No new figure fixes queued as of this update.)
+> Last updated: 2026-07-02 (both queued figure fixes are now fully DONE end to end — code-side
+> [footer-text readability + S/B/SB notation] and manuscript-side [captions wired + images refreshed +
+> recompiled] — see RESUME HERE for the full writeup. No new figure fixes queued as of this update.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -389,18 +390,35 @@
 > `fig_boxplots` (post-rotation-fix), `fig_modemixing`, `fig_benzene_normal`.
 > `py -m pytest tests/` **53/53 still green** throughout (no figure-specific tests exist; this module is
 > presentation-only, per its own docstring -- confirmed nothing else regressed).
-> **Not done here (explicitly out of scope, flagged for the right owner):** wiring `nonideal_footer_text`/
-> `nonmonotonicity_note` into the actual `.tex` `\captionof{figure}{...}` captions -- that's `lead-author`'s
-> job on `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, not touched this session per the task's explicit
-> instruction. The two exact sentence texts are quoted in full above for that purpose.
+> ~~Manuscript-side half of both queued figure fixes (wiring `nonideal_footer_text`/
+> `nonmonotonicity_note` into `.tex` captions + refreshing the embedded images)~~ ✓ **DONE
+> 2026-07-02** (same day, `lead-author`). `fig:confusion`'s `\captionof{figure}{...}` (panel (d)
+> sentence) now states the exact `nonideal_footer_text` content in place of the old "the figure footer
+> records..." cross-reference (which pointed at prose no longer baked into the raster): *"Non-ideal
+> tier ($n=422$): 0\% of bend or stretch reference-labeled modes crossed to the opposite clean category
+> (bend$\to$stretch $=0.0\%$, stretch$\to$bend $=0.0\%$); 100\% of the non-retained remainder lands in
+> the mixed bucket."* (real `$\to$` arrow in the `.tex`, not the engineer's console-safe ASCII `->`,
+> per the task's own instruction). `fig:benzene`'s caption gained a trailing clause carrying
+> `nonmonotonicity_note`'s substance as a full sentence rather than a dropped-in fragment: *"The EMIT
+> score-vs.-contribution relationship plotted here is non-monotonic by design (a flag mechanism, not a
+> parity check), so the non-monotonic points should be read as the expected behavior of a threshold
+> test, not as noise or an error."* Copied the freshly regenerated PDFs (S/B/SB gloss legends, footer/
+> note prose removed from the raster) from `data/figures/` into `JCC/JCC_man_scoring/images/`: `fig_benzene`,
+> `fig_benzene_normal`, `fig_bondscores`, `fig_boxplots`, `fig_confusion`, `fig_modemixing`,
+> `fig_sensitivity` (all 7 that changed bytes in commit `36d24c7`; `fig_sensitivity` copied too for a
+> consistent snapshot even though its bytes were identical). Recompiled via the OneDrive-safe
+> scratch-dir latexmk workflow: **32 pages before -> 32 pages after** (no page-count shift), zero
+> undefined references/citations, no new LaTeX warnings (the sole pre-existing warning, `caption
+> Warning: \setcaptiontype ... outside box or environment on input line 616`, is the unrelated
+> water-modes figure, present before this edit too). PDF copied back to
+> `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.pdf`.
 > **Next:** Phase 5 (`reproduce.py` orchestrator wiring; SI Cartesian-geometry export; graphical TOC)
 > and the remaining two Phase 6 recommended items (mixed-SB bucket CoM-argument half; leave-one-
 > molecule-out τ evaluation). The `fig:modemixing` irrep-degeneracy sub-panel gap remains BLOCKED
 > pending confirmation, not built. Consider an `expert-reviewer-jcc` pass on the manuscript now that
-> the label rename, benzene restructuring, and water-figure/δ-notation fixes have all landed -- this
-> was requested earlier and deliberately deferred until things stabilized; they have. Also flag
-> `lead-author` to wire the two newly-exposed footer/note sentences (above) into their respective
-> LaTeX captions next time that manuscript is touched.
+> the label rename, benzene restructuring, water-figure/δ-notation fixes, and both figure-caption
+> wirings have all landed -- this was requested earlier and deliberately deferred until things
+> stabilized; they have. No figure fixes queued as of this update.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).

@@ -151,12 +151,28 @@ CATEGORY_MARKER = {
     "mixed_external": "P",
 }
 
+# FIXED 2026-07-02 (IMPLEMENTATION_PLAN.md queued item 2): the internal
+# stretch/bend/mixed classifications now display the SAME short symbols the
+# classifier itself emits (src.classifier.STRETCHING="S"/BENDING="B"/
+# MIXED_STRETCH_BEND="SB") and the manuscript prose/tab:benzenemixed use
+# (`\texttt{S}`/`\texttt{B}`/`\texttt{SB}`), instead of spelling them out.
+# Chosen gloss form: bare "S"/"B"/"SB" alone read as too cryptic in a
+# standalone legend/tick label with no surrounding caption text to lean on
+# (these figures are also viewed as bare PNGs, not just inside the compiled
+# paper), so each symbol carries a one-time, in-figure "(word)" gloss baked
+# directly into the label text itself -- e.g. "S (stretching)" -- rather
+# than bare "S" plus a caption-only gloss (which only lead-author could add,
+# and only for the LaTeX-compiled view). translation/rotation are untouched:
+# the manuscript has no single-letter T/R bucket symbol to match (its actual
+# short labels are axis-specific, "Tx".."Rz"), so "clean translation"/"clean
+# rotation" stay as the pre-existing long form. `mixed_external` similarly
+# has no short symbol in the manuscript prose and is left unchanged.
 CATEGORY_LABEL = {
     "translation": "clean translation",
     "rotation": "clean rotation",
-    "bend": "bending",
-    "stretch": "stretching",
-    "mixed": "mixed stretch/bend",
+    "bend": "B (bending)",
+    "stretch": "S (stretching)",
+    "mixed": "SB (mixed S/B)",
     "mixed_external": "mixed external+vibration",
 }
 
@@ -414,10 +430,15 @@ def plot_benzene_stress_test(
     ax_b.set_ylim(-0.03, 1.15)
     ax_b.legend(loc="upper left", frameon=False, handletextpad=0.3,
                 labelspacing=0.35, borderaxespad=0.1, fontsize=6.7)
-    ax_b.text(0.98, 0.02,
-              "non-monotonic by design\n(flag mechanism, not a parity check)",
-              transform=ax_b.transAxes, ha="right", va="bottom",
-              fontsize=6.3, style="italic", color="#333333")
+    # FIXED 2026-07-02 (same readability fix as fig:confusion's footer,
+    # IMPLEMENTATION_PLAN.md queued item 1): this prose note used to be
+    # drawn in-image via `ax_b.text()` at 6.3pt on this 3.8x3.6in canvas --
+    # even smaller than fig:confusion's now-removed footer, so it would
+    # shrink well below a readable floor once LaTeX rescales the figure to
+    # column width. Removed from the raster; the exact sentence is exposed
+    # in `summary["nonmonotonicity_note"]` below for the caption instead.
+    nonmonotonicity_note = ("non-monotonic by design (flag mechanism, "
+                             "not a parity check)")
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -434,6 +455,7 @@ def plot_benzene_stress_test(
         "emit34_36_scores": fy,
         "emit34_36_contributions": fx,
         "emit34_36_vstretch": fvs,
+        "nonmonotonicity_note": nonmonotonicity_note,
     }
     return summary
 
@@ -786,24 +808,34 @@ def plot_confusion_matrix(
     ax_pb.set_title("(d) Non-ideal retention vs. migration", loc="left",
                     fontweight="bold", fontsize=9)
 
-    fig.tight_layout()
-    # Whole-figure footer: the 0%-opposite-crossing finding applies to BOTH
-    # non-ideal categories and is the point of tier 2, so it is stated once
-    # here (figure-level caption line) rather than as a per-panel annotation
-    # that collided with panel (d)'s title at these bar heights.
-    fig.text(
-        0.5, 0.005,
-        (f"Non-ideal tier (n={n_nonideal}): 0% of bend or stretch reference-labeled "
-         f"modes crossed to the OPPOSITE clean category "
-         f"(bend→stretch={opposite_n[0]:.1%}, stretch→bend={opposite_n[1]:.1%}); "
-         "100% of the non-retained remainder lands in the mixed bucket."),
-        ha="center", va="bottom", fontsize=6.8, style="italic", color="#333333",
+    # Whole-figure footer sentence: the 0%-opposite-crossing finding applies
+    # to BOTH non-ideal categories and is the point of tier 2. FIXED
+    # 2026-07-02 (readability): this used to be drawn in-image via
+    # `fig.text()` at 6.8pt on this 7.4x6.6in canvas; LaTeX's
+    # `\includegraphics[width=0.95\columnwidth]` rescales that canvas to
+    # ~6.2in, shrinking the effective size to ~5.7pt -- below a readable
+    # floor once printed. Removed from the raster entirely; the exact
+    # sentence is computed here and returned in `summary["nonideal_footer_text"]`
+    # instead, for lead-author to place in the actual LaTeX
+    # `\captionof{figure}{...}` text (typeset at normal caption font size,
+    # not shrunk with the image).
+    # ASCII "->" (not a unicode arrow) deliberately: this string is meant to
+    # be easy to print/copy on any console (a literal U+2192 arrow crashes
+    # `print()` under Windows' default cp1252 stdout encoding), and reads
+    # fine as-is in a LaTeX caption too.
+    footer_text = (
+        f"Non-ideal tier (n={n_nonideal}): 0% of bend or stretch reference-labeled "
+        f"modes crossed to the OPPOSITE clean category "
+        f"(bend->stretch={opposite_n[0]:.1%}, stretch->bend={opposite_n[1]:.1%}); "
+        "100% of the non-retained remainder lands in the mixed bucket."
     )
+    fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
     plt.close(fig)
 
     summary = {
         "pdf": pdf_path, "png": png_path,
+        "nonideal_footer_text": footer_text,
         "layout": ("2x2: (a) rigorous confusion matrix, (b) rigorous "
                    "precision/recall bars, (c) non-ideal confusion matrix, "
                    "(d) non-ideal retention/migration bars -- REPLACES the "
@@ -873,19 +905,23 @@ def plot_bond_scores(
     # One consistent marker shape (circle) for every legend entry -- color
     # (stretching/bending) and fill (ideal/non-ideal) are the only two
     # encodings here; shape no longer redundantly re-encodes stretch/bend.
+    # Labels use the short S/B symbol + gloss ("S (stretching)"), matching
+    # CATEGORY_LABEL's 2026-07-02 fix (queued item 2) -- this legend is
+    # custom-built (not sourced from CATEGORY_LABEL, since it also encodes
+    # ideal/non-ideal), so the same wording is applied by hand here.
     legend_elems = [
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor=COLORS["stretching"], markeredgecolor=COLORS["stretching"],
-               markersize=6, label="stretching, ideal"),
+               markersize=6, label="S (stretching), ideal"),
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor="none", markeredgecolor=COLORS["stretching"],
-               markersize=6, label="stretching, non-ideal"),
+               markersize=6, label="S (stretching), non-ideal"),
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor=COLORS["bending"], markeredgecolor=COLORS["bending"],
-               markersize=6, label="bending, ideal"),
+               markersize=6, label="B (bending), ideal"),
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor="none", markeredgecolor=COLORS["bending"],
-               markersize=6, label="bending, non-ideal"),
+               markersize=6, label="B (bending), non-ideal"),
     ]
     ax.legend(handles=legend_elems, loc="upper left", frameon=False, fontsize=6.8,
               handletextpad=0.4, labelspacing=0.4, borderaxespad=0.2)
@@ -937,20 +973,22 @@ def plot_boxplots(
                        lib_df["ideal"].isin(("yes", "no"))].copy()
 
     groups = [("bend", "yes"), ("stretch", "yes"), ("bend", "no"), ("stretch", "no")]
-    # Long forms ("bending"/"stretching"), matching CATEGORY_LABEL and every
-    # other figure's terminology (fig:confusion, fig:bondscores,
-    # fig:modemixing, fig:benzene_normal) -- fixed 2026-07-02 consistency
-    # pass; these used to be the short forms "bend"/"stretch", the one
-    # inconsistent label vocabulary in the figure set. Stacking "(ideal)"/
-    # "(non-ideal)" onto every one of the 4 per-panel tick labels (as tried
-    # first) made adjacent 2-line labels visually run together in this
-    # narrow a panel (3 panels sharing a ~7.4in figure) regardless of
-    # spacing/font tweaks -- switched instead to a two-level tick scheme:
-    # short primary labels ("bending"/"stretching" only, comfortably
-    # narrow) plus a single shared "ideal"/"non-ideal" group annotation
+    # S/B symbol + gloss ("B (bending)"/"S (stretching)"), matching
+    # CATEGORY_LABEL's 2026-07-02 short-notation fix (queued item 2) and
+    # every other figure's terminology (fig:confusion, fig:bondscores,
+    # fig:modemixing, fig:benzene_normal). Before that fix these were the
+    # bare long forms ("bending"/"stretching"); before THAT they were the
+    # bare short forms "bend"/"stretch" -- this is a third iteration, now
+    # settled on the classifier/manuscript's actual "S"/"B" vocabulary.
+    # Stacking "(ideal)"/"(non-ideal)" onto every one of the 4 per-panel
+    # tick labels (as tried first, pre-2026-07-02) made adjacent 2-line
+    # labels visually run together in this narrow a panel (3 panels sharing
+    # a ~7.4in figure) regardless of spacing/font tweaks -- switched instead
+    # to a two-level tick scheme: short primary labels only, comfortably
+    # narrow, plus a single shared "ideal"/"non-ideal" group annotation
     # (with an under-bracket) spanning each pair, which only has to appear
     # ONCE per pair rather than once per box.
-    group_labels = ["bending", "stretching", "bending", "stretching"]
+    group_labels = ["B (bending)", "S (stretching)", "B (bending)", "S (stretching)"]
     # Positions: gap 1.3 within a bend/stretch pair, gap 1.6 between the
     # ideal pair (1,2) and non-ideal pair (3,4) -- sized (see
     # IMPLEMENTATION_PLAN.md 2026-07-02 changelog entry) so neither the
@@ -993,7 +1031,13 @@ def plot_boxplots(
             flier.set_markeredgecolor(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[ref]])
 
         ax.set_xticks(positions)
-        ax.set_xticklabels(group_labels, fontsize=6.5)
+        # rotation=30/ha="right" (added with the 2026-07-02 S/B-gloss switch,
+        # queued item 2): the longer "S (stretching)"/"B (bending)" labels
+        # collided horizontally at this position spacing (previously fine
+        # for the shorter bare "bending"/"stretching" words) -- rotating
+        # matches the same idiom fig:confusion's heatmap ticks already use,
+        # verified collision-free by rendering.
+        ax.set_xticklabels(group_labels, fontsize=6.5, rotation=30, ha="right")
         ax.set_xlim(positions[0] - 0.7, positions[-1] + 0.7)
         ax.set_ylabel(ylabel)
         ax.set_title(title, loc="left", fontweight="bold", fontsize=9)

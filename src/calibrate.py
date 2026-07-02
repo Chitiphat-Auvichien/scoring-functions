@@ -260,6 +260,30 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
     Returns {'acceptance_floor', 'per_category': {...}, 'floor_met',
     'confusion_table': DataFrame} -- the last is the raw reference-label x
     predicted-bucket contingency table for fig:confusion.
+
+    ADDITIVE (2026-07-02, formula-auditor + lead-author recommendation):
+    each `per_category[cat]` entry also carries `recall_ideal`/
+    `recall_nonideal` (+ `n_ref_ideal`/`n_ref_nonideal`), a formal, tested
+    version of the ideal-vs-non-ideal ground-truth-strength split that
+    `src/figures.py::plot_confusion_matrix` already applies ad hoc (as of
+    commit 424a666) directly to `library_scores.csv` for `fig:confusion`'s
+    two-tier layout. The pooled `precision`/`recall` keys above are UNCHANGED
+    (existing callers/tests are unaffected) -- this only adds new keys, and
+    intentionally does not touch `src/figures.py` (that figure is already
+    correct and wired into the manuscript; this just gives the same split a
+    single formal, computed home instead of only living inside plotting code).
+    Tier masks are copied verbatim from `plot_confusion_matrix` for identical
+    semantics: `ideal` tier = every external (T/R) row REGARDLESS of its
+    `ideal` tag (Eckart-Sayvetz completeness makes those exact regardless)
+    OR any internal row with `ideal=='yes'`; `nonideal` tier = internal rows
+    with `ideal=='no'` only. For `translation`/`rotation`, every row is
+    `kind=='external'`, so `recall_ideal` reproduces the pooled `recall`
+    exactly and `recall_nonideal` is NaN (n_ref_nonideal=0, no external row
+    ever has `ideal=='no'`) -- expected, not a bug. For `stretch`/`bend`,
+    `recall_ideal` is guaranteed to be exactly 1.0: tau_S/tau_B
+    (`derive_stretch_bend_thresholds`) are LITERALLY the min/max of this same
+    `ideal=='yes'` population, so by construction no ideal-tier stretch/bend
+    row can land on the wrong side of its own defining boundary.
     """
     from src.classifier import (
         vib_label, STRETCHING, BENDING, MIXED_STRETCH_BEND,
@@ -286,6 +310,12 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
 
     confusion_table = pd.crosstab(df["ref_label"], df["_pred_bucket"])
 
+    # Ideal/non-ideal ground-truth-strength tiers -- identical masks to
+    # src/figures.py::plot_confusion_matrix's ad hoc split (see docstring
+    # above); computed once here and reused for every category below.
+    ideal_tier_mask = (df["kind"] == "external") | (df["ideal"] == "yes")
+    nonideal_tier_mask = (df["kind"] == "internal") & (df["ideal"] == "no")
+
     per_category = {}
     for ref in ("stretch", "bend", "translation", "rotation"):
         ref_mask = df["ref_label"] == ref
@@ -299,6 +329,14 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
                  "precision": precision, "recall": recall}
         if ref in ("stretch", "bend"):
             entry["mixed_fraction"] = float((df.loc[ref_mask, "_pred_bucket"] == "mixed").mean())
+
+        for tier_name, tier_mask in (("ideal", ideal_tier_mask), ("nonideal", nonideal_tier_mask)):
+            tier_ref_mask = ref_mask & tier_mask
+            n_ref_tier = int(tier_ref_mask.sum())
+            tp_tier = int((tier_ref_mask & pred_mask).sum())
+            entry[f"n_ref_{tier_name}"] = n_ref_tier
+            entry[f"recall_{tier_name}"] = tp_tier / n_ref_tier if n_ref_tier else float("nan")
+
         per_category[ref] = entry
 
     floor_met = all(

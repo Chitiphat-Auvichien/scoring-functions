@@ -230,7 +230,14 @@ def attach_geometry_classification(df, data_dir="data", thresholds=None,
           internal rows) and recorded in the returned skip report rather than
           raising -- this is a real, isolated data-provenance mismatch (see
           the water/H2O case in the module docstring), not necessarily a code
-          bug, so it must not crash the whole ingest.
+          bug, so it must not crash the whole ingest. A row whose "Vib i"
+          name resolves to NO engine mode at all (m is None -- not currently
+          known to happen for any molecule, but not proven impossible) is
+          treated identically to a frequency mismatch, not silently skipped:
+          it is appended to `mismatches` with engine_freq=None so it still
+          trips the same all-or-nothing gate and shows up in the skip report
+          (fixed 2026-07-02, formula-auditor finding -- the previous `continue`
+          could in principle let a molecule half-merge with no report at all).
       (b) external-row append (the n_T+n_R ideal T/R rows) -- always done
           when the geometry parses at all, since construct_T()/construct_R()
           build these directly from geometry and do not depend on the
@@ -267,6 +274,14 @@ def attach_geometry_classification(df, data_dir="data", thresholds=None,
         for idx, row in mol_rows.iterrows():
             m = by_name.get(f"Vib {row['mode_index']}")
             if m is None:
+                # No engine mode resolves for this Excel row at all (not
+                # currently known to happen for any molecule -- see the
+                # module docstring -- but not silently skipped either: an
+                # unresolved row is exactly as disqualifying as a frequency
+                # mismatch, so it counts toward the mismatch gate below and
+                # the whole molecule's internal-row merge is excluded and
+                # reported, matching the documented all-or-nothing guarantee.
+                mismatches.append((row["mode_index"], None, row["freq"]))
                 continue
             if np.isclose(m["frequency"], row["freq"], atol=freq_atol, rtol=freq_rtol):
                 matched.append((idx, m))
@@ -314,10 +329,11 @@ def build_library_scores(xlsx_path="data/vibrational-scoring-functions.xlsx",
     df, skip_report = attach_geometry_classification(df, data_dir, thresholds)
     for entry in skip_report:
         mode_index, eng_f, exc_f = entry["example"]
+        eng_f_str = f"{eng_f:.4f}" if eng_f is not None else "NO ENGINE MODE RESOLVED"
         warnings.warn(
             f"excel_ingest: '{entry['molecule']}' internal rows NOT geometry-"
             f"merged ({entry['n_mismatched']} mode(s) mismatched, e.g. mode "
-            f"{mode_index}: engine {eng_f:.4f} vs Excel {exc_f:.4f} cm-1) -- "
+            f"{mode_index}: engine {eng_f_str} vs Excel {exc_f:.4f} cm-1) -- "
             "this molecule's Excel row likely came from a different "
             "calculation than data/logs/. Its ideal T/R rows are still "
             "attached (geometry-only, unaffected).", stacklevel=2)

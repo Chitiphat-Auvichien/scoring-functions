@@ -444,6 +444,11 @@
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
+> **2026-07-02 (small fix):** `fig_benzene_normal`'s legend showed "clean translation"/"clean rotation" as
+> two separate entries despite both sharing the identical gray-X color/marker — merged to one "clean T/R"
+> legend entry (local dedup-key fix in `plot_benzene_normal_modes`; `CATEGORY_LABEL`/`CATEGORY_COLOR`/
+> `CATEGORY_MARKER` untouched, since other figures' tick labels still need "translation"/"rotation" kept
+> distinct). Regenerated `fig_benzene_normal.{pdf,png}` only; 53/53 tests still green.
 
 ## Context
 

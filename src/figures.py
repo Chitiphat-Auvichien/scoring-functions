@@ -1322,7 +1322,19 @@ def plot_sensitivity(
     return summary
 
 
-if __name__ == "__main__":
+def regenerate_all(verbose=True):
+    """Regenerate every manuscript figure in one call (factored out of the
+    former ``if __name__ == "__main__":`` block so callers -- e.g.
+    ``main.py --figures`` -- can invoke this directly instead of shelling out
+    to ``python -m src.figures``). Each figure function reads its own
+    already-computed ``data/results/*.csv`` inputs with their own defaults;
+    this function takes no molecule-specific arguments.
+
+    Returns a dict {tex_label: result_dict} for all 7 figures (6 labeled
+    fig:* + the standalone benzene-normal-modes gallery), in the same order
+    they are built. Raises whatever the underlying plot_* function raises
+    (e.g. a missing input CSV) -- fail loud, no silent partial regeneration.
+    """
     fns = [
         ("fig:benzene", plot_benzene_stress_test),
         ("benzene-normal-modes gallery (no fig: label yet)", plot_benzene_normal_modes),
@@ -1332,10 +1344,18 @@ if __name__ == "__main__":
         ("fig:modemixing", plot_mode_mixing),
         ("fig:sensitivity", plot_sensitivity),
     ]
+    results = {}
     for tex_label, fn in fns:
         result = fn()
-        print(f"{tex_label} ->", result["pdf"])
-        print(f"{tex_label} ->", result["png"])
-        for k, v in result.items():
-            if k not in ("pdf", "png"):
-                print(f"  {k}: {v}")
+        results[tex_label] = result
+        if verbose:
+            print(f"{tex_label} ->", result["pdf"])
+            print(f"{tex_label} ->", result["png"])
+            for k, v in result.items():
+                if k not in ("pdf", "png"):
+                    print(f"  {k}: {v}")
+    return results
+
+
+if __name__ == "__main__":
+    regenerate_all()

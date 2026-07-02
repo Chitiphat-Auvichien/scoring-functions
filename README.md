@@ -8,18 +8,11 @@ Standard visualization of molecular vibrations can be subjective. This repositor
 of motion for translational, rotational, and vibrational character, and then classifies each mode
 into one of six categories — no pre-computed reference/"clean" mode set required.
 
-This is a two-paper research codebase, and both papers are active:
+This is the reference implementation for the manuscript *"A Unified, Reference-Free Framework for
+Classifying the 3N Modes of Molecular Motion,"* in preparation for the *Journal of Computational
+Chemistry* (JCC).
 
-* **Paper I** (the original scoring-functions concept — three raw per-axis scores) was submitted to
-  the *Journal of Chemical Education*. It is the historical starting point of this repository and its
-  citation entry below still reflects "submitted" status.
-* **Paper II**, *"A Unified, Reference-Free Framework for Classifying the 3N Modes of Molecular
-  Motion,"* is in preparation for the *Journal of Computational Chemistry* (JCC) and substantially
-  extends Paper I's scoring functions into a full classification algorithm, an EMIT-mode projection
-  method, and a calibrated, validated pipeline. It does not invalidate or supersede Paper I; it builds
-  on it.
-
-Concretely, the code now covers:
+Concretely, the code covers:
 
 * **Step 1 — scoring.** Every mode gets six per-axis external scores plus a stretch/bend score:
   * **Translational scores (Tx, Ty, Tz):** does the whole molecule move along the X/Y/Z axis?
@@ -57,7 +50,7 @@ You need **Python 3.0** or higher installed on your computer.
     pip install -r requirements.txt
     ```
     This installs `numpy`, `pandas`, `scipy`, and `matplotlib`, which cover the scoring, classification,
-    projection, and figure pipelines. The library-ingestion pipeline (`src/excel_ingest.py`) additionally
+    projection, and figure pipelines. The library-ingestion pipeline (`--library` below) additionally
     needs `openpyxl` to read the source `.xlsx` workbook — install it separately (`pip install openpyxl`)
     if you plan to run that step.
 
@@ -96,59 +89,64 @@ The results are saved as a CSV file in `data/results/` (`<molecule>_normal_score
 
 **Note:** This repository is designed to facilitate calculations of scores for vibrational modes from the Gaussian program or for EMIT modes. However, the user can calculate scores for modes of motion obtained from any programs or methods by adapting the output format to suit this program.
 
-## Classification, EMIT Projection, Calibration, and Figures
+## Classification, EMIT Projection, Library Calibration, and Figures (CLI flags)
 
-`main.py`'s command line currently only exposes the Step-1 scoring workflow above (`-m`/`--molecule`
-and `--mode`). The classification, EMIT-projection, library-calibration, and figure-generation
-pipelines are fully built and tested, but — as of this writing — are reachable as **Python functions**
-you import and call yourself, not as `main.py` subcommands. (Wiring them into `main.py` as
-`--classify`/`--emit-projection`/`--library`/`--figures` flags, and a `reproduce.py` orchestrator that
-chains everything headlessly, is tracked as outstanding work in `IMPLEMENTATION_PLAN.md`.)
+Beyond the Step-1 scoring workflow above, `main.py` exposes five additional flags that each run one
+already-built pipeline end to end, with no need to import Python yourself. All commands below were run
+from the repository root (`Github/scoring-functions/`) against the data already checked into this repo
+and confirmed to produce real output files.
 
-Run these from the repository root (`Github/scoring-functions/`):
+**Per-molecule flags** (`-m`/`--molecule` required):
 
-```python
-from main import run_classify_pipeline, run_projection_pipeline
-from src.excel_ingest import run_ingest_pipeline
-from src.calibrate import run_calibration_pipeline
-
-# Step 1 scores + Steps 2-4 classification labels for every mode of a molecule.
-# mode_type is "normal" or "emit"; writes data/results/<mol>_<normal|EMIT>_classified.csv
-df, path = run_classify_pipeline("benzene", "normal")
+```bash
+# Steps 2-4 classification for one molecule. --mode is required (it picks which
+# CSV gets written). Writes data/results/<mol>_{normal,emit}_classified.csv.
+python main.py -m water --mode normal --classify
 
 # Project raw EMIT eigenvectors onto the mass-weighted normal-mode reference basis.
 # Writes data/results/<mol>_EMIT_contributions.csv (grouped) and
-# data/results/<mol>_EMIT_projection_full.csv (per-reference-mode detail).
-df_grouped, df_full, (path_grouped, path_full) = run_projection_pipeline("benzene")
+# data/results/<mol>_EMIT_projection_full.csv (per-reference-mode detail). Fails
+# loudly with a clear message if data/EMIT/<mol>_EMIT.txt is missing.
+python main.py -m water --emit-projection
 
-# Ingest the hydride-library spreadsheet and attach geometry-backed classifications.
-# Writes data/results/library_scores.csv.
-df_lib, path, skip_report = run_ingest_pipeline()
+# Flags combine freely and run in a fixed order (classify, then emit-projection) --
+# useful for doing both steps for one molecule in a single command.
+python main.py -m benzene --mode emit --classify --emit-projection
+```
+
+**Global flags** (molecule-independent; `-m` is ignored if supplied alongside them):
+
+```bash
+# Ingest the hydride-library spreadsheet -> data/results/library_scores.csv.
+# Known-slow (~630s to parse the workbook via openpyxl) -- the command prints a
+# warning before starting so you don't think it has hung.
+python main.py --library
 
 # Calibrate tau_TR/tau_S/tau_B against the ingested library and run the
 # threshold-sensitivity sweep. Writes data/results/thresholds.json and
-# data/results/tau_sensitivity_sweep.csv.
-thresholds, result, sweep_df, (path_json, path_sweep) = run_calibration_pipeline()
+# data/results/tau_sensitivity_sweep.csv. Re-ingests the library itself, so this
+# is also slow the first time.
+python main.py --calibrate
+
+# Regenerate every manuscript figure from data/results/*.csv ->
+# data/figures/*.{pdf,png} (7 figures: fig:benzene, fig:confusion, fig:bondscores,
+# fig:boxplots, fig:modemixing, fig:sensitivity, and the standalone
+# benzene-normal-modes gallery).
+python main.py --figures
 ```
 
-Every manuscript figure is a function in `src/figures.py` (e.g. `plot_benzene_stress_test`,
-`plot_confusion_matrix`, `plot_bond_scores`, `plot_boxplots`, `plot_mode_mixing`,
-`plot_sensitivity`, `plot_benzene_normal_modes`); each reads already-computed
-`data/results/*.csv`/`thresholds.json` and writes a vector PDF + PNG pair to `data/figures/`. Running
-the module directly regenerates all of them in one go:
+If none of these flags are passed, `main.py` behaves exactly as in Step 2-5 above (the plain Step-1
+scoring path) — nothing about the default workflow changed.
 
-```bash
-python -m src.figures
-```
+Every manuscript figure is also a standalone function in `src/figures.py` (e.g.
+`plot_benzene_stress_test`, `plot_confusion_matrix`, `plot_bond_scores`, `plot_boxplots`,
+`plot_mode_mixing`, `plot_sensitivity`, `plot_benzene_normal_modes`) if you need to regenerate just one
+of them from a Python session; `python main.py --figures` (or `python -m src.figures`) regenerates all
+of them in one go.
 
 ## Citation
 If you use this code in your class or research, please cite:
 
-> Auvichien, C.; Therdpraisan, N.; Lertmankha, P.; Paiboonvorachat, N. "Scoring functions for
-> classifying modes of molecular motion: I. Bridging mathematics and chemistry education" (Citation
-> will be updated after submission to the *J. Chem. Educ.*)
-
-The classification framework, EMIT-projection method, and calibration/validation pipeline described
-above are the subject of a second, separate manuscript, in preparation for the *Journal of
-Computational Chemistry*: *"A Unified, Reference-Free Framework for Classifying the 3N Modes of
-Molecular Motion."* A full citation will be added here once that manuscript is submitted.
+> A full citation for *"A Unified, Reference-Free Framework for Classifying the 3N Modes of Molecular
+> Motion"* (in preparation for the *Journal of Computational Chemistry*) will be added here once the
+> manuscript is submitted.

@@ -211,12 +211,124 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
     return df, df_full, (out_grouped, out_full)
 
 
+def _run_flag_pipelines(args):
+    """Handle the --classify / --emit-projection / --library / --calibrate /
+    --figures flags (Phase-5 CLI subcommands). These wire up the EXISTING
+    headless pipeline functions (run_classify_pipeline, run_projection_pipeline,
+    src.excel_ingest.run_ingest_pipeline, src.calibrate.run_calibration_pipeline,
+    src.figures.regenerate_all) -- no scoring/classification logic lives here.
+
+    Design (documented in README.md "How to Use" / IMPLEMENTATION_PLAN.md):
+      - --library/--calibrate/--figures are GLOBAL (molecule-independent) and
+        ignore -m/--molecule if it happens to be supplied alongside them.
+      - --classify/--emit-projection are PER-MOLECULE and require -m.
+        --classify additionally requires --mode (normal|emit), since that is
+        exactly what determines which classified CSV gets written.
+      - All flags given together run in a fixed, sensible order: --library,
+        --calibrate, --classify, --emit-projection, --figures (library/
+        calibrate feed figures; classify/emit-projection are independent of
+        each other and of library/calibrate). Any subset can be combined.
+      - Fails loud (prints a clear message, returns without a stack trace) on
+        a bad combination (e.g. --classify with no --mode, --emit-projection
+        with no EMIT data) rather than silently doing nothing.
+
+    Returns True if at least one flag was handled (caller should stop --
+    the plain Step-1 scoring path is skipped), False if none of these flags
+    were passed (caller falls through to the original interactive/--mode path).
+    """
+    any_flag = args.library or args.calibrate or args.classify or args.emit_projection or args.figures
+    if not any_flag:
+        return False
+
+    if args.library:
+        if args.molecule:
+            print("Note: --library is global and ignores -m/--molecule.")
+        print("Running library ingest (src.excel_ingest.run_ingest_pipeline) -- "
+              "this is known-slow (~630s to parse the workbook via openpyxl). Please wait...")
+        from src.excel_ingest import run_ingest_pipeline
+        df_lib, path, skip_report = run_ingest_pipeline()
+        print(f"Wrote {len(df_lib)} rows -> {path}")
+        if skip_report:
+            print(f"  {len(skip_report)} molecule(s) had their internal-row geometry "
+                  "merge skipped (frequency mismatch) -- see warnings above.")
+
+    if args.calibrate:
+        if args.molecule and not args.library:
+            print("Note: --calibrate is global and ignores -m/--molecule.")
+        print("Running threshold calibration (src.calibrate.run_calibration_pipeline)...")
+        from src.calibrate import run_calibration_pipeline
+        thresholds, result, sweep_df, (path_json, path_sweep) = run_calibration_pipeline()
+        print(f"Frozen thresholds tau_TR={thresholds.tau_TR}, tau_S={thresholds.tau_S}, "
+              f"tau_B={thresholds.tau_B} -> {path_json}")
+        print(f"Wrote {len(sweep_df)}-row sensitivity sweep -> {path_sweep}")
+
+    if args.classify or args.emit_projection:
+        if not args.molecule:
+            print("Error: --classify/--emit-projection require -m/--molecule.")
+            return True
+
+    if args.classify:
+        if not args.mode:
+            print("Error: --classify requires --mode {normal,emit} "
+                  "(it determines which classified CSV gets written).")
+            return True
+        try:
+            df, path = run_classify_pipeline(args.molecule, args.mode)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"Error running --classify for '{args.molecule}' ({args.mode}): {e}")
+            return True
+        print(f"Wrote {len(df)}-row classification -> {path}")
+
+    if args.emit_projection:
+        try:
+            df, df_full, (path_grouped, path_full) = run_projection_pipeline(args.molecule)
+        except FileNotFoundError as e:
+            print(f"Error: --emit-projection for '{args.molecule}' needs both normal-mode "
+                  f"AND EMIT input data present ({e})")
+            return True
+        except ValueError as e:
+            print(f"Error running --emit-projection for '{args.molecule}': {e}")
+            return True
+        print(f"Wrote {len(df)}-row grouped contributions -> {path_grouped}")
+        print(f"Wrote {len(df_full)}-row full projection detail -> {path_full}")
+
+    if args.figures:
+        print("Regenerating all manuscript figures (src.figures.regenerate_all)...")
+        from src.figures import regenerate_all
+        regenerate_all()
+
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser(description="Calculate Molecular Mode Scores")
-    ap.add_argument("-m", "--molecule", required=True, help="Molecule name (without extension)")
+    ap.add_argument("-m", "--molecule", help="Molecule name (without extension)")
     ap.add_argument("--mode", choices=["normal", "emit"],
                     help="Run non-interactively with this mode type (skips the prompt).")
+    ap.add_argument("--classify", action="store_true",
+                    help="Run Steps 2-4 classification for -m <molecule> "
+                         "(requires --mode). Writes <mol>_{normal,emit}_classified.csv.")
+    ap.add_argument("--emit-projection", action="store_true", dest="emit_projection",
+                    help="Project raw EMIT eigenvectors onto the normal-mode reference "
+                         "basis for -m <molecule>. Writes <mol>_EMIT_contributions.csv "
+                         "and <mol>_EMIT_projection_full.csv.")
+    ap.add_argument("--library", action="store_true",
+                    help="Ingest the hydride-library spreadsheet -> "
+                         "data/results/library_scores.csv. Global (ignores -m); slow (~630s).")
+    ap.add_argument("--calibrate", action="store_true",
+                    help="Calibrate tau_TR/tau_S/tau_B against the ingested library -> "
+                         "data/results/thresholds.json + tau_sensitivity_sweep.csv. Global (ignores -m).")
+    ap.add_argument("--figures", action="store_true",
+                    help="Regenerate all manuscript figures from data/results/*.csv -> "
+                         "data/figures/*.{pdf,png}. Global (ignores -m).")
     args = ap.parse_args()
+
+    if _run_flag_pipelines(args):
+        return
+
+    if not args.molecule:
+        print("Error: -m/--molecule is required (unless using --library/--calibrate/--figures alone).")
+        return
     mol_name = args.molecule
 
     if args.mode:

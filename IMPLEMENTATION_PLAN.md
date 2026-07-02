@@ -16,6 +16,59 @@
 > for the full writeup. Caption-side S/B/SB gloss text (from the prior update) still outstanding.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-03 (lead-engineer, CLI subcommands + README JCE-retraction fix):** Phase 5 checklist item
+> **DONE** — `main.py` gained 5 new flags, each wiring an EXISTING pipeline function (no logic
+> reimplemented): `--classify` (`run_classify_pipeline`, per-molecule, requires `-m` + `--mode`),
+> `--emit-projection` (`run_projection_pipeline`, per-molecule, requires `-m`), `--library`
+> (`src.excel_ingest.run_ingest_pipeline`, global, ignores `-m`, prints a slow-warning first), `--calibrate`
+> (`src.calibrate.run_calibration_pipeline`, global, ignores `-m`), `--figures` (new
+> `src.figures.regenerate_all()`, factored out of that module's former `if __name__ == "__main__":` block
+> so `main.py` can call it directly instead of shelling out to `python -m src.figures`). Design: the
+> default `-m <mol> --mode {normal,emit}` Step-1 path is UNCHANGED (verified no regression); new flags can
+> combine freely with each other and with `-m`/`--mode` in one command (e.g.
+> `-m benzene --mode emit --classify --emit-projection` runs both in sequence — tested, works); bad
+> combinations fail loud with a clear message (`--classify` with no `--mode`; `--classify`/
+> `--emit-projection` with no `-m`; `--emit-projection` against a molecule with no EMIT file) rather than
+> silently doing nothing. **Every flag actually run and verified this session, not just written:**
+> - `py main.py -m water --mode normal` (plain path, no new flags) → unchanged 9-row Tx..Vib3 table,
+>   confirms no regression.
+> - `py main.py -m water --mode normal --classify` → `data/results/water_normal_classified.csv` (9 rows,
+>   fresh timestamp, correct S/B labels).
+> - `py main.py -m water --emit-projection` → `water_EMIT_contributions.csv` +
+>   `water_EMIT_projection_full.csv` (9 rows each, fresh timestamps).
+> - `py main.py -m benzene --mode emit --classify --emit-projection` → all 3 outputs written in one
+>   command (36 rows each).
+> - `py main.py -m SF2 --emit-projection` (no EMIT file for SF2) → clean one-line error, no traceback.
+> - `py main.py -m water --classify` (no `--mode`) / `py main.py --classify` (no `-m`) / `py main.py` (no
+>   molecule, no flags) → each gives its own clear one-line error, exit without a stack trace.
+> - `py main.py --library` → **659-row** `library_scores.csv` (ran in background, real ~630s cost
+>   confirmed live, not just quoted from docs; 4 known frequency-mismatch skip warnings printed, matching
+>   the pre-existing documented H2O/OF2/Cl2O/Br2O finding — nothing new or wrong).
+> - `py main.py --calibrate` → `thresholds.json` re-derives the SAME frozen values already on record
+>   (`tau_TR=0.95, tau_S=0.90368, tau_B=0.17327`) and a 190-row `tau_sensitivity_sweep.csv` — reproducible,
+>   not drifted.
+> - `py main.py --figures` → all 7 figure PDF/PNG pairs regenerated (fresh timestamps; content confirmed
+>   unchanged in substance — only embedded PDF metadata bytes differ, same as any figure regen).
+> All of the above CSV/JSON outputs came back **byte-identical** to what was already committed
+> (`git status` showed zero diff for any `data/results/*` file after this whole session's runs) — a nice
+> incidental reproducibility confirmation, not just a CLI-wiring check. `py -m pytest tests/` **53/53
+> green** throughout (no test file touched; not required by the task, so none added — flag behavior was
+> validated by actually running it, per the task's own instruction).
+> **README.md also rewritten a SECOND time this date** (superseding the earlier-same-day rewrite logged
+> just below, which is now WRONG and should not be treated as current): **direct author instruction**
+> received mid-session — the *J. Chem. Educ.* (JCE) submission will be WITHDRAWN before JCC submission,
+> so this is the FIRST scoring-functions paper, not a sequel to or extension of an earlier one. Removed
+> EVERY mention of JCE/*J. Chem. Educ.*/"Paper I"/"Paper II" from `README.md` (grepped for
+> `Educ|JCE|Paper I|Paper II`, zero matches confirmed). The repository is now framed as the reference
+> implementation for exactly ONE manuscript: *"A Unified, Reference-Free Framework for Classifying the 3N
+> Modes of Molecular Motion,"* in preparation for JCC. Citation section now names only JCC (no citation
+> yet — "will be added once submitted", same honest placeholder convention as before, just for one paper
+> instead of two). New "Classification, EMIT Projection, Library Calibration, and Figures (CLI flags)"
+> section documents the exact tested commands above (not Python-snippet examples) — every command shown
+> in the README is one that was actually run and verified this session, per the task's own instruction.
+> **For future sessions:** JCC is the first/only paper for this repository going forward — do NOT
+> reintroduce "Paper I (JCE)"/"Paper II (JCC)" dual-paper framing anywhere (README, docstrings, comments)
+> unless the author explicitly reverses this decision again.
 > **QUEUED, not started (author decision 2026-07-03, deliberately deferred until SI content stabilizes):**
 > merge the two standalone SI documents (`JCC_SI_computational_cost.tex`, `JCC_SI_sensitivity.tex`) into
 > ONE combined `JCC_SI.tex` before submission — Wiley/JCC convention is a single Supporting Information
@@ -882,9 +935,15 @@ library scores from the Excel file.
       + library if retrievable) — B7/B14 reproducibility requirement.
 - [ ] **Graphical-TOC image** (B4, submission-REQUIRED): 50×50 mm; assemble per the structure-doc concept.
 - [ ] Fill the **Gaussian revision/year** `TODO-DATA` (line 463) and correct the inconsistent citation.
-- [ ] `main.py`: add `--classify`, `--emit-projection`, `--library`, `--figures` subcommands.
+- [x] `main.py`: add `--classify`, `--emit-projection`, `--library`, `--figures` subcommands. **DONE
+      2026-07-03** — also added `--calibrate` (not in the original bullet text but the same class of
+      pipeline-wiring flag, author-requested same session). See RESUME HERE for the full writeup.
 - [x] `README.md`: document classification workflow; resolve **JCE-vs-JCC** mismatch (README cites
-      *J. Chem. Educ.* "paper I"; this is the JCC unified-framework paper). **DONE 2026-07-03.**
+      *J. Chem. Educ.* "paper I"; this is the JCC unified-framework paper). **DONE 2026-07-03** (rewritten
+      TWICE this date — see RESUME HERE: the first pass, earlier the same day, still framed this as a
+      two-paper "Paper I (JCE)/Paper II (JCC)" codebase; that framing was explicitly retracted by the
+      author later the same day — JCE is being withdrawn before JCC submission, so JCC is the first/only
+      paper, not a sequel. The current README has zero JCE/*J. Chem. Educ.* references.)
 
 ## Phase 6 — Strengthen for review (RE-TIERED 2026-07-01; see Changelog)
 > From expert-reviewer-jcc, re-triaged after Decision 5 (Phase 4/Gramicidin deferred to the companion

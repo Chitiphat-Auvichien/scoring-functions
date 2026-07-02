@@ -252,19 +252,31 @@
 >      the deck's bullet list loosely suggests, would separate closely-related panels with no reader
 >      benefit — keep the current 2x2 layout).
 >   3. **Benzene normal modes — the real work, strict dependency order, do not parallelize:**
->      (a) **`lead-engineer` FIRST:** identify, by computation (not guessing), specific mode indices for
->      two new worked examples from `data/results/benzene_normal_classified.csv`/`library_scores.csv`:
->      a genuine ring-breathing mode (benzene's classic totally-symmetric mode, historically ~992 cm⁻¹ —
->      check which of the 7 `STRETCHING`-labeled modes shows a uniform, high-magnitude contribution
->      across all six C-C ring bonds via `s_AB`, the same signature pattern already used to characterize
->      mode 19's uniform SB character in `tab:benzenemixed`) and a representative C-H stretching mode
->      (likely the highest-frequency `STRETCHING`-labeled mode). The SB worked example is already in
->      hand and needs no new identification: mode 19 (1319.27 cm⁻¹), already described in the current
->      text as "a totally symmetric ring-distortion combination."
->      (b) **`figure-builder` SECOND (after (a) lands):** build a NEW score-vs-frequency figure for
->      benzene's 36 normal modes, distinct from `fig:benzene` (which stays framed around the EMIT stress
->      test and must not be repurposed/changed), visually calling out the 3 named modes (ring-breathing,
->      mode 19, C-H stretch).
+>      (a) ~~`lead-engineer` FIRST: identify the ring-breathing/C-H-stretch mode indices~~ ✓ **DONE
+>      2026-07-02.** New `src/benzene_validation.py` Task E: `benzene_worked_examples()` /
+>      `run_benzene_worked_examples()`. Primary criterion (author-confirmed mid-session, overriding an
+>      earlier bond-uniformity-first heuristic): among C6H6's 7 `S` (STRETCHING)-labeled real normal
+>      modes there is a clean ~2200 cm⁻¹ frequency gap; the lowest-frequency one with `V_Stretch`≈1.000
+>      is the ring-breathing mode, the highest-frequency one is the representative C-H stretch.
+>      **Identified: mode 12 (992.5825 cm⁻¹ — matches the literature ~992 cm⁻¹ ring-breathing assignment
+>      almost exactly) = ring-breathing; mode 30 (3223.172 cm⁻¹, the highest-frequency `S` mode) =
+>      representative C-H stretch.** Per-bond `s_AB` supporting evidence (reusing Task B's parsing
+>      helpers, extended with a new `_CH_BONDS` tuple): mode 12 — `V_Stretch=1.0000`, 99.1% of it on the
+>      6 C-C ring bonds (`cc_fraction_of_V=0.991`), uniform to CV=0.0024, C-H total negligible (0.0090);
+>      mode 30 — `V_Stretch=1.0000`, 99.3% of it on the 6 C-H bonds, C-C total negligible (0.0072), and
+>      **not** part of a near-degenerate pair (unlike modes 26/27 and 28/29 among the same `S` cluster,
+>      which sit 0.017/0.016 cm⁻¹ apart — mode 30 is isolated, the natural non-degenerate representative
+>      pick, computed via a `near_degenerate_partner`/`partner_freq_diff` check, not assumed). Mode 19
+>      (SB, 1319.27 cm⁻¹) untouched, as instructed. Output: `data/results/benzene_worked_examples.csv`
+>      (2 rows: mode_index, freq, V_Stretch, role, cc_total, ch_total, cc_fraction_of_V, cc_min/max/cv,
+>      ch_min/max/cv, near_degenerate_partner, partner_freq_diff). Two new regression tests in
+>      `tests/test_benzene_validation.py` pin mode 12/30 as manuscript claims (same protection level as
+>      the existing 13/14/19/23/24 pins). **53/53 tests green.**
+>      (b) **`figure-builder` SECOND (next up):** build a NEW score-vs-frequency figure for benzene's 36
+>      normal modes, distinct from `fig:benzene` (which stays framed around the EMIT stress test and must
+>      not be repurposed/changed), visually calling out the 3 named modes (ring-breathing = mode 12,
+>      mode 19, C-H stretch = mode 30) — read them from `data/results/benzene_worked_examples.csv`
+>      (+ mode 19 from `benzene_mixed_bond_diagnostic.csv`), not re-derived.
 >      (c) **`lead-author` THIRD (after (a) and (b) land):** rewrite the benzene-normal-modes section's
 >      narrative to lead with the descriptive worked-example framing anchored on the new figure, folding
 >      the existing 6/6, 7/7, 18/23 numbers in as supporting evidence rather than the section's opening

@@ -64,6 +64,8 @@ MOLECULE = "C6H6"
 # already embedded in library_scores.csv's s_AB string (src/excel_ingest.py's
 # _bond_string()), so no separate atom-type lookup is needed here.
 _CC_RING_BONDS = ("C1-C2", "C2-C3", "C3-C4", "C4-C5", "C5-C6", "C1-C6")
+# C-H bonds, one per ring carbon (Ci-H(i+6), matching the same connectivity).
+_CH_BONDS = ("C1-H7", "C2-H8", "C3-H9", "C4-H10", "C5-H11", "C6-H12")
 
 
 def _load_lib(lib_df, data_dir):
@@ -269,9 +271,128 @@ def run_benzene_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0, writ
     return bond_detail_df, pairs_df, paths
 
 
+# --------------------------------------------------------------------------
+# Task E (2026-07-02): worked-example gallery mode identification
+# --------------------------------------------------------------------------
+#
+# Per Scoring_Manuscript_Plan_2026-07-02.pdf step 3a, the "Benzene normal
+# modes" section is being reworked into a descriptive worked-example gallery
+# needing three NAMED modes: a ring-breathing mode, a representative C-H
+# stretch, and an SB (mixed stretch/bend) example. The SB example is already
+# in hand (mode 19, 1319.27 cm-1, described in tab:benzenemixed) and is not
+# re-derived here. This identifies the other two by computation.
+#
+# Primary criterion (author-confirmed 2026-07-02, overriding an earlier
+# bond-uniformity-first heuristic): among benzene's 7 `S` (STRETCHING)
+# -labeled normal modes there is a clear ~2200 cm-1 frequency gap -- one mode
+# sits far below 3000 cm-1, the other six sit at/above ~3180 cm-1. The
+# low-frequency one, with V_Stretch essentially exactly 1.000, is the
+# ring-breathing mode (matches the literature ~992 cm-1 assignment); the
+# highest-frequency one is the representative C-H stretch. Per-bond `s_AB`
+# C-C vs. C-H totals are reported as SUPPORTING evidence for both picks
+# (reusing the same parsing helpers as Task B), not as the primary test.
+
+def benzene_worked_examples(lib_df=None, data_dir="data", freq_tol=1.0):
+    """Identify, by computation, benzene's ring-breathing and representative
+    C-H-stretch normal modes for the manuscript's worked-example gallery.
+
+    Returns a 2-row DataFrame, one row each for role "ring_breathing" and
+    "ch_stretch": mode_index, freq, V_Stretch, role, cc_total, ch_total,
+    cc_fraction_of_V, cc_min, cc_max, cc_cv, ch_min, ch_max, ch_cv,
+    near_degenerate_partner (mode_index of another `S`-labeled mode within
+    `freq_tol` cm-1, or None), partner_freq_diff (NaN if none).
+
+    Method: among C6H6's internal normal modes with predicted_bucket ==
+    "stretch", sort by frequency; the LOWEST-frequency one is
+    ring_breathing, the HIGHEST-frequency one is ch_stretch. Raises
+    ValueError if fewer than 2 STRETCHING-labeled modes exist (need two
+    distinct picks) -- fail loud rather than silently returning a
+    degenerate/duplicate identification.
+    """
+    df = _load_lib(lib_df, data_dir)
+    internal = df[(df["molecule"] == MOLECULE) & (df["kind"] == "internal")].copy()
+    internal["mode_index"] = internal["mode_index"].astype(int)
+    internal["predicted_bucket"] = internal["predicted_label"].map(classification_bucket)
+
+    stretch = internal[internal["predicted_bucket"] == "stretch"].sort_values("freq")
+    if len(stretch) < 2:
+        raise ValueError(
+            f"Only {len(stretch)} STRETCHING-labeled {MOLECULE} normal mode(s) "
+            "found -- cannot identify distinct ring-breathing and C-H-stretch "
+            "worked examples (has calibration or the reference data changed?).")
+
+    ring_row = stretch.iloc[0]
+    ch_row = stretch.iloc[-1]
+
+    def _bond_stats(row):
+        bonds = _parse_bond_string(row["s_AB"])
+        cc_total = sum(v for k, v in bonds.items() if _is_cc_bond(k))
+        ch_total = sum(v for k, v in bonds.items() if not _is_cc_bond(k))
+        cc_vec = np.array([bonds.get(b, 0.0) for b in _CC_RING_BONDS])
+        ch_vec = np.array([bonds.get(b, 0.0) for b in _CH_BONDS])
+        cc_cv = float(cc_vec.std() / cc_vec.mean()) if cc_vec.mean() else float("nan")
+        ch_cv = float(ch_vec.std() / ch_vec.mean()) if ch_vec.mean() else float("nan")
+        return {
+            "cc_total": cc_total,
+            "ch_total": ch_total,
+            "cc_fraction_of_V": cc_total / row["V_Stretch"] if row["V_Stretch"] else float("nan"),
+            "cc_min": float(cc_vec.min()),
+            "cc_max": float(cc_vec.max()),
+            "cc_cv": cc_cv,
+            "ch_min": float(ch_vec.min()),
+            "ch_max": float(ch_vec.max()),
+            "ch_cv": ch_cv,
+        }
+
+    # Near-degenerate partner check for the C-H stretch pick (an E1u/E2g-style
+    # doubly-degenerate partner would sit within freq_tol cm-1 of ch_row).
+    others = stretch[stretch["mode_index"] != ch_row["mode_index"]]
+    diffs = (others["freq"] - ch_row["freq"]).abs()
+    if len(diffs) and diffs.min() <= freq_tol:
+        partner_idx = int(others.loc[diffs.idxmin(), "mode_index"])
+        partner_diff = float(diffs.min())
+    else:
+        partner_idx = None
+        partner_diff = float("nan")
+
+    rows = []
+    for role, row in (("ring_breathing", ring_row), ("ch_stretch", ch_row)):
+        out = {
+            "mode_index": int(row["mode_index"]),
+            "freq": float(row["freq"]),
+            "V_Stretch": float(row["V_Stretch"]),
+            "role": role,
+        }
+        out.update(_bond_stats(row))
+        if role == "ch_stretch":
+            out["near_degenerate_partner"] = partner_idx
+            out["partner_freq_diff"] = partner_diff
+        else:
+            out["near_degenerate_partner"] = None
+            out["partner_freq_diff"] = float("nan")
+        rows.append(out)
+
+    cols = ["mode_index", "freq", "V_Stretch", "role", "cc_total", "ch_total",
+            "cc_fraction_of_V", "cc_min", "cc_max", "cc_cv", "ch_min", "ch_max",
+            "ch_cv", "near_degenerate_partner", "partner_freq_diff"]
+    return pd.DataFrame(rows)[cols]
+
+
+def run_benzene_worked_examples(lib_df=None, data_dir="data", freq_tol=1.0, write=True):
+    """Headless entry point (Task E). Returns (df, path or None)."""
+    result = benzene_worked_examples(lib_df, data_dir, freq_tol)
+    path = None
+    if write:
+        path = os.path.join(data_dir, "results", "benzene_worked_examples.csv")
+        result.to_csv(path, index=False)
+    return result, path
+
+
 if __name__ == "__main__":
     d, s, p = run_benzene_normal_validation()
     print(s.to_string(index=False))
     bd, pr, p2 = run_benzene_bond_diagnostic()
     print(bd.to_string(index=False))
     print(pr.to_string(index=False))
+    we, p3 = run_benzene_worked_examples()
+    print(we.to_string(index=False))

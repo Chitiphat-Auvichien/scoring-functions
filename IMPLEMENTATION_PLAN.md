@@ -290,18 +290,33 @@
 >      band differs from fig:benzene panel (a)'s, so "center right" doesn't clear it the same way).
 >      `plot_benzene_stress_test`/`fig:benzene` itself is untouched (diff to `src/figures.py` is purely
 >      additive). `data/figures/fig_benzene_normal.{pdf,png}`. 53/53 tests still green.
->      (c) **`lead-author` THIRD (next up, after (a) and (b) land):** rewrite the benzene-normal-modes
->      section's narrative to lead with the descriptive worked-example framing anchored on the new
->      figure, folding the existing 6/6, 7/7, 18/23 numbers in as supporting evidence rather than the
->      section's opening frame. Do not lose the existing bond-level SB analysis (`tab:benzenemixed`, the
->      degenerate-pair correlation numbers) — that content is correct and valuable, it just needs to sit
->      under the new framing rather than being the section's own lead-in statistics.
+>      (c) ~~`lead-author`: rewrite the benzene-normal-modes section's narrative~~ DONE 2026-07-02 --
+>      the dispatched agent completed the rewrite, then dispatched its own nested review sub-agent
+>      before finalizing and was manually stopped by the user while idle waiting on it. Resuming it via
+>      SendMessage failed (once a user stops a task the harness treats it as cancelled). The
+>      coordinating session verified the already-written .tex content directly (Read, not just a
+>      report), confirmed it was complete and good, and finished the remaining mechanical steps itself:
+>      confirmed fig_benzene_normal.pdf was already copied into JCC/JCC_man_scoring/images/, recompiled
+>      with latexmk (OneDrive-safe: copied to scratch, compiled there, copied the PDF back), verified
+>      zero undefined references/citations, copied the final PDF back. 31 pages (up from 29). Section
+>      now leads with the three worked examples (mode 12 ring-breathing 992.6 cm-1, s[V_S]=1.000; mode
+>      30 C-H stretch 3223.2 cm-1, s[V_S]=1.000, inverted bond pattern, illustrating frequency-
+>      independence; mode 19 mixed S/B 1319.3 cm-1, the honest-mixed-character case), then explicitly
+>      pivots ("These three modes anchor the systematic validation behind them") into the pre-existing
+>      6/6, 7/7, 18/23 numbers and tab:benzenemixed as supporting evidence -- exactly per plan.
+>      **Lesson:** if a dispatched agent's status comes back killed/stopped-by-user rather than
+>      completed, verify its file-level work directly before discarding or blindly retrying -- here the
+>      substantive work was already good, only the housekeeping tail (compile + copy-back + bookkeeping)
+>      was missing.
 >   4. **Benzene EMIT modes:** CONFIRMED already aligned (τ_B-specific two-gate framing and the "extreme
 >      case that rarely occurs" limitation note are both explicit) — no further action.
-> **After this benzene-normal-modes work lands:** Phase 5 (`reproduce.py` orchestrator wiring; SI
-> Cartesian-geometry export; graphical TOC) and the remaining two Phase 6 recommended items (mixed-SB
-> bucket CoM-argument half; leave-one-molecule-out τ evaluation). The `fig:modemixing` irrep-degeneracy
-> sub-panel gap remains BLOCKED pending confirmation, not built.
+> **Benzene-normal-modes 3-step sequence (identify -> figure -> narrative) now fully complete.**
+> **Next:** Phase 5 (`reproduce.py` orchestrator wiring; SI Cartesian-geometry export; graphical TOC)
+> and the remaining two Phase 6 recommended items (mixed-SB bucket CoM-argument half; leave-one-
+> molecule-out τ evaluation). The `fig:modemixing` irrep-degeneracy sub-panel gap remains BLOCKED
+> pending confirmation, not built. Consider an `expert-reviewer-jcc` pass on the manuscript now that
+> the label rename, benzene restructuring, and water-figure/δ-notation fixes have all landed -- this
+> was requested earlier and deliberately deferred until things stabilized; they have.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).

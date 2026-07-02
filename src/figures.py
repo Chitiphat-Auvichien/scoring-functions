@@ -90,7 +90,7 @@ COLORS = {
 # below are now IDENTITY maps. Kept (not deleted) so the ~15 call sites
 # elsewhere in this file (`CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[r]]` etc.)
 # don't all need touching; for a RAW per-mode classifier label (e.g.
-# fig:benzene panel (a)'s `row["label"]`, which can be "Tx", "Tx*", "S", ...),
+# fig_benzene_normal's `row["label"]`, which can be "Tx", "Tx*", "S", ...),
 # convert with `classification_bucket()` first, then use directly as the key.
 REF_LABEL_TO_CATEGORY = {
     "translation": "translation",
@@ -150,7 +150,9 @@ CATEGORY_LABEL = {
 
 # Calibrated classifier thresholds (src/calibrate.py's frozen
 # data/results/thresholds.json, read via Thresholds.calibrated()), quoted
-# here only for the reference dashed lines in fig:benzene panel (a). These
+# here only for the reference dashed lines in fig_benzene_normal (fig:benzene
+# itself carries no tau_S/tau_B lines since its 2026-07-02 single-panel
+# simplification dropped the normal-mode s[V_S]-vs-frequency content). These
 # used to be the provisional Thresholds() class defaults (0.9/0.2) hardcoded
 # before Phase-3 calibration existed; fixed 2026-07-02 (consistency audit) to
 # track the SAME calibrated values used everywhere else (fig:boxplots panel
@@ -268,63 +270,42 @@ def _explode_bonds(lib_df):
 # --------------------------------------------------------------------------
 
 def plot_benzene_stress_test(
-    normal_csv="data/results/benzene_normal_classified.csv",
     emit_classified_csv="data/results/benzene_EMIT_classified.csv",
     emit_contrib_csv="data/results/benzene_EMIT_contributions.csv",
     out_dir="data/figures",
     label="fig_benzene",
 ):
-    """Build fig:benzene: (a) s[V_S] vs. frequency for the 36 normal modes;
-    (b) score vs. projected normal-mode contribution for the 36 EMIT modes,
-    highlighting the EMIT 2/9 s[R] inversion and the EMIT 34-36 flagged
-    externals.
+    """Build fig:benzene: score vs. projected normal-mode contribution for
+    the 36 EMIT modes, highlighting the EMIT 2/9 s[R] inversion and the
+    EMIT 34-36 flagged externals.
 
     This is a flag-behavior / non-monotonicity illustration (per
-    IMPLEMENTATION_PLAN.md Phase 2), NOT a T/R-accuracy parity plot: panel
-    (b) deliberately omits any 1:1 reference line and plots |score| against
-    projected contribution fraction only to expose where the two disagree.
+    IMPLEMENTATION_PLAN.md Phase 2), NOT a T/R-accuracy parity plot: the
+    figure deliberately omits any 1:1 reference line and plots |score|
+    against projected contribution fraction only to expose where the two
+    disagree.
+
+    Single-panel figure (simplified 2026-07-02): this used to carry a
+    second panel showing s[V_S] vs. frequency for benzene's 36 real normal
+    modes, but that content is strictly subsumed by the standalone
+    ``plot_benzene_normal_modes``/``fig_benzene_normal`` figure (same data,
+    plus named worked-example callouts), and the manuscript's "stress test
+    on benzene EMIT modes" prose never referenced it -- only the EMIT 2/9
+    and EMIT 34-36 content below. Keeping normal-mode data inside a figure
+    captioned around the EMIT stress test was also conceptually confusing
+    regardless of redundancy. See IMPLEMENTATION_PLAN.md Changelog.
 
     Returns a summary dict with output paths and a few sanity numbers.
     """
     _style()
 
-    normal = pd.read_csv(normal_csv)
     emit = pd.read_csv(emit_classified_csv)
     contrib = pd.read_csv(emit_contrib_csv)
     emit = emit.merge(contrib, on="Mode", suffixes=("", "_c"))
 
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(7.0, 3.2))
+    fig, ax_b = plt.subplots(figsize=(3.8, 3.6))
 
-    # ---------------- Panel (a): s[V_S] vs frequency, 36 normal modes -----
-    seen_labels = set()
-    for _, row in normal.iterrows():
-        cat = classification_bucket(row["label"])
-        color = CATEGORY_COLOR.get(cat, "black")
-        marker = CATEGORY_MARKER.get(cat, "o")
-        plot_kwargs = dict(color=color, marker=marker, s=26,
-                            edgecolors="black", linewidths=0.3, zorder=3)
-        leg_label = CATEGORY_LABEL.get(cat, cat) if cat not in seen_labels else None
-        seen_labels.add(cat)
-        ax_a.scatter(row["Freq"], row["V_Stretch"], label=leg_label, **plot_kwargs)
-
-    ax_a.axhline(TAU_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-    ax_a.axhline(TAU_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-    ax_a.text(0.98, TAU_S, r"$\tau_S=$" + f"{TAU_S:.3f}", ha="right",
-               va="bottom", fontsize=7, color=COLORS["threshold"],
-               transform=ax_a.get_yaxis_transform())
-    ax_a.text(0.98, TAU_B, r"$\tau_B=$" + f"{TAU_B:.3f}", ha="right",
-               va="top", fontsize=7, color=COLORS["threshold"],
-               transform=ax_a.get_yaxis_transform())
-
-    ax_a.set_xlabel(r"Frequency (cm$^{-1}$)")
-    ax_a.set_ylabel(r"$s[\mathrm{V_S}]$")
-    ax_a.set_ylim(-0.05, 1.08)
-    ax_a.set_xlim(-120, normal["Freq"].max() * 1.05)
-    ax_a.set_title("(a) 36 normal modes", loc="left", fontweight="bold", fontsize=9)
-    ax_a.legend(loc="center right", frameon=False, handletextpad=0.3,
-                labelspacing=0.3, borderaxespad=0.1)
-
-    # ---------------- Panel (b): score vs projected contribution, EMIT ----
+    # ---------------- score vs projected contribution, EMIT modes ----
     axes6 = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"]
     eps = 1e-3
     bg_x, bg_y = [], []
@@ -395,8 +376,6 @@ def plot_benzene_stress_test(
     ax_b.set_ylabel(r"$|\,\mathrm{score}\,|$ (this framework)")
     ax_b.set_xlim(-0.03, 1.05)
     ax_b.set_ylim(-0.03, 1.15)
-    ax_b.set_title("(b) EMIT modes: score vs. projection", loc="left",
-                    fontweight="bold", fontsize=9)
     ax_b.legend(loc="upper left", frameon=False, handletextpad=0.3,
                 labelspacing=0.35, borderaxespad=0.1, fontsize=6.7)
     ax_b.text(0.98, 0.02,
@@ -411,17 +390,14 @@ def plot_benzene_stress_test(
     summary = {
         "pdf": pdf_path,
         "png": png_path,
-        "panel_a_n_points": len(normal),
-        "panel_a_freq_range": (float(normal["Freq"].min()), float(normal["Freq"].max())),
-        "panel_a_vs_range": (float(normal["V_Stretch"].min()), float(normal["V_Stretch"].max())),
-        "panel_b_n_background_points": len(bg_x),
-        "panel_b_emit2_Ry_score": float(abs(e2["Ry"])),
-        "panel_b_emit2_Ry_contribution": float(e2["C2_Ry"]),
-        "panel_b_emit9_Ry_score": float(abs(e9["Ry"])),
-        "panel_b_emit9_Ry_contribution": float(e9["C2_Ry"]),
-        "panel_b_emit34_36_scores": fy,
-        "panel_b_emit34_36_contributions": fx,
-        "panel_b_emit34_36_vstretch": fvs,
+        "n_background_points": len(bg_x),
+        "emit2_Ry_score": float(abs(e2["Ry"])),
+        "emit2_Ry_contribution": float(e2["C2_Ry"]),
+        "emit9_Ry_score": float(abs(e9["Ry"])),
+        "emit9_Ry_contribution": float(e9["C2_Ry"]),
+        "emit34_36_scores": fy,
+        "emit34_36_contributions": fx,
+        "emit34_36_vstretch": fvs,
     }
     return summary
 

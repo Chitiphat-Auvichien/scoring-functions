@@ -311,6 +311,25 @@
 >   4. **Benzene EMIT modes:** CONFIRMED already aligned (τ_B-specific two-gate framing and the "extreme
 >      case that rarely occurs" limitation note are both explicit) — no further action.
 > **Benzene-normal-modes 3-step sequence (identify -> figure -> narrative) now fully complete.**
+> ~~5. `figure-builder`: simplify `fig:benzene` to single-panel (drop the now-redundant normal-mode
+>    panel)~~ ✓ **DONE 2026-07-02.** `plot_benzene_stress_test` (`src/figures.py`) dropped its former
+>    panel (a) (`s[V_S]` vs. frequency, benzene's 36 normal modes) -- that content is now strictly
+>    subsumed by the standalone `plot_benzene_normal_modes`/`fig_benzene_normal` figure (same data plus
+>    named worked-example callouts, built in the sequence above), and the manuscript's "stress test on
+>    benzene EMIT modes" prose never referenced panel (a)/"36 normal modes" at all, only the EMIT 2/9 and
+>    EMIT 34-36 content. Having real NORMAL-mode data inside a figure captioned around the EMIT stress
+>    test was also conceptually confusing independent of the redundancy. `fig:benzene` is now a single
+>    `fig, ax = plt.subplots(figsize=(3.8, 3.6))` panel containing only the former panel (b) (EMIT score
+>    vs. projected normal-mode contribution, EMIT 2/9 R_y-inversion diamond callout + EMIT 34-36 flagged-
+>    external star callout) -- unchanged content, just no longer alongside the dropped panel. Removed the
+>    now-unused `normal_csv` parameter (no caller passed it positionally/by keyword outside this module's
+>    own `__main__` block, which calls with no args -- nothing else to fix) and the `panel_a_*`/`panel_b_*`
+>    summary-dict key prefixes (now unprefixed, e.g. `emit2_Ry_score`; no test asserted on the old keys).
+>    `.tex` caption for `fig:benzene` (`JCC_temp_LaTeXtemplate.tex`) checked and needs NO change -- it
+>    already only describes EMIT/flagged-external/R_y-inversion content, never "36 normal modes"/panel
+>    (a). Regenerated `data/figures/fig_benzene.{pdf,png}` and copied the PDF into
+>    `JCC/JCC_man_scoring/images/fig_benzene.pdf`. 53/53 tests still green. `plot_benzene_normal_modes`/
+>    `fig_benzene_normal` itself untouched.
 > **Next:** Phase 5 (`reproduce.py` orchestrator wiring; SI Cartesian-geometry export; graphical TOC)
 > and the remaining two Phase 6 recommended items (mixed-SB bucket CoM-argument half; leave-one-
 > molecule-out τ evaluation). The `fig:modemixing` irrep-degeneracy sub-panel gap remains BLOCKED
@@ -723,6 +742,24 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-02 — Simplified `fig:benzene` to a single panel; dropped the redundant normal-mode panel.**
+  `plot_benzene_stress_test` (`src/figures.py`) used to render 2 panels: (a) `s[V_S]` vs. frequency for
+  benzene's 36 real normal modes, (b) EMIT score vs. projected normal-mode contribution (EMIT 2/9
+  R_y-inversion + EMIT 34-36 flagged-external callouts). Panel (a) became fully redundant once
+  `plot_benzene_normal_modes`/`fig_benzene_normal` was built (same data, better: named worked-example
+  callouts for modes 12/19/30) — confirmed the manuscript's "stress test on benzene EMIT modes" prose
+  never referenced panel (a)/"36 normal modes" at all, and having normal-mode data inside a figure
+  captioned around the EMIT stress test was conceptually confusing regardless of redundancy. Removed
+  panel (a) entirely (the `normal_csv` param, the `ax_a` subplot, the `normal.iterrows()` loop, the
+  tau_S/tau_B reference lines and their panel-(a)-specific text); `fig:benzene` is now one
+  `fig, ax_b = plt.subplots(figsize=(3.8, 3.6))` panel with the former panel (b) content unchanged, no
+  "(a)"/"(b)" title prefixes. Dropped the `panel_a_*`/`panel_b_*`-prefixed summary-dict keys (now
+  unprefixed: `n_background_points`, `emit2_Ry_score`, `emit34_36_scores`, etc.) — no test or other
+  caller referenced the old keys or the `normal_csv` parameter, so nothing else needed updating.
+  `.tex` caption for `fig:benzene` checked and needs no change (already EMIT-only content). Regenerated
+  `data/figures/fig_benzene.{pdf,png}` and copied the PDF to
+  `JCC/JCC_man_scoring/images/fig_benzene.pdf`. 53/53 tests green throughout.
+  `plot_benzene_normal_modes`/`fig_benzene_normal` untouched.
 - **2026-07-02 — Re-rendered all 6 manuscript figures after the label-vocabulary rename
   (presentation-only regen, not a new figure/analysis).** Ran `py -m src.figures`; all 6 regenerated
   without error. Visually inspected every PNG: legend/annotation text is unchanged from before the

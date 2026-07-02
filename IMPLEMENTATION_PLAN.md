@@ -9,9 +9,11 @@
 > newest-dated one unless told otherwise). Any agent working on the manuscript's Results & Discussion
 > section (`lead-author` especially, but also `figure-builder`/`lead-engineer` when their output feeds a
 > specific section) should be pointed at this file, not an older one.
-> Last updated: 2026-07-02 (both queued figure fixes are now fully DONE end to end — code-side
+> Last updated: 2026-07-02 (both queued figure fixes are fully DONE end to end — code-side
 > [footer-text readability + S/B/SB notation] and manuscript-side [captions wired + images refreshed +
-> recompiled] — see RESUME HERE for the full writeup. No new figure fixes queued as of this update.)
+> recompiled] — but the S/B/SB gloss was then REVERTED to bare symbols per author visual-review
+> feedback, same day: too long inside the figures. Gloss now deferred to LaTeX captions only —
+> see RESUME HERE for the full writeup. Caption-side gloss text still outstanding.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -412,13 +414,33 @@
 > Warning: \setcaptiontype ... outside box or environment on input line 616`, is the unrelated
 > water-modes figure, present before this edit too). PDF copied back to
 > `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.pdf`.
+> ~~S/B/SB in-figure gloss reverted to bare symbols (author visual review)~~ ✓ **DONE 2026-07-02**
+> (same day, `lead-engineer`). The gloss-form decision recorded just above ("S (stretching)" etc.,
+> chosen because these PNGs are also viewed standalone) was reviewed by the author once rendered and
+> judged TOO LONG inside the figures themselves. Reverted: `CATEGORY_LABEL`'s `"bend"`/`"stretch"`/
+> `"mixed"` entries are back to bare `"B"`/`"S"`/`"SB"` (no parenthetical); `fig_bondscores`'s hand-built
+> `Line2D` legend back to `"S, ideal"`/`"S, non-ideal"`/`"B, ideal"`/`"B, non-ideal"`; `fig_boxplots`'s
+> `group_labels` back to bare `"B"`/`"S"`. The gloss will instead be added ONCE per figure in the LaTeX
+> caption text (`lead-author`'s job), not baked into the raster. Reverting also reopened the tick-label-
+> collision question `fig_boxplots` had fixed with a 30°/`ha="right"` rotation: bare single-character
+> `"B"`/`"S"` have no collision risk at the existing spacing, so the rotation is no longer needed and was
+> removed (ticks now horizontal/unrotated) -- reads cleaner, verified by rendering.
+> `translation`/`rotation`/`mixed_external` entries untouched (already long-form, not part of this
+> gloss). Regenerated the 5 figures that read `CATEGORY_LABEL`/these hand-written legends:
+> `fig_confusion`, `fig_modemixing`, `fig_benzene_normal`, `fig_bondscores`, `fig_boxplots`.
+> `fig_benzene` confirmed (grep) to never use `CATEGORY_LABEL` -- left untouched, per the prior entry's
+> note. Visually re-verified all 5 regenerated PNGs: bare `S`/`B`/`SB` only, no leftover collision, no
+> stray gloss text. `py -m pytest tests/` **53/53 still green**.
 > **Next:** Phase 5 (`reproduce.py` orchestrator wiring; SI Cartesian-geometry export; graphical TOC)
 > and the remaining two Phase 6 recommended items (mixed-SB bucket CoM-argument half; leave-one-
 > molecule-out τ evaluation). The `fig:modemixing` irrep-degeneracy sub-panel gap remains BLOCKED
 > pending confirmation, not built. Consider an `expert-reviewer-jcc` pass on the manuscript now that
 > the label rename, benzene restructuring, water-figure/δ-notation fixes, and both figure-caption
 > wirings have all landed -- this was requested earlier and deliberately deferred until things
-> stabilized; they have. No figure fixes queued as of this update.
+> stabilized; they have. **Still outstanding:** the LaTeX caption side of the S/B/SB gloss revert --
+> a caption sentence spelling out "S = stretching, B = bending, SB = mixed" once per figure caption
+> (`lead-author`'s job) has not yet been written; the figures currently show bare symbols with no gloss
+> anywhere until that lands. No other figure fixes queued as of this update.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).

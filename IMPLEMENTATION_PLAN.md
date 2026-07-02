@@ -742,6 +742,55 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-02 — Visual-consistency pass across 5 figures (author feedback: "not high-quality,"
+  inconsistent labels, legend/tick-label overlap, redundant marker-shape encoding).** `src/figures.py`
+  only; no scoring/data changes. Four fixes, each visually verified by reading the regenerated PNG (not
+  just code inspection):
+  1. **Redundant shape encoding removed in `plot_bond_scores` (fig:bondscores) and `plot_mode_mixing`
+     (fig:modemixing).** Both used to vary marker SHAPE (square=stretching, circle=bending) on top of
+     COLOR for the same stretch/bend distinction — over-encoding. `_marker_kwargs()` gained an optional
+     `marker=` override (default `None` → falls back to `CATEGORY_MARKER[category]`, so every other
+     caller — there are none besides these two — is unaffected); both functions now pass `marker="o"`
+     so every point is a circle regardless of stretch/bend, leaving color (stretch/bend) and fill
+     (`IDEAL_STYLE`, filled=ideal/hollow=non-ideal) as the only two encodings. Legends rebuilt to match
+     (circle-only proxy handles). `CATEGORY_MARKER` itself is untouched — `fig:confusion`/
+     `fig_benzene_normal` still legitimately vary shape across >2 mutually-exclusive buckets.
+  2. **Label vocabulary standardized in `plot_boxplots` (fig:boxplots).** Was the only figure using
+     short forms ("bend"/"stretch"); now uses the long forms ("bending"/"stretching") matching
+     `CATEGORY_LABEL` and every other figure's prose.
+  3. **Legend/tick-label overlap fixed in two figures.**
+     - `plot_confusion_matrix` panel (b): the `loc="lower left"` precision/recall legend sat directly
+       above the rotated x-tick labels ("clean translation" etc.), visually crowding them. Moved to
+       `loc="upper left"`; also dropped the 4 identical per-bar "1.000" value labels (precision=recall=
+       1.000 for every category — already stated once in the panel title "(all = 1.000)", so they were
+       pure redundant clutter *and* the exact space the legend needed) — fixes both problems at once.
+     - `plot_boxplots`: the 4 two-line tick labels ("bend\n(ideal)" etc.) collided at every panel width
+       tried (uniform spacing, paired spacing — the "(non-ideal)" line is simply too wide for a
+       3-panels-per-7.4in figure at any reasonable font size/spacing, since JCC's `\includegraphics[
+       width=0.95\columnwidth]` rescales the whole PDF to a fixed ~6.2in target regardless of the
+       matplotlib figsize chosen, so growing figsize to "solve" the collision would have silently
+       shrunk the final-print font below the 8pt-readability floor). Redesigned as a two-level tick
+       scheme instead: short primary labels ("bending"/"stretching" only) plus a single shared "ideal"/
+       "non-ideal" bracket+label spanning each pair (drawn once per pair via `ax.get_xaxis_transform()`
+       at a fixed axes-fraction y-offset, so it doesn't depend on each panel's y-data range) — appears
+       once per pair instead of once per box, so it never needs to be as wide as 4 repeated suffixes.
+  4. **Benzene highlight colors de-clashed in `plot_benzene_stress_test` (fig:benzene).**
+     `COLORS["highlight_r"]` (`#E69F00` orange, too close to `stretching`'s `#D55E00` vermillion) and
+     `COLORS["highlight_t"]` (`#0072B2`, an exact duplicate of `bending`'s blue, despite the callout
+     being about translation) both clashed with the `CATEGORY_COLOR` vocabulary. Replaced with the two
+     remaining unclaimed hues in the extended Okabe-Ito palette — `highlight_r` → `#F0E442` yellow,
+     `highlight_t` → `#000000` black — genuinely distinct from all 5 category colors and from each
+     other; every other Okabe-Ito hue is already claimed by a category or a fig:sensitivity color. Since
+     a bare yellow line has poor contrast on white, added a black `path_effects` halo to the EMIT-2/9
+     connecting arrow (keeps the arrow legible without changing its color) and moved the "EMIT 9" label
+     off to the upper-left of its marker (its old lower-right offset now visually collided with the
+     thicker haloed arrow).
+  Regenerated `fig_bondscores`, `fig_modemixing`, `fig_boxplots`, `fig_confusion`, `fig_benzene`
+  ({pdf,png}); copied the 5 PDFs into `JCC/JCC_man_scoring/images/`, overwriting the stale copies.
+  `fig_benzene_normal`/`fig_sensitivity` intentionally untouched (audit found no issues there) — spot-
+  checked their regenerated PNGs anyway to confirm the shared `COLORS`/`_style()` edits didn't leak into
+  them; pixel content is unaffected (only the two colors nobody else references and boxplots-local
+  layout constants changed). `py -m pytest tests/` stayed 53/53 green throughout.
 - **2026-07-02 — Simplified `fig:benzene` to a single panel; dropped the redundant normal-mode panel.**
   `plot_benzene_stress_test` (`src/figures.py`) used to render 2 panels: (a) `s[V_S]` vs. frequency for
   benzene's 36 real normal modes, (b) EMIT score vs. projected normal-mode contribution (EMIT 2/9

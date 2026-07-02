@@ -23,7 +23,9 @@ sys.path.insert(0, ROOT)
 
 import pandas as pd                                                # noqa: E402
 
-from src.excel_ingest import resolve_log_basename, EXCLUDED_MOLECULES  # noqa: E402
+from src.excel_ingest import (                                     # noqa: E402
+    resolve_log_basename, EXCLUDED_MOLECULES, attach_geometry_classification,
+)
 
 LIB_CSV = os.path.join(ROOT, "data", "results", "library_scores.csv")
 
@@ -130,6 +132,49 @@ def test_bond_scores_sum_to_v_stretch():
         assert abs(total - row["V_Stretch"]) < 1e-3, (row["molecule"], row["mode_index"])
         checked += 1
     assert checked > 100, f"only checked {checked} rows -- unexpectedly few"
+
+
+def test_unresolved_engine_mode_is_reported_not_silently_skipped():
+    """formula-auditor finding (2026-07-02): a "Vib i" row that resolves to
+    NO engine mode at all (m is None) must count as a mismatch -- not be
+    silently `continue`d past -- so the molecule still trips the
+    all-or-nothing gate and shows up in the skip report. Synthesize a
+    molecule ('H2O' -> data/logs/water.log, a real geometry-backed molecule)
+    with one bogus, unresolvable mode_index (999; water only has 3
+    vibrational modes) alongside a mismatch that SHOULD have triggered a
+    warning even before this fix, to isolate the new code path."""
+    bogus_row = {
+        "molecule": "H2O", "mode_index": 999, "kind": "internal",
+        "freq": 12345.0, "ref_label": "bend", "ideal": "no",
+        "V_Stretch": 0.5, "delta_b_mean": None, "s_AB": "", "rel_db": "",
+        "has_geometry": False, "predicted_label": None,
+        "predicted_annotation": None,
+        "Tx": None, "Ty": None, "Tz": None, "Rx": None, "Ry": None, "Rz": None,
+    }
+    df_in = pd.DataFrame([bogus_row])
+    data_dir = os.path.join(ROOT, "data")
+    df_out, skip_report = attach_geometry_classification(df_in, data_dir)
+
+    assert len(skip_report) == 1
+    entry = skip_report[0]
+    assert entry["molecule"] == "H2O"
+    assert entry["n_mismatched"] == 1
+    mode_index, engine_freq, excel_freq = entry["example"]
+    assert mode_index == 999
+    assert engine_freq is None          # the m-is-None sentinel, not skipped
+    assert excel_freq == 12345.0
+
+    # The bogus internal row must NOT have been half-merged.
+    internal_out = df_out[df_out["kind"] == "internal"]
+    assert len(internal_out) == 1
+    assert not bool(internal_out.iloc[0]["has_geometry"])
+    assert internal_out.iloc[0]["predicted_label"] is None
+
+    # External (T/R) rows are independent of this gate and are still
+    # appended normally for this geometry-backed molecule.
+    external_out = df_out[df_out["kind"] == "external"]
+    assert len(external_out) == 6
+    assert external_out["has_geometry"].all()
 
 
 def test_ideal_stretch_bend_populations_do_not_overlap():

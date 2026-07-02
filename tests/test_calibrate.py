@@ -226,6 +226,52 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     assert res["floor_met"] is False
 
 
+def test_confusion_matrix_ideal_nonideal_recall_split():
+    """Task-C addition (2026-07-02): confusion_matrix_stats() now also
+    reports recall_ideal/recall_nonideal per category (additive; the pooled
+    precision/recall keys above are unchanged). Mirrors
+    src/figures.py::plot_confusion_matrix's ad hoc ideal/non-ideal split
+    (commit 424a666) as a single formal, tested statistic instead of only
+    living inside plotting code.
+
+    recall_ideal['stretch']==1.0 and recall_ideal['bend']==1.0 must hold
+    EXACTLY, not approximately -- tau_S/tau_B are derived
+    (derive_stretch_bend_thresholds) as literally the min/max of this same
+    ideal=='yes' population, so by construction no ideal-tier stretch/bend
+    row can land on the wrong side of its own defining boundary. This test
+    verifies that construction argument computationally rather than assuming
+    it.
+    """
+    lib_df = pd.read_csv(LIB_CSV)
+    calibrated = Thresholds.calibrated()
+    res = confusion_matrix_stats(lib_df, calibrated, acceptance_floor=0.95)
+
+    assert res["per_category"]["stretch"]["recall_ideal"] == 1.0
+    assert res["per_category"]["bend"]["recall_ideal"] == 1.0
+    assert res["per_category"]["stretch"]["n_ref_ideal"] == 41
+    assert res["per_category"]["bend"]["n_ref_ideal"] == 50
+
+    # Non-ideal tier reproduces the figure-builder's reported numbers
+    # (fig:confusion changelog entry, 2026-07-02): bend retains 95.7%,
+    # stretch retains 65.6%.
+    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.9571) < 1e-3
+    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.6561) < 1e-3
+    assert res["per_category"]["bend"]["n_ref_nonideal"] == 233
+    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 189
+
+    # Translation/rotation: every row is an external (T/R) reference, so the
+    # ideal tier reproduces the pooled recall exactly and there is no
+    # non-ideal tier at all (n_ref_nonideal==0 -> recall_nonideal is NaN).
+    for cat in ("translation", "rotation"):
+        assert res["per_category"][cat]["recall_ideal"] == 1.0
+        assert res["per_category"][cat]["n_ref_nonideal"] == 0
+        assert res["per_category"][cat]["recall_nonideal"] != res["per_category"][cat]["recall_nonideal"]  # NaN
+
+    # Pooled keys (existing behavior) must be untouched by this addition.
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.7174) < 1e-3
+    assert abs(res["per_category"]["bend"]["recall"] - 0.9647) < 1e-3
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = 0

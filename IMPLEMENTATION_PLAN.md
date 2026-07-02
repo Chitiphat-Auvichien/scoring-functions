@@ -3,8 +3,10 @@
 > Living checklist. Tick `[x]` as parts are completed; pick up unchecked items in any later session.
 > Companion to the JCC manuscript `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, the content plan
 > `JCC/JCC_manuscript_structure_JCCformat.pdf`, and the plan slides `JCC/Scoring_Manuscript_Plan_2026-06-29.pdf`.
-> Last updated: 2026-07-02 (`fig:confusion` rebuilt as a two-tier rigorous/non-ideal figure +
-> fig:benzene panel (a) tau_S/tau_B drift fix — see Changelog).
+> Last updated: 2026-07-02 (benzene normal-modes-vs-reference validation formalized as the manuscript's
+> PRIMARY classification-vs-reference result, per `JCC/Scoring_Manuscript_Plan_2026-07-01.pdf`'s
+> mandated Results & Discussion order; `confusion_matrix_stats()` ideal/non-ideal recall split;
+> `excel_ingest.py` mismatch-gate robustness fix — see Changelog).
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -131,9 +133,58 @@
 > (projection-verified) are never even flag-eligible. Library externals (146 rows/25 molecules): FP=0,
 > confirmed not assumed. `tests/test_flag_validation.py` (6 tests) → 40/40 green. See Phase 6 checklist
 > above for the full write-up; score-validator dispatched to independently confirm the counts.
+> ~~Benzene normal-modes-vs-reference validation (Task A) + bond-contribution/degenerate-pair diagnostic
+> (Task B) + `confusion_matrix_stats()` ideal/non-ideal recall split (Task C) + `excel_ingest.py`
+> mismatch-gate robustness fix (Task D)~~ ✓ **DONE 2026-07-02.** Per
+> `JCC/Scoring_Manuscript_Plan_2026-07-01.pdf`'s mandated Results & Discussion order, benzene's real
+> NORMAL modes (not EMIT) vs. their literature/group-theory `ref_label` (already in
+> `library_scores.csv` for `C6H6`) is now the manuscript's **PRIMARY** classification-vs-reference
+> result — a non-circular ground truth (external literature assignment, unlike EMIT's threshold-cut
+> "ground truth"). New `src/benzene_validation.py`: `benzene_normal_reference_detail/_summary` (Task A)
+> reproduces the session's ad hoc numbers exactly by re-deriving them from `library_scores.csv` (no
+> hardcoding) — **6/6 external T/R correct; 7/7 literature-stretch modes recalled (1.0); 18/23
+> literature-bend modes recalled (0.7826), the other 5 (mode_index 13/14/19/23/24) landing in
+> MIXED_STRETCH_BEND; ZERO crossings into the opposite clean category in either direction** (computed via
+> an explicit `crossed_opposite` column, not eyeballed). `benzene_mixed_bond_diagnostic` (Task B) parses
+> those 5 modes' per-bond `s_AB` (already in `library_scores.csv`) and computes: C-H bond contributions
+> are ~0 (`ch_total` 0.0088-0.0100 total across all 6 C-H bonds per mode, `cc_fraction_of_V` >0.95 for
+> all 5); mode 19's C-C contribution is essentially uniform across all 6 ring bonds (coefficient of
+> variation <0.02); modes 13/14 and 23/24 are DETECTED (not assumed) as near-degenerate pairs (freq
+> splitting 0.0157/0.0292 cm⁻¹, well inside a 1 cm⁻¹ tolerance) with a computed strong NEGATIVE Pearson
+> correlation between their 6-bond C-C `s_AB` vectors (-0.969 / -0.997) — the "complementary alternating
+> pattern" claim is now a number, not an eyeballed observation; this is exactly the D6h degenerate
+> E-type-pair signature. Both functions raise (fail-loud) if the geometry merge is incomplete or if no
+> mixed modes exist, rather than silently validating partial/stale data. Outputs:
+> `data/results/benzene_normal_reference_{detail,summary}.csv`,
+> `data/results/benzene_mixed_{bond_diagnostic,degenerate_pairs}.csv`.
+> `tests/test_benzene_validation.py` (9 new tests) pin every number above.
+> **Task C:** `confusion_matrix_stats()` (`src/calibrate.py`) now additionally reports
+> `per_category[cat]["recall_ideal"]`/`["recall_nonideal"]` (+ `n_ref_ideal`/`n_ref_nonideal`) using the
+> SAME tier masks `src/figures.py::plot_confusion_matrix` already applies ad hoc for `fig:confusion`'s
+> two-tier layout (commit `424a666`) — purely additive, existing pooled `precision`/`recall` keys
+> unchanged, `src/figures.py` NOT touched. Verified computationally (not just asserted):
+> `recall_ideal["stretch"] == 1.0` and `recall_ideal["bend"] == 1.0` EXACTLY, as required by
+> construction since `tau_S`/`tau_B` are literally the ideal population's own min/max; `recall_nonideal`
+> reproduces the figure's numbers (bend 0.9571, stretch 0.6561). New test in `tests/test_calibrate.py`.
+> **Task D:** `excel_ingest.py::attach_geometry_classification`'s `if m is None: continue` branch (a row
+> whose "Vib i" name resolves to no engine mode at all) now appends a `(mode_index, None, freq)` sentinel
+> to `mismatches` instead of silently skipping — so a molecule hitting this case (not currently known to
+> occur for any molecule, per the module's own docstring, but not proven impossible) is excluded and
+> reported like any other frequency mismatch, matching the documented all-or-nothing merge guarantee. New
+> test in `tests/test_excel_ingest.py` (synthetic bogus `mode_index=999` on water/H2O).
+> **Note (per author instruction):** the EMIT systematic 36-mode confusion matrix (`src/flag_validation.py`,
+> commit `65f4e92`, Phase 6 item above) remains built and tested but is EXCLUDED from the manuscript by
+> author decision — its "ground truth" is a threshold cut (`0.05 < M_ext < 0.95`) on continuous,
+> genuinely-mixed EMIT projection fractions, which is circular reasoning for an accuracy claim; benzene
+> EMIT is now framed purely as an extreme/rare edge-case stress test (EMIT 34-36 flag behavior, EMIT 2-vs-9
+> inversion), never as the paper's systematic classification-accuracy evidence. That role now belongs
+> entirely to the benzene-normal-modes validation documented above. 51/51 tests green
+> (`py -m pytest tests/`).
 > **Next, in order:** Phase 5 (`reproduce.py` orchestrator wiring in `src/figures.py`'s 6 functions;
 > SI Cartesian-geometry export; graphical TOC) — see Phase 5 checklist below; then the remaining two
-> Phase 6 recommended items (mixed-SB bucket validation; leave-one-molecule-out τ evaluation). The two
+> Phase 6 recommended items (mixed-SB bucket validation — now partially discharged for benzene by the
+> irrep-degeneracy complementary-pair check above, but the CoM-argument half and the full-library
+> lit-labeled-fraction reporting remain open; leave-one-molecule-out τ evaluation). The two
 > flagged pending gaps (fig:modemixing irrep-degeneracy sub-panel molecule/spec; a possible new benzene
 > low-frequency C-C stretch panel) remain BLOCKED pending lead-author/tex-data-sync confirmation, not built.
 > **After each step:** `py -m pytest tests/` should stay green.
@@ -373,7 +424,13 @@ library scores from the Excel file.
       below (`ideal=='yes'` internal rows + all externals = rigorous ground truth; `ideal=='no'`
       internal rows = non-ideal characterization) — see that Changelog entry for why pooling the two
       populations into one accuracy number risks misreading intrinsic non-ideal stretch/bend mixing as
-      classifier error.
+      classifier error. **Formalized into `confusion_matrix_stats()` itself, 2026-07-02 (Task C):** the
+      function's return value now ALSO carries `per_category[cat]["recall_ideal"]`/`["recall_nonideal"]`
+      (+`n_ref_ideal`/`n_ref_nonideal`), using the identical tier masks `plot_confusion_matrix` applies —
+      additive only, pooled keys unchanged, `src/figures.py` untouched. Verified computationally:
+      `recall_ideal["stretch"]==1.0`/`recall_ideal["bend"]==1.0` exactly (guaranteed by `tau_S`/`tau_B`'s
+      own derivation from this same population's min/max); `recall_nonideal` reproduces the figure's
+      95.7%/65.6% numbers. See RESUME HERE for the full write-up; pinned in `tests/test_calibrate.py`.
 - [x] Figure `fig:confusion` (two-tier: rigorous ground truth confusion matrix + precision/recall,
       vs. non-ideal label retention/migration-to-mixed) — **REBUILT 2026-07-02** (originally a single
       pooled-library matrix, **DONE 2026-07-02** same day; rebuilt same day after the ideal-vs-non-ideal
@@ -479,7 +536,16 @@ library scores from the Excel file.
       concern). **Promoted:** this is the direct evidentiary backbone for the manuscript's residual-risk
       discipline that mixed-SB/flagged-external buckets be "validated by characterization and
       consistency, never by an accuracy claim" — without this item that discipline is asserted but not
-      discharged.
+      discharged. **Partially discharged for benzene, 2026-07-02:** `src/benzene_validation.py`'s
+      `benzene_mixed_bond_diagnostic()` reports the fraction (5/23 ≈ 21.7% of benzene's lit-labeled bend
+      modes land in MIXED_STRETCH_BEND, zero in the wrong clean category) AND supplies the
+      irrep-degeneracy argument as a computed fact, not an eyeballed one: modes 13/14 and 23/24 are
+      detected as near-degenerate pairs (freq splitting <0.03 cm⁻¹) whose 6-bond C-C `s_AB` patterns are
+      strongly anti-correlated (r=-0.969/-0.997) — the D6h E-type-pair complementary signature. **Still
+      open:** the CoM-softening argument (this item's other half; see the OPTIONAL CoM-conservation item
+      below, not yet built) and extending the lit-labeled-fraction report beyond benzene to the whole
+      library (the pooled/non-ideal `mixed_fraction` already exists in `confusion_matrix_stats()`, Phase
+      3, but has not been explicitly written up as this item's deliverable).
 - [ ] **Out-of-sample / leave-one-molecule-out** evaluation of the τ-calibrated classifier — answers the
       "reference-free vs trained-τ" objection that the sensitivity plateau alone does not. **Promoted:**
       with the computational-cost argument now the primary defense against "why not projection/PED," a
@@ -527,6 +593,86 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-02 — Benzene normal-modes-vs-reference validation formalized as the manuscript's PRIMARY
+  classification-vs-reference result (new `src/benzene_validation.py`) + `confusion_matrix_stats()`
+  ideal/non-ideal recall split (Task C) + `excel_ingest.py` mismatch-gate robustness fix (Task D).**
+  **Manuscript positioning (per `JCC/Scoring_Manuscript_Plan_2026-07-01.pdf`, one directory above this
+  repo, which mandates the Results & Discussion order):** "Benzene normal modes -> low-frequency
+  stretching" is now the paper's PRIMARY classification-vs-reference validation. Benzene EMIT is
+  repositioned as an extreme/rare edge-case stress test only (flag behavior on EMIT 34-36, the EMIT
+  2-vs-9 `s[R]` inversion) — NOT a systematic accuracy claim. The systematic 36-mode EMIT confusion
+  matrix built earlier this session (`src/flag_validation.py`, commit `65f4e92`) is fully built and
+  tested (`tests/test_flag_validation.py`, 6 tests) but is EXCLUDED from the manuscript by author
+  decision: its "ground truth" is a threshold cut (`0.05 < M_ext < 0.95`) on continuous,
+  genuinely-mixed EMIT projection fractions — circular reasoning for an accuracy claim (the very
+  continuum being classified is used to manufacture its own ground truth). This decision is recorded
+  here, not re-litigated, and `src/flag_validation.py` itself is untouched.
+  **Why benzene's real NORMAL modes are non-circular, unlike EMIT:** the literature/group-theory
+  vibrational assignment for each of benzene's 30 real normal modes (`ref_label` in
+  `data/results/library_scores.csv`, molecule `C6H6`) is an INDEPENDENT external reference (predates
+  this code entirely) — comparing the classifier's own `predicted_label` against it is a genuine
+  accuracy check.
+  **Task A — `benzene_normal_reference_detail`/`_summary`/`run_benzene_normal_validation`:** reproduces
+  the session's ad hoc findings exactly, re-derived from `library_scores.csv` with no hardcoded numbers:
+  **6/6 external (T/R) modes correct** (`CLEAN_TRANSLATION`/`CLEAN_ROTATION` matching `ref_label`);
+  **7/7 literature-stretch modes recalled** (mode_index 12, 25-30, recall=1.0); **18/23 literature-bend
+  modes recalled** (recall=0.7826), the other 5 (mode_index 13,14,19,23,24) landing in
+  `MIXED_STRETCH_BEND`, never in the wrong clean category; **ZERO crossings into the opposite clean
+  category in either direction** (0/7 stretch->bend, 0/23 bend->stretch), computed via an explicit
+  `crossed_opposite` boolean column rather than eyeballed. Raises (fail-loud) if any `ref_label` row
+  lacks a `predicted_label` (incomplete geometry merge) or if the molecule has no `ref_label` rows at
+  all, rather than silently validating partial/stale data.
+  **Task B — `benzene_mixed_bond_diagnostic`/`run_benzene_bond_diagnostic`:** for the 5 modes Task A's
+  own output identifies as MIXED_STRETCH_BEND (not hardcoded), parses `library_scores.csv`'s
+  semicolon-joined per-bond `s_AB` string (already present, no new score computed) and reports, per mode:
+  C-C ring-bond total, C-H total, and `cc_fraction_of_V`. Confirms computationally: C-H contributions are
+  ~0 (`ch_total` 0.0088-0.0100 across all 6 C-H bonds per mode; `cc_fraction_of_V`>0.95 for all 5 modes —
+  essentially all of `V_Stretch` sits on the C-C ring); mode 19 (1319.2678 cm⁻¹) is uniform across all 6
+  ring bonds (coefficient of variation <0.02, i.e. genuinely 6-fold-symmetric, not noise). A
+  frequency-proximity check (default tolerance 1 cm⁻¹) DETECTS — rather than assumes — that modes 13/14
+  (splitting 0.0157 cm⁻¹) and 23/24 (splitting 0.0292 cm⁻¹) are near-degenerate pairs, and computes the
+  Pearson correlation of their 6-bond C-C `s_AB` vectors: **-0.969 (13/14) and -0.997 (23/24)** — a
+  strong, computed NEGATIVE (complementary/anti-correlated) pattern, the expected signature of a D6h
+  doubly-degenerate (E-type) mode pair. This turns the "complementary alternating pattern"/"genuine
+  ring-stretch-bend combination mode, not classifier noise" claim from an eyeballed observation into a
+  number. Mode 19 correctly pairs with nothing else in the 5 (its nearest same-bucket neighbor is >100
+  cm⁻¹ away).
+  Outputs: `data/results/benzene_normal_reference_{detail,summary}.csv`,
+  `data/results/benzene_mixed_{bond_diagnostic,degenerate_pairs}.csv`.
+  `tests/test_benzene_validation.py` (9 new tests): pins every number above, plus the two fail-loud paths
+  (incomplete merge; molecule absent) and a defensive check that mutating away all MIXED_STRETCH_BEND
+  labels correctly raises rather than silently reporting an empty diagnostic.
+  **Task C — `confusion_matrix_stats()` ideal/non-ideal recall split** (`src/calibrate.py`, independently
+  recommended earlier this session by both formula-auditor and lead-author): the pooled recall numbers
+  (e.g. stretch=0.7174) mix ideal-molecule rigorous ground truth with non-ideal nominal literature labels
+  into one statistic with only a prose claim, no computed/asserted split. Added
+  `per_category[cat]["recall_ideal"]`/`["recall_nonideal"]` (+`n_ref_ideal`/`n_ref_nonideal`) — purely
+  additive (existing `precision`/`recall`/`tp`/`n_ref`/`n_pred`/`mixed_fraction` keys unchanged). Tier
+  masks copied verbatim from `src/figures.py::plot_confusion_matrix`'s existing ad hoc split (commit
+  `424a666`) for identical semantics: `ideal` tier = every `kind=='external'` row (regardless of its own
+  `ideal` tag — Eckart-Sayvetz completeness makes those exact either way) OR any internal row with
+  `ideal=='yes'`; `nonideal` tier = internal rows with `ideal=='no'` only. **Verified computationally, not
+  just assumed:** `recall_ideal["stretch"]==1.0` and `recall_ideal["bend"]==1.0` EXACTLY — guaranteed by
+  construction since `tau_S`/`tau_B` (`derive_stretch_bend_thresholds`) are literally the min/max of this
+  same `ideal=='yes'` population, so no ideal-tier row can land on the wrong side of its own defining
+  boundary. `recall_nonideal` reproduces the `fig:confusion` changelog's own numbers exactly (bend
+  0.9571, stretch 0.6561). `src/figures.py` and `data/figures/*` were explicitly NOT touched (per
+  instruction — that figure already has its own correct, independently-computed ad hoc split wired into
+  the manuscript; this is an additive formalization of the same split into the stats function's return
+  value, not a replacement for the figure's plotting code). New test in `tests/test_calibrate.py`.
+  **Task D — `excel_ingest.py` mismatch-gate robustness fix** (formula-auditor finding, low priority):
+  `attach_geometry_classification()`'s `if m is None: continue` branch silently skipped a row whose
+  "Vib i" name resolves to no engine mode at all, without counting it toward the mismatch gate — meaning
+  such a row could in principle cause a partial (half-merged) attachment with no report, contradicting
+  the module's documented all-or-nothing guarantee. Not currently known to happen for any of the 25
+  geometry-backed molecules (per the module's own docstring), but not proven impossible. Fixed: `m is
+  None` now appends a `(mode_index, None, freq)` sentinel to `mismatches`, so it trips the same gate as a
+  frequency mismatch and the molecule is excluded-and-reported like any other bad merge. New synthetic
+  regression test in `tests/test_excel_ingest.py` (bogus `mode_index=999` on water/H2O, a real
+  geometry-backed molecule) confirms the row is reported and NOT half-merged, while the molecule's
+  external T/R rows (independent of this gate) still attach normally.
+  **Full suite: 51/51 tests green** (`py -m pytest tests/`; was 40/40 before this session — +1
+  `test_excel_ingest.py`, +1 `test_calibrate.py`, +9 new `test_benzene_validation.py`).
 - **2026-07-02 — `fig:confusion` rebuilt two-tier (rigorous ground truth vs. non-ideal
   characterization) + `fig:benzene` tau_S/tau_B drift fix, per figure-builder consistency audit.**
   **Why:** the library's literature `ref_label` is exact group-theory ground truth only for

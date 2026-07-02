@@ -1,0 +1,5 @@
+ref_label,n,n_correct,recall,n_crossed_opposite,n_migrated_to_mixed
+translation,3,3,1.0,0,0
+rotation,3,3,1.0,0,0
+stretch,7,7,1.0,0,0
+bend,23,18,0.782608695652174,0,5

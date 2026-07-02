@@ -16,6 +16,14 @@
 > for the full writeup. Caption-side S/B/SB gloss text (from the prior update) still outstanding.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **QUEUED, not started (author decision 2026-07-03, deliberately deferred until SI content stabilizes):**
+> merge the two standalone SI documents (`JCC_SI_computational_cost.tex`, `JCC_SI_sensitivity.tex`) into
+> ONE combined `JCC_SI.tex` before submission — Wiley/JCC convention is a single Supporting Information
+> file, not several (SI is published as-supplied, not typeset by production). Target shape: one doc with
+> continuous section/figure numbering (e.g. "S1. Elementary-Operation Derivation of Computational Cost",
+> "S2. τ_TR Threshold-Sensitivity Analysis"), still growing (full score tables, Cartesian coordinates, and
+> other content already promised in the main text's "Supporting Information" subsection still need to be
+> added too) — do the merge once that content is in, not before, to avoid re-merging repeatedly.
 > **2026-07-03 (lead-author, whole-document precision editing pass):** Author reviewed the compiled PDF
 > and requested a batch fix across `JCC_temp_LaTeXtemplate.tex`; all 8 items done, both SI docs still
 > compile clean, main doc page count unchanged (32 pages before/after):

@@ -9,6 +9,25 @@
 > newest-dated one unless told otherwise). Any agent working on the manuscript's Results & Discussion
 > section (`lead-author` especially, but also `figure-builder`/`lead-engineer` when their output feeds a
 > specific section) should be pointed at this file, not an older one.
+> **NEXT SESSION, two queued figure fixes (author-flagged 2026-07-02, deferred for budget, not started):**
+> 1. **fig:confusion's in-image footer text is too small once rescaled to column width.** The
+>    "Non-ideal tier (n=422): 0%% of bend or stretch..." sentence is drawn via `fig.text()` at 6.8pt
+>    inside `plot_confusion_matrix`'s 7.4x6.6in canvas; LaTeX's `\includegraphics[width=0.95\columnwidth]`
+>    shrinks it to ~6.2in, so the footer becomes ~5.7pt effective — below a readable floor. Move this
+>    sentence out of the rasterized/vector figure and into the actual LaTeX `\captionof{figure}{...}`
+>    text instead (typeset at normal caption font size, not shrunk with the image). Same principle may
+>    apply to other in-figure footer/annotation text if a similar pattern exists elsewhere — check.
+> 2. **Adopt the short S/B/SB notation in figure legends/labels, matching the classifier's actual
+>    output and the manuscript prose.** `src/figures.py`'s `CATEGORY_LABEL` dict currently spells out
+>    "stretching"/"bending"/"mixed stretch/bend" while the classifier itself, the main text
+>    (`\texttt{S}`/`\texttt{B}`/`\texttt{SB}`), and `tab:benzenemixed` all use the short symbols. Update
+>    `CATEGORY_LABEL` (and any other figure-specific legend/tick text using the long forms) to `S`/`B`/`SB`
+>    (possibly with a one-time in-caption gloss the first time each symbol appears, e.g. "S (stretching)",
+>    if bare single-letter legend entries read as too cryptic — author's call). This touches every figure
+>    that reuses `CATEGORY_LABEL`: `fig_confusion`, `fig_bondscores`, `fig_boxplots`, `fig_modemixing`,
+>    `fig_benzene_normal` — all would need regenerating, plus a recompile + visual re-verification pass.
+> Both are real, agreed-on fixes, not just noted-for-consideration — do them next session, in that order
+> (fix 1 is small/scoped; fix 2 is broader, touches ~5 figures, budget accordingly).
 > Last updated: 2026-07-02 (label-vocabulary rename: classifier output labels are now short and
 > axis-specific — see Changelog "Label rename" entry and RESUME HERE below).
 

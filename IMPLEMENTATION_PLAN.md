@@ -2,7 +2,13 @@
 
 > Living checklist. Tick `[x]` as parts are completed; pick up unchecked items in any later session.
 > Companion to the JCC manuscript `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, the content plan
-> `JCC/JCC_manuscript_structure_JCCformat.pdf`, and the plan slides `JCC/Scoring_Manuscript_Plan_2026-06-29.pdf`.
+> `JCC/JCC_manuscript_structure_JCCformat.pdf` (positioning spine — still current), and the plan slides.
+> **Manuscript-structure slides: `JCC/Scoring_Manuscript_Plan_2026-07-02.pdf` is now the CURRENT
+> authoritative Results & Discussion structure/content doc** (supersedes `..._2026-07-01.pdf`, which
+> itself superseded `..._2026-06-29.pdf` — all three are kept on disk for history; always use the
+> newest-dated one unless told otherwise). Any agent working on the manuscript's Results & Discussion
+> section (`lead-author` especially, but also `figure-builder`/`lead-engineer` when their output feeds a
+> specific section) should be pointed at this file, not an older one.
 > Last updated: 2026-07-02 (label-vocabulary rename: classifier output labels are now short and
 > axis-specific — see Changelog "Label rename" entry and RESUME HERE below).
 
@@ -219,13 +225,36 @@
 > --stat` showing 0 insertions/deletions, same byte counts, only embedded PDF metadata differs). No
 > stale/raw label strings (e.g. `"Tx*"`, `"SB"`) found anywhere a descriptive English label was
 > expected. 51/51 tests still green. Committed + pushed.
-> **Next:** `lead-author` to update the `.tex`'s literal `\textsc{clean_translation}`-style label
-> references + the benzene table to the new short symbols — see `project_jcc-manuscript.md`/
-> `project_jcc-scoring-program.md` memory for detail. Then Phase 5 (`reproduce.py` orchestrator wiring; SI Cartesian-geometry export; graphical TOC)
-> and the remaining two Phase 6 recommended items (mixed-SB bucket CoM-argument half; leave-one-molecule-out
-> τ evaluation). The two previously-flagged pending gaps (fig:modemixing irrep-degeneracy sub-panel;
-> possible new benzene low-frequency C-C stretch panel) remain BLOCKED pending lead-author/tex-data-sync
-> confirmation, not built.
+> **In flight (2026-07-02):** `lead-author` dispatched to (a) fix the `.tex`'s literal
+> `\textsc{clean_translation}`-style label references to the new short symbols, and (b) align the
+> manuscript against **`JCC/Scoring_Manuscript_Plan_2026-07-02.pdf`** — the newer structure doc (one
+> day after `..._2026-07-01.pdf`) which adds specific Results & Discussion CONTENT requirements beyond
+> section order, not yet confirmed done as of this update:
+>   - **Ideal vs. non-ideal section:** confirm the prose explicitly states "pure S/B labels for
+>     non-ideal molecules are not true references — they are based on ideal molecules" (should already
+>     match the two-tier confusion-matrix work); add a scope note if missing: the library covers all
+>     shapes but assumes one-central-atom molecules for the pure-S/B ideal reference to hold cleanly,
+>     and that SB (mixed) character delocalizes more in larger molecules.
+>   - **Benzene normal modes:** the slide wants the score-vs-frequency distribution explicitly
+>     compared against named worked-example modes — a ring-breathing mode, some SB (mixed) modes, and a
+>     C-H stretching mode. **NOT YET IDENTIFIED which specific mode indices these are** in
+>     `data/results/benzene_normal_classified.csv`/`library_scores.csv` — this needs a `lead-engineer`
+>     (or `chemist`) pass to identify by symmetry/frequency signature (ring-breathing is typically the
+>     lowest-frequency totally-symmetric A1g-type mode; C-H stretching is the highest-frequency STRETCHING-
+>     labeled mode, likely one of mode_index 25-30 per the existing validation numbers) — do not guess
+>     this in prose without a computed identification. Also unclear whether the existing `fig:benzene`
+>     (framed as the EMIT stress test) can be reused/repurposed for this section's "score distribution
+>     over frequencies" figure, or whether a NEW dedicated figure is needed — flagged, not resolved.
+>   - **Benzene EMIT modes:** confirm the τ_B-specific flagging framing and the "extreme case that
+>     rarely occurs" limitation note are both explicit (likely already true from the earlier reframing
+>     this session, just needs confirming against the newer doc's exact wording).
+> **After lead-author reports back:** likely follow-up dispatches — `lead-engineer` to identify/compute
+> the ring-breathing and C-H-stretching worked-example mode indices for benzene (a small, well-scoped
+> analysis, not a new pipeline), then `figure-builder` if a new benzene score-vs-frequency figure is
+> confirmed needed (distinct from `fig:benzene`'s EMIT-stress-test framing). Then Phase 5 (`reproduce.py`
+> orchestrator wiring; SI Cartesian-geometry export; graphical TOC) and the remaining two Phase 6
+> recommended items (mixed-SB bucket CoM-argument half; leave-one-molecule-out τ evaluation). The
+> `fig:modemixing` irrep-degeneracy sub-panel gap remains BLOCKED pending confirmation, not built.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).

@@ -3,10 +3,8 @@
 > Living checklist. Tick `[x]` as parts are completed; pick up unchecked items in any later session.
 > Companion to the JCC manuscript `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, the content plan
 > `JCC/JCC_manuscript_structure_JCCformat.pdf`, and the plan slides `JCC/Scoring_Manuscript_Plan_2026-06-29.pdf`.
-> Last updated: 2026-07-02 (benzene normal-modes-vs-reference validation formalized as the manuscript's
-> PRIMARY classification-vs-reference result, per `JCC/Scoring_Manuscript_Plan_2026-07-01.pdf`'s
-> mandated Results & Discussion order; `confusion_matrix_stats()` ideal/non-ideal recall split;
-> `excel_ingest.py` mismatch-gate robustness fix — see Changelog).
+> Last updated: 2026-07-02 (label-vocabulary rename: classifier output labels are now short and
+> axis-specific — see Changelog "Label rename" entry and RESUME HERE below).
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -180,13 +178,49 @@
 > inversion), never as the paper's systematic classification-accuracy evidence. That role now belongs
 > entirely to the benzene-normal-modes validation documented above. 51/51 tests green
 > (`py -m pytest tests/`).
-> **Next, in order:** Phase 5 (`reproduce.py` orchestrator wiring in `src/figures.py`'s 6 functions;
-> SI Cartesian-geometry export; graphical TOC) — see Phase 5 checklist below; then the remaining two
-> Phase 6 recommended items (mixed-SB bucket validation — now partially discharged for benzene by the
-> irrep-degeneracy complementary-pair check above, but the CoM-argument half and the full-library
-> lit-labeled-fraction reporting remain open; leave-one-molecule-out τ evaluation). The two
-> flagged pending gaps (fig:modemixing irrep-degeneracy sub-panel molecule/spec; a possible new benzene
-> low-frequency C-C stretch panel) remain BLOCKED pending lead-author/tex-data-sync confirmation, not built.
+> **LABEL-VOCABULARY RENAME (2026-07-02, author-directed, IN PROGRESS as of this update):** classifier
+> output labels are now short and axis-specific, replacing the old generic constants. Mapping:
+> `CLEAN_TRANSLATION`/`CLEAN_ROTATION` (any axis) → the specific Step-2 slot name the mode actually won
+> (`"Tx"`,`"Ty"`,`"Tz"`,`"Rx"`,`"Ry"`,`"Rz"`); `MIXED_EXTERNAL_WITH_VIBRATION` → the same slot name with
+> a trailing `"*"` (`"Tx*"` etc.); `STRETCHING`/`BENDING`/`MIXED_STRETCH_BEND` → `"S"`/`"B"`/`"SB"` (the
+> Python constant NAMES in `src/classifier.py` are unchanged, only their string VALUES). New helper
+> predicates in `src/classifier.py`: `is_external_label()`, `external_axis()`, `is_clean_external()`,
+> `is_mixed_external()`, `is_translation()`, `is_rotation()`, `classification_bucket()` (the last maps
+> ANY classification label to one of 6 semantic buckets — `"translation"/"rotation"/"stretch"/"bend"/
+> "mixed"/"mixed_external"` — for anything needing the old coarse-category behavior, e.g.
+> `src/figures.py`'s `CATEGORY_COLOR`/`CATEGORY_MARKER`/`CATEGORY_LABEL`, now keyed by these 6 bucket
+> names instead of the old label strings). Mixed-external annotations dropped the now-redundant
+> `dominant_external=<slot>` prefix (the slot is already IN the classification string) — annotation is
+> now just `"vibration=<S|B|SB>"`.
+> **Recovery note for a future session finding this mid-flight:** a `lead-engineer` dispatch did the
+> core rename (`classifier.py`, `calibrate.py`'s bucket logic, `projection.py`, `benzene_validation.py`,
+> `flag_validation.py`) correctly but was cut off by a session-limit hit before finishing propagation —
+> left the repo NOT importable (`tests/test_classifier.py`/`test_calibrate.py` failed to import
+> `CLEAN_TRANSLATION`, which no longer exists) and nothing committed. The main session finished the
+> propagation directly (not re-dispatched, to conserve session budget): fixed `src/figures.py`'s category
+> dicts, updated every test file's assertions to the new scheme, and re-ran the full regeneration chain
+> (`main.run_classify_pipeline`/`run_projection_pipeline` for water/benzene/CO2 → `src/excel_ingest.
+> run_ingest_pipeline()` [genuinely slow: ~630s just to parse the workbook's two sheets via openpyxl,
+> not a hang — this workbook's Data-Validation extension parses slowly; NOT the reported "~1 minute" the
+> tests' docstrings claimed, that estimate was wrong/optimistic] → `src/calibrate.run_calibration_pipeline()`
+> → `src/benzene_validation.run_benzene_normal_validation()`/`run_benzene_bond_diagnostic()` →
+> `src/flag_validation.run_flag_validation_pipeline()`). **If resuming and this note is still here
+> unresolved:** check `git status`/`git log` in `Github/scoring-functions/` first — the rename may have
+> finished and been committed after this note was written (check for a commit message mentioning the
+> label rename after `8c0e27c`), or the CSV regeneration chain above may need re-running if it didn't
+> finish (`py -m pytest tests/` will fail loudly with stale-label assertion mismatches if so, not a silent
+> corruption). Do NOT re-dispatch a fresh `lead-engineer` for this without checking working-tree state
+> first — the pattern this session (and the 2026-07-02 Phase-3 session before it) both confirm:
+> interrupted-by-limit work is usually recoverable, not lost.
+> **Next, in order (once the rename settles):** dispatch `figure-builder` to re-render all 6 figures
+> (their legends currently show the OLD label text baked in from before this rename) and `lead-author`
+> to update the `.tex`'s literal `\textsc{clean_translation}`-style label references + the benzene table
+> to the new short symbols — see `project_jcc-manuscript.md`/`project_jcc-scoring-program.md` memory for
+> detail. Then Phase 5 (`reproduce.py` orchestrator wiring; SI Cartesian-geometry export; graphical TOC)
+> and the remaining two Phase 6 recommended items (mixed-SB bucket CoM-argument half; leave-one-molecule-out
+> τ evaluation). The two previously-flagged pending gaps (fig:modemixing irrep-degeneracy sub-panel;
+> possible new benzene low-frequency C-C stretch panel) remain BLOCKED pending lead-author/tex-data-sync
+> confirmation, not built.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
@@ -593,6 +627,55 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-02 — Label-vocabulary rename: classifier output labels are now short and axis-specific
+  (author-directed design decision, not a bug fix). Recovered from a session-limit interruption
+  mid-rename; nothing was lost.** Old scheme: `CLEAN_TRANSLATION`/`CLEAN_ROTATION` (generic, axis-blind)/
+  `MIXED_EXTERNAL_WITH_VIBRATION`/`STRETCHING`/`BENDING`/`MIXED_STRETCH_BEND`. New scheme: clean external
+  → the specific Step-2 slot the mode won (`"Tx"`,`"Ty"`,`"Tz"`,`"Rx"`,`"Ry"`,`"Rz"`); mixed external →
+  same slot + trailing `"*"` (`"Tx*"` etc.); internal vibration → `"S"`/`"B"`/`"SB"` (the Python constant
+  NAMES `STRETCHING`/`BENDING`/`MIXED_STRETCH_BEND` in `src/classifier.py` are unchanged, only their
+  string VALUES). `src/classifier.py` gained reusable predicates (`is_external_label`, `external_axis`,
+  `is_clean_external`, `is_mixed_external`, `is_translation`, `is_rotation`, `classification_bucket`) so
+  downstream code checks label PATTERNS instead of exact-matching a small fixed set of constants.
+  Mixed-external annotations dropped the now-redundant `dominant_external=<slot>` prefix (the slot is
+  already in the classification string itself) — annotation is now just `"vibration=<S|B|SB>"`.
+  **What happened this session:** a `lead-engineer` dispatch did the core rename correctly in
+  `classifier.py`/`calibrate.py`/`projection.py`/`benzene_validation.py`/`flag_validation.py` (including
+  proactively fixing a latent desync risk in `projection.py` by importing the vibration-label constants
+  instead of hardcoding their string values) but was cut off by a session-limit hit before finishing
+  propagation to `src/figures.py`, 5 test files, and regenerating the committed CSVs — left the repo
+  NOT EVEN IMPORTABLE (`ImportError: cannot import name 'CLEAN_TRANSLATION'`) and nothing committed.
+  The main session verified this (ran `git diff`/`git status`, confirmed via `py -m pytest` that
+  collection itself failed) and finished the work directly rather than re-dispatching, to conserve
+  session budget: reworked `src/figures.py`'s `CATEGORY_COLOR`/`CATEGORY_MARKER`/`CATEGORY_LABEL` to key
+  on the 6 semantic buckets `classification_bucket()` returns (`translation`/`rotation`/`stretch`/`bend`/
+  `mixed`/`mixed_external`) instead of the old label strings; updated every assertion in
+  `tests/test_classifier.py`, `test_calibrate.py`, `test_excel_ingest.py`, `test_flag_validation.py`,
+  `test_benzene_validation.py` to the new scheme; then re-ran the full regeneration chain in dependency
+  order (`main.run_classify_pipeline`/`run_projection_pipeline` for water/benzene/CO2 →
+  `src/excel_ingest.run_ingest_pipeline()` → `src/calibrate.run_calibration_pipeline()` →
+  `src/benzene_validation.run_benzene_normal_validation()`/`run_benzene_bond_diagnostic()` →
+  `src/flag_validation.run_flag_validation_pipeline()`) to refresh every committed CSV that stores these
+  labels as data, not just code.
+  **A genuine surprise along the way, not a bug:** the Excel ingest step took roughly **630 seconds
+  just to parse the workbook's two sheets** via `openpyxl` (its `Data Validation extension is not
+  supported` warning correlates with a known slow path) — nearly 15x the "on the order of a minute"
+  estimate in `tests/test_excel_ingest.py`'s/`test_calibrate.py`'s own docstrings. This first looked
+  like a hung process (near-zero CPU on the `py` launcher for 10+ minutes) and was killed once
+  prematurely before the mistake was caught: `py.exe`(the launcher) shows ~0 CPU because the REAL work
+  happens in a child `python3.13.exe` process, which was climbing steadily the whole time — always check
+  the child process tree, not just the top-level launcher PID, before concluding a job is stuck. Those
+  test docstrings' timing estimate should be corrected in a future pass (flagged here, not fixed this
+  session — out of scope for a documentation-only nit during an active recovery).
+  **Not yet done this session (queued next, in order):** `figure-builder` needs to re-render all 6
+  figures (their legends currently bake in the OLD label text from before this rename) and `lead-author`
+  needs to update the `.tex`'s literal `\textsc{clean_translation}`-style references + the benzene table
+  to the new short symbols. Historical Changelog entries below this one, and Phase 2's original
+  checklist prose, still use the OLD label names as an accurate record of what was true when they were
+  written — not updated for this rename, matching this file's own established precedent from the
+  earlier τ-renaming (which WAS propagated throughout; this rename's historical-prose mentions were
+  judged lower-value to rewrite given the volume of scattered occurrences versus the session budget
+  already spent recovering from the interruption above).
 - **2026-07-02 — Benzene normal-modes-vs-reference validation formalized as the manuscript's PRIMARY
   classification-vs-reference result (new `src/benzene_validation.py`) + `confusion_matrix_stats()`
   ideal/non-ideal recall split (Task C) + `excel_ingest.py` mismatch-gate robustness fix (Task D).**

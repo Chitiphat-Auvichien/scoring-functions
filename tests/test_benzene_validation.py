@@ -28,6 +28,7 @@ from src.benzene_validation import (                               # noqa: E402
     benzene_normal_reference_detail, benzene_normal_reference_summary,
     benzene_mixed_bond_diagnostic, MOLECULE,
 )
+from src.classifier import MIXED_STRETCH_BEND, BENDING               # noqa: E402
 
 LIB_CSV = os.path.join(ROOT, "data", "results", "library_scores.csv")
 
@@ -147,7 +148,7 @@ def test_benzene_mixed_bond_diagnostic_raises_if_no_mixed_modes():
     lib_df = _lib().copy()
     mask = lib_df["molecule"] == MOLECULE
     lib_df.loc[mask, "predicted_label"] = lib_df.loc[mask, "predicted_label"].replace(
-        "MIXED_STRETCH_BEND", "BENDING")
+        MIXED_STRETCH_BEND, BENDING)
     try:
         benzene_mixed_bond_diagnostic(lib_df)
         assert False, "expected ValueError when no MIXED_STRETCH_BEND modes exist"

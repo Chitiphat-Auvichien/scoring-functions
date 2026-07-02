@@ -26,6 +26,7 @@ import pandas as pd                                                # noqa: E402
 from src.excel_ingest import (                                     # noqa: E402
     resolve_log_basename, EXCLUDED_MOLECULES, attach_geometry_classification,
 )
+from src.classifier import is_clean_external                       # noqa: E402
 
 LIB_CSV = os.path.join(ROOT, "data", "results", "library_scores.csv")
 
@@ -95,11 +96,11 @@ def test_geometry_backed_molecules_have_external_rows():
 
 def test_external_rows_classify_clean_translation_rotation():
     """Ideal T/R references (Eckart-Sayvetz, exact for normal modes) must
-    classify CLEAN_TRANSLATION/CLEAN_ROTATION for every geometry-backed
+    classify clean (bare "Tx".."Rz", no trailing "*") for every geometry-backed
     molecule -- this is the completeness guarantee, not an anecdotal check."""
     df = _load()
     ext = df[df["kind"] == "external"]
-    bad = ext[~ext["predicted_label"].isin(["CLEAN_TRANSLATION", "CLEAN_ROTATION"])]
+    bad = ext[~ext["predicted_label"].apply(is_clean_external)]
     assert len(bad) == 0, bad[["molecule", "mode_index", "predicted_label"]]
 
 
@@ -116,8 +117,7 @@ def test_water_o_series_internal_rows_correctly_unmerged():
         assert not internal["has_geometry"].any(), mol
         external = df[(df["molecule"] == mol) & (df["kind"] == "external")]
         assert external["has_geometry"].all(), mol
-        assert external["predicted_label"].isin(
-            ["CLEAN_TRANSLATION", "CLEAN_ROTATION"]).all(), mol
+        assert external["predicted_label"].apply(is_clean_external).all(), mol
 
 
 def test_bond_scores_sum_to_v_stretch():

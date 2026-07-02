@@ -33,7 +33,7 @@ sys.path.insert(0, ROOT)
 from main import load_inputs, build_scorer_and_final              # noqa: E402
 from src.classifier import (                                       # noqa: E402
     classify_all_modes, classify_to_rows, Thresholds,
-    CLEAN_TRANSLATION, CLEAN_ROTATION, MIXED_EXTERNAL_WITH_VIBRATION,
+    is_mixed_external,
     STRETCHING, BENDING, MIXED_STRETCH_BEND,
 )
 
@@ -52,12 +52,12 @@ def _classify(mol, mode_type):
 
 
 def test_water_normal_externals_clean():
-    """The 6 ideal T/R reference modes classify clean (score>=tau_TR, V<=tau_B)."""
+    """The 6 ideal T/R reference modes classify clean (score>=tau_TR, V<=tau_B) --
+    i.e. the bare slot name itself ("Tx".."Rz"), per the 2026-07-02 axis-specific
+    label rename (no more generic CLEAN_TRANSLATION/CLEAN_ROTATION constants)."""
     t = _classify("water", "normal")
-    for lbl in ("Tx", "Ty", "Tz"):
-        assert t[lbl]["classification"] == CLEAN_TRANSLATION, t[lbl]["classification"]
-    for lbl in ("Rx", "Ry", "Rz"):
-        assert t[lbl]["classification"] == CLEAN_ROTATION, t[lbl]["classification"]
+    for lbl in ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz"):
+        assert t[lbl]["classification"] == lbl, t[lbl]["classification"]
 
 
 def test_water_normal_vibrations():
@@ -74,25 +74,28 @@ def test_water_normal_vibrations():
 
 
 def test_benzene_emit_34_35_mixed_external():
-    """EMIT 34/35 (E1u, |s[T]|=1 but V_Stretch=0.667/0.577 > tau_B) fail gate 2 -> flagged,
-    with the annotation naming the correct dominant external slot."""
+    """EMIT 34/35 (E1u, |s[T]|=1 but V_Stretch=0.667/0.577 > tau_B) fail gate 2 -> flagged
+    with the axis-specific mixed-external label ("Tx*"/"Ty*", 2026-07-02 rename); the axis
+    is now IN the classification itself, so the annotation only carries the vibration
+    sub-label (no more redundant "dominant_external=..." text)."""
     t = _classify("benzene", "emit")
-    assert t["EMIT 34"]["classification"] == MIXED_EXTERNAL_WITH_VIBRATION
-    assert "dominant_external=Tx" in t["EMIT 34"]["annotation"]
-    assert t["EMIT 35"]["classification"] == MIXED_EXTERNAL_WITH_VIBRATION
-    assert "dominant_external=Ty" in t["EMIT 35"]["annotation"]
+    assert t["EMIT 34"]["classification"] == "Tx*"
+    assert is_mixed_external(t["EMIT 34"]["classification"])
+    assert t["EMIT 34"]["annotation"] == f"vibration={MIXED_STRETCH_BEND}"
+    assert t["EMIT 35"]["classification"] == "Ty*"
+    assert t["EMIT 35"]["annotation"] == f"vibration={MIXED_STRETCH_BEND}"
 
 
 def test_benzene_emit_36_clean_translation_blind_spot():
-    """EMIT 36 (A2u, |s[Tz]|=1, V_Stretch=0) passes BOTH gates -> CLEAN_TRANSLATION.
+    """EMIT 36 (A2u, |s[Tz]|=1, V_Stretch=0) passes BOTH gates -> bare "Tz" (clean).
 
     This is the documented, INTENTIONAL blind spot (IMPLEMENTATION_PLAN.md Decision X):
     the two-gate purity test cannot see EMIT 36's out-of-plane bending residual because
-    s[V_S]=0 for it too (bending, not stretching). Reproducing CLEAN_TRANSLATION here is
+    s[V_S]=0 for it too (bending, not stretching). Reproducing clean "Tz" here is
     correct -- do not "fix" this.
     """
     t = _classify("benzene", "emit")
-    assert t["EMIT 36"]["classification"] == CLEAN_TRANSLATION
+    assert t["EMIT 36"]["classification"] == "Tz"
     assert abs(t["EMIT 36"]["V"]) < TOL
 
 
@@ -111,8 +114,8 @@ def test_co2_linear_no_spurious_onaxis_mode():
     t = _classify("co2_mp2_3-21g", "normal")
     assert len(t) == 9  # 3N for a 3-atom linear molecule, not 3N+1
     assert "Rx" not in t
-    assert t["Ry"]["classification"] == CLEAN_ROTATION
-    assert t["Rz"]["classification"] == CLEAN_ROTATION
+    assert t["Ry"]["classification"] == "Ry"
+    assert t["Rz"]["classification"] == "Rz"
     # the 2 bends and 2 stretches must be the REAL vibrational modes, not a
     # spurious all-zero placeholder
     vib_labels = {name: m["classification"] for name, m in t.items() if name.startswith("Vib")}

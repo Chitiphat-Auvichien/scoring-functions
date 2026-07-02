@@ -3,17 +3,18 @@ validation -- IMPLEMENTATION_PLAN.md Phase 6, item 1: "Flag precision/recall
 over ALL 36 benzene EMIT modes (and library externals) against the C2
 projection reference." Promotes the prior anecdotal EMIT 2/9/34-36 spot-check
 into a full 36-mode confusion count, since benzene EMIT is this manuscript's
-only remaining stress test of the classifier's MIXED_EXTERNAL_WITH_VIBRATION
-flag (Gramicidin's scale demonstration was deferred to the companion paper,
-Decision 5).
+only remaining stress test of the classifier's mixed-external flag (an axis
+label with a trailing "*", e.g. "Tx*"; Gramicidin's scale demonstration was
+deferred to the companion paper, Decision 5).
 
 What is being compared
 -----------------------
 - classify_all_modes()'s PREDICTED flag: does Algorithm 1's two-gate purity
-  test (src/classifier.py Step 3) label a mode MIXED_EXTERNAL_WITH_VIBRATION
-  ("predicted positive") or not ("predicted negative" -- this collapses
-  CLEAN_TRANSLATION/CLEAN_ROTATION/STRETCHING/BENDING/MIXED_STRETCH_BEND into
-  one bucket, since a mode never even assigned an external slot in Step 2 has
+  test (src/classifier.py Step 3) give a mode the mixed-external flag (an
+  axis label with a trailing "*", e.g. "Tx*") ("predicted positive") or not
+  ("predicted negative" -- this collapses every clean-external label
+  ("Tx".."Rz") and every Step-4 internal label ("S"/"B"/"SB") into one
+  bucket, since a mode never even assigned an external slot in Step 2 has
   no opportunity to be flagged at all -- see the FN-mechanism note below).
 - The projection's (src/projection.py, eq:emitproj) GROUND TRUTH: does the
   mode genuinely have fractional external+vibration character?
@@ -55,7 +56,7 @@ translation") to a SECOND, independent, and more widespread cause: Step 2's
 plain one-to-one linear_sum_assignment only ever assigns exactly n_T+n_R=6
 of the 36 modes an external slot at all (by construction -- the algorithm
 spec's global assignment, not a bug); the other 30 modes fall straight to
-Step 4 and can NEVER be flagged MIXED_EXTERNAL_WITH_VIBRATION regardless of
+Step 4 and can NEVER receive the mixed-external flag regardless of
 how much genuine external character their projection shows (e.g. EMIT 1, 2,
 5, 7, 8, 10-14, 18 all have 7-39% external character by projection but are
 Step-2 assignment "losers" for their slot, not just amplitude-degenerate
@@ -72,7 +73,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from src.classifier import Thresholds, MIXED_EXTERNAL_WITH_VIBRATION
+from src.classifier import Thresholds, is_mixed_external
 
 # Ground-truth thresholds on the projection-derived max external fraction.
 GT_EXT_LO = 0.05
@@ -135,7 +136,7 @@ def benzene_emit_flag_confusion(data_dir="data", thresholds=None,
         m = by_name[name]
         m_ext = float(r["M_ext"])
         gt_pos = ext_lo < m_ext < ext_hi
-        pred_pos = m["classification"] == MIXED_EXTERNAL_WITH_VIBRATION
+        pred_pos = is_mixed_external(m["classification"])
         if pred_pos and gt_pos:
             cell = "TP"
         elif pred_pos and not gt_pos:
@@ -171,8 +172,8 @@ def library_external_flag_confusion(data_dir="data", lib_df=None):
     Eckart-Sayvetz completeness -- meaning M_ext=1.0 exactly for every one of
     these rows without needing to actually run project_emit on them. Ground
     truth is therefore CLEAN for 100% of these rows; this function verifies
-    (rather than assumes) that the classifier's predicted_label is never
-    MIXED_EXTERNAL_WITH_VIBRATION for any of them (FP=0) -- the same fact
+    (rather than assumes) that the classifier's predicted_label never carries
+    the mixed-external flag for any of them (FP=0) -- the same fact
     src/calibrate.py's tau_TR sensitivity sweep already established
     indirectly (100% accuracy at every grid point), re-expressed here as a
     directly comparable flag-confusion count alongside the benzene EMIT
@@ -186,7 +187,7 @@ def library_external_flag_confusion(data_dir="data", lib_df=None):
     if lib_df is None:
         lib_df = pd.read_csv(os.path.join(data_dir, "results", "library_scores.csv"))
     ext = lib_df[(lib_df["kind"] == "external") & (lib_df["has_geometry"])].copy()
-    pred_pos = (ext["predicted_label"] == MIXED_EXTERNAL_WITH_VIBRATION).to_numpy()
+    pred_pos = ext["predicted_label"].apply(is_mixed_external).to_numpy()
     gt_pos = np.zeros(len(ext), dtype=bool)  # exact completeness -> ground truth always CLEAN
     stats = _confusion_from_bools(pred_pos, gt_pos)
     stats["n_molecules"] = int(ext["molecule"].nunique())

@@ -54,10 +54,7 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
-from src.classifier import (
-    STRETCHING, BENDING, MIXED_STRETCH_BEND,
-    CLEAN_TRANSLATION, CLEAN_ROTATION,
-)
+from src.classifier import classification_bucket
 
 MOLECULE = "C6H6"
 
@@ -67,14 +64,6 @@ MOLECULE = "C6H6"
 # already embedded in library_scores.csv's s_AB string (src/excel_ingest.py's
 # _bond_string()), so no separate atom-type lookup is needed here.
 _CC_RING_BONDS = ("C1-C2", "C2-C3", "C3-C4", "C4-C5", "C5-C6", "C1-C6")
-
-_PRED_TO_BUCKET = {
-    STRETCHING: "stretch",
-    BENDING: "bend",
-    MIXED_STRETCH_BEND: "mixed",
-    CLEAN_TRANSLATION: "translation",
-    CLEAN_ROTATION: "rotation",
-}
 
 
 def _load_lib(lib_df, data_dir):
@@ -116,7 +105,7 @@ def benzene_normal_reference_detail(lib_df=None, data_dir="data"):
             "attach_geometry_classification() did not merge these (frequency "
             "mismatch?). Cannot validate against an incomplete merge.")
 
-    b["predicted_bucket"] = b["predicted_label"].map(_PRED_TO_BUCKET).fillna(b["predicted_label"])
+    b["predicted_bucket"] = b["predicted_label"].map(classification_bucket)
     b["correct"] = b["predicted_bucket"] == b["ref_label"]
     b["crossed_opposite"] = (
         ((b["ref_label"] == "bend") & (b["predicted_bucket"] == "stretch")) |

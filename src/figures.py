@@ -46,9 +46,8 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 from src.classifier import (
-    Thresholds, vib_label,
+    Thresholds, vib_label, classification_bucket,
     STRETCHING, BENDING, MIXED_STRETCH_BEND,
-    CLEAN_TRANSLATION, CLEAN_ROTATION, MIXED_EXTERNAL_WITH_VIBRATION,
 )
 
 # --------------------------------------------------------------------------
@@ -73,23 +72,29 @@ COLORS = {
     "confusion_cmap": "Blues",    # sequential, colorblind-safe -- fig:confusion heatmap
 }
 
-# Reference-label (library ground truth) -> shared classification-category
-# constant, so fig:confusion/fig:bondscores/fig:boxplots/fig:modemixing all
-# color/mark "stretch"/"bend"/"translation"/"rotation" identically to
-# fig:benzene's STRETCHING/BENDING/CLEAN_TRANSLATION/CLEAN_ROTATION points.
+# Reference-label (library ground truth) / predicted-bucket -> shared
+# classification-CATEGORY name. Since the 2026-07-02 label rename made clean/
+# mixed-external classifier labels axis-specific ("Tx".."Rz", "Tx*".."Rz*"
+# -- 12 distinct raw strings, no longer 2-3 fixed constants), the CATEGORY
+# vocabulary these dicts translate INTO is now the 6 bucket names
+# src.classifier.classification_bucket() already returns ("translation",
+# "rotation", "stretch", "bend", "mixed", "mixed_external") -- and ref_label/
+# pred_bucket values already ARE exactly those bucket names, so both dicts
+# below are now IDENTITY maps. Kept (not deleted) so the ~15 call sites
+# elsewhere in this file (`CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[r]]` etc.)
+# don't all need touching; for a RAW per-mode classifier label (e.g.
+# fig:benzene panel (a)'s `row["label"]`, which can be "Tx", "Tx*", "S", ...),
+# convert with `classification_bucket()` first, then use directly as the key.
 REF_LABEL_TO_CATEGORY = {
-    "translation": CLEAN_TRANSLATION,
-    "rotation": CLEAN_ROTATION,
-    "stretch": STRETCHING,
-    "bend": BENDING,
+    "translation": "translation",
+    "rotation": "rotation",
+    "stretch": "stretch",
+    "bend": "bend",
 }
-# Predicted-bucket (confusion_matrix_stats' "_pred_bucket") -> category,
-# extending the above with the two bucket names that only appear as
-# predictions, never as reference labels.
 PRED_BUCKET_TO_CATEGORY = dict(REF_LABEL_TO_CATEGORY)
 PRED_BUCKET_TO_CATEGORY.update({
-    "mixed": MIXED_STRETCH_BEND,
-    "mixed_external": MIXED_EXTERNAL_WITH_VIBRATION,
+    "mixed": "mixed",
+    "mixed_external": "mixed_external",
 })
 
 # The one new visual dimension needed by the library figures: ideal vs.
@@ -103,31 +108,37 @@ IDEAL_STYLE = {
     "no": {"filled": False, "label": "non-ideal", "alpha": 0.85},
 }
 
+# Keyed by the 6 CATEGORY bucket names (see REF_LABEL_TO_CATEGORY comment
+# above), not by raw classifier label strings -- translation/rotation share
+# one color+marker (as they always have; only the legend/tick TEXT in
+# CATEGORY_LABEL distinguishes them), matching every individual axis-specific
+# clean-external label ("Tx".."Rz") or mixed-external label ("Tx*".."Rz*")
+# once routed through classification_bucket().
 CATEGORY_COLOR = {
-    "CLEAN_TRANSLATION": COLORS["external"],
-    "CLEAN_ROTATION": COLORS["external"],
-    "BENDING": COLORS["bending"],
-    "STRETCHING": COLORS["stretching"],
-    "MIXED_STRETCH_BEND": COLORS["mixed"],
-    "MIXED_EXTERNAL_WITH_VIBRATION": COLORS["mixed_ext"],
+    "translation": COLORS["external"],
+    "rotation": COLORS["external"],
+    "bend": COLORS["bending"],
+    "stretch": COLORS["stretching"],
+    "mixed": COLORS["mixed"],
+    "mixed_external": COLORS["mixed_ext"],
 }
 
 CATEGORY_MARKER = {
-    "CLEAN_TRANSLATION": "X",
-    "CLEAN_ROTATION": "X",
-    "BENDING": "o",
-    "STRETCHING": "s",
-    "MIXED_STRETCH_BEND": "^",
-    "MIXED_EXTERNAL_WITH_VIBRATION": "P",
+    "translation": "X",
+    "rotation": "X",
+    "bend": "o",
+    "stretch": "s",
+    "mixed": "^",
+    "mixed_external": "P",
 }
 
 CATEGORY_LABEL = {
-    "CLEAN_TRANSLATION": "clean translation",
-    "CLEAN_ROTATION": "clean rotation",
-    "BENDING": "bending",
-    "STRETCHING": "stretching",
-    "MIXED_STRETCH_BEND": "mixed stretch/bend",
-    "MIXED_EXTERNAL_WITH_VIBRATION": "mixed external+vibration",
+    "translation": "clean translation",
+    "rotation": "clean rotation",
+    "bend": "bending",
+    "stretch": "stretching",
+    "mixed": "mixed stretch/bend",
+    "mixed_external": "mixed external+vibration",
 }
 
 # Calibrated classifier thresholds (src/calibrate.py's frozen
@@ -280,7 +291,7 @@ def plot_benzene_stress_test(
     # ---------------- Panel (a): s[V_S] vs frequency, 36 normal modes -----
     seen_labels = set()
     for _, row in normal.iterrows():
-        cat = row["label"]
+        cat = classification_bucket(row["label"])
         color = CATEGORY_COLOR.get(cat, "black")
         marker = CATEGORY_MARKER.get(cat, "o")
         plot_kwargs = dict(color=color, marker=marker, s=26,
@@ -672,16 +683,16 @@ def plot_bond_scores(
     ax.set_ylim(-0.03, 1.05)
 
     legend_elems = [
-        Line2D([0], [0], marker=CATEGORY_MARKER[STRETCHING], color="none",
+        Line2D([0], [0], marker=CATEGORY_MARKER["stretch"], color="none",
                markerfacecolor=COLORS["stretching"], markeredgecolor=COLORS["stretching"],
                markersize=6, label="stretching, ideal"),
-        Line2D([0], [0], marker=CATEGORY_MARKER[STRETCHING], color="none",
+        Line2D([0], [0], marker=CATEGORY_MARKER["stretch"], color="none",
                markerfacecolor="none", markeredgecolor=COLORS["stretching"],
                markersize=6, label="stretching, non-ideal"),
-        Line2D([0], [0], marker=CATEGORY_MARKER[BENDING], color="none",
+        Line2D([0], [0], marker=CATEGORY_MARKER["bend"], color="none",
                markerfacecolor=COLORS["bending"], markeredgecolor=COLORS["bending"],
                markersize=6, label="bending, ideal"),
-        Line2D([0], [0], marker=CATEGORY_MARKER[BENDING], color="none",
+        Line2D([0], [0], marker=CATEGORY_MARKER["bend"], color="none",
                markerfacecolor="none", markeredgecolor=COLORS["bending"],
                markersize=6, label="bending, non-ideal"),
     ]

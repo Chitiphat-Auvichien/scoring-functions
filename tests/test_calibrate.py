@@ -34,8 +34,8 @@ import pandas as pd                                                 # noqa: E402
 from main import load_inputs, build_scorer_and_final                # noqa: E402
 from src.classifier import (                                        # noqa: E402
     classify_all_modes, Thresholds,
-    CLEAN_TRANSLATION, CLEAN_ROTATION, MIXED_EXTERNAL_WITH_VIBRATION,
-    STRETCHING, BENDING,
+    is_external_label, is_mixed_external,
+    STRETCHING, BENDING, MIXED_STRETCH_BEND,
 )
 from src.calibrate import (                                         # noqa: E402
     find_plateau, freeze_tau_tr, derive_stretch_bend_thresholds,
@@ -128,11 +128,11 @@ def test_benzene_emit_34_35_36_under_calibrated_thresholds():
     (0.17327) either way, so this is robust to the shift, as predicted."""
     calibrated = Thresholds.calibrated()
     t = _classify("benzene", "emit", calibrated)
-    assert t["EMIT 34"]["classification"] == MIXED_EXTERNAL_WITH_VIBRATION
-    assert "dominant_external=Tx" in t["EMIT 34"]["annotation"]
-    assert t["EMIT 35"]["classification"] == MIXED_EXTERNAL_WITH_VIBRATION
-    assert "dominant_external=Ty" in t["EMIT 35"]["annotation"]
-    assert t["EMIT 36"]["classification"] == CLEAN_TRANSLATION
+    assert t["EMIT 34"]["classification"] == "Tx*"
+    assert t["EMIT 34"]["annotation"] == f"vibration={MIXED_STRETCH_BEND}"
+    assert t["EMIT 35"]["classification"] == "Ty*"
+    assert t["EMIT 35"]["annotation"] == f"vibration={MIXED_STRETCH_BEND}"
+    assert t["EMIT 36"]["classification"] == "Tz"
 
 
 def test_water_targets_under_calibrated_thresholds():
@@ -140,10 +140,8 @@ def test_water_targets_under_calibrated_thresholds():
     Thresholds.calibrated() instead of the pinned provisional defaults."""
     calibrated = Thresholds.calibrated()
     t = _classify("water", "normal", calibrated)
-    for lbl in ("Tx", "Ty", "Tz"):
-        assert t[lbl]["classification"] == CLEAN_TRANSLATION
-    for lbl in ("Rx", "Ry", "Rz"):
-        assert t[lbl]["classification"] == CLEAN_ROTATION
+    for lbl in ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz"):
+        assert t[lbl]["classification"] == lbl
     assert t["Vib 1"]["classification"] == BENDING
     assert t["Vib 2"]["classification"] == STRETCHING
     assert t["Vib 3"]["classification"] == STRETCHING
@@ -174,8 +172,7 @@ def test_degenerate_emit_block_sanity_check():
     labels_b = [m["classification"] for m in scored_b]
     assert labels_a == labels_b  # deterministic, run-to-run stable
 
-    external_labels = {CLEAN_TRANSLATION, CLEAN_ROTATION, MIXED_EXTERNAL_WITH_VIBRATION}
-    n_slotted = sum(1 for lbl in labels_a if lbl in external_labels)
+    n_slotted = sum(1 for lbl in labels_a if is_external_label(lbl))
     assert n_slotted == 6  # n_T(3) + n_R(3) for benzene (non-linear)
 
     # The degenerate block (EMIT 1-9, eigenvalue -23.7514 cm-1) genuinely
@@ -190,9 +187,9 @@ def test_degenerate_emit_block_sanity_check():
     # precision, ~1e-6 relative), not necessarily bit-identical.
     assert max(freqs) - min(freqs) < 1e-4 * abs(freqs[0]), freqs
     block_labels = {n: by_name[n]["classification"] for n in degenerate_block}
-    assert block_labels["EMIT 6"] == MIXED_EXTERNAL_WITH_VIBRATION
-    assert block_labels["EMIT 9"] == MIXED_EXTERNAL_WITH_VIBRATION
-    n_external_in_block = sum(1 for lbl in block_labels.values() if lbl in external_labels)
+    assert is_mixed_external(block_labels["EMIT 6"]) and block_labels["EMIT 6"].startswith("Rx")
+    assert is_mixed_external(block_labels["EMIT 9"]) and block_labels["EMIT 9"].startswith("Ry")
+    n_external_in_block = sum(1 for lbl in block_labels.values() if is_external_label(lbl))
     assert n_external_in_block == 2  # not 0, not 9 -- exactly the 2 slot-winners
 
 

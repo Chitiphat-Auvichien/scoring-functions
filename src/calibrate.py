@@ -74,7 +74,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from src.classifier import Thresholds, CLEAN_TRANSLATION, CLEAN_ROTATION
+from src.classifier import Thresholds, is_clean_external
 from src.excel_ingest import (
     build_library_scores, resolve_log_basename, _EXTERNAL_SLOTS,
 )
@@ -159,7 +159,7 @@ def sweep_tau_tr(lib_df, tau_S, tau_B, data_dir="data", tau_grid=DEFAULT_TAU_GRI
             for m in scored:
                 if m["name"] in _EXTERNAL_SLOTS:
                     total += 1
-                    is_clean = m["classification"] in (CLEAN_TRANSLATION, CLEAN_ROTATION)
+                    is_clean = is_clean_external(m["classification"])
                     correct += int(is_clean)
                     labels[(mol, m["name"])] = m["classification"]
         scored_e = classify_all_modes(scorer_e, final_e, th)
@@ -285,16 +285,13 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
     `ideal=='yes'` population, so by construction no ideal-tier stretch/bend
     row can land on the wrong side of its own defining boundary.
     """
-    from src.classifier import (
-        vib_label, STRETCHING, BENDING, MIXED_STRETCH_BEND,
-        CLEAN_TRANSLATION, CLEAN_ROTATION, MIXED_EXTERNAL_WITH_VIBRATION,
-    )
+    from src.classifier import vib_label, classification_bucket
 
-    _BUCKET = {
-        STRETCHING: "stretch", BENDING: "bend", MIXED_STRETCH_BEND: "mixed",
-        CLEAN_TRANSLATION: "translation", CLEAN_ROTATION: "rotation",
-        MIXED_EXTERNAL_WITH_VIBRATION: "mixed_external",
-    }
+    # Bucket lookup is logic-based (classification_bucket(), src/classifier.py),
+    # not a flat dict keyed by exact label: clean/mixed-external labels are now
+    # 6 distinct axis-specific strings each (e.g. "Tx".."Rz", "Tx*".."Rz*")
+    # rather than the 2 fixed CLEAN_TRANSLATION/CLEAN_ROTATION/
+    # MIXED_EXTERNAL_WITH_VIBRATION constants a flat dict used to key on.
 
     df = lib_df.copy()
     df = df[df["ref_label"].notna()]  # every row here has a stretch/bend/
@@ -302,8 +299,8 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
 
     def _predict(row):
         if row["kind"] == "internal" and not row["has_geometry"]:
-            return _BUCKET[vib_label(row["V_Stretch"], thresholds)]
-        return _BUCKET.get(row["predicted_label"], row["predicted_label"])
+            return classification_bucket(vib_label(row["V_Stretch"], thresholds))
+        return classification_bucket(row["predicted_label"])
 
     df = df.copy()
     df["_pred_bucket"] = df.apply(_predict, axis=1)

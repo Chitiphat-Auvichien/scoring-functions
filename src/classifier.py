@@ -10,6 +10,22 @@ prepended for normal modes; raw EMIT eigenvectors only for EMIT). This module
 is self-contained (no dependency on ``main.py``); ``main.py`` orchestrates by
 calling into it -- see ``main.run_classify_pipeline``.
 
+Label vocabulary (author-approved rename, 2026-07-02; short, axis-specific
+symbolic scheme, replacing the earlier CLEAN_TRANSLATION/CLEAN_ROTATION/
+MIXED_EXTERNAL_WITH_VIBRATION/STRETCHING/BENDING/MIXED_STRETCH_BEND strings)
+--------------------------------------------------------------------------
+Clean external (Step 3, gate pass)   -> the specific Step-2 slot name:
+    "Tx", "Ty", "Tz", "Rx", "Ry", "Rz".
+Mixed external + vibration (Step 3, gate fail) -> the same slot name with a
+    trailing "*": "Tx*", "Ty*", "Tz*", "Rx*", "Ry*", "Rz*".
+Stretching / bending / mixed stretch-bend (Step 4) -> "S" / "B" / "SB"
+    (Python constant names STRETCHING/BENDING/MIXED_STRETCH_BEND unchanged,
+    only their string VALUES changed, to minimize import-site churn).
+See ``is_external_label``/``external_axis``/``is_clean_external``/
+``is_mixed_external``/``is_translation``/``is_rotation`` below for the
+reusable predicates downstream code should use instead of hand-rolling regex
+against these strings.
+
 Pipeline
 --------
 Step 1  score every mode: {s[Tx..Tz], s[Rx..Rz], s[V_S]}, per-bond {s_AB}.
@@ -22,18 +38,19 @@ Step 2  global external-mode assignment: one-to-one ``linear_sum_assignment``
         ambiguity; normal-mode T/R references are built directly from
         geometry, never searched for).
 Step 3  two-gate purity test on each assigned (slot, mode) pair: clean iff
-        |score_for_slot| >= tau_TR AND s[V_S] <= tau_B -> CLEAN_TRANSLATION /
-        CLEAN_ROTATION; else MIXED_EXTERNAL_WITH_VIBRATION, annotated with the
-        dominant external slot and vib_label(s[V_S]).
+        |score_for_slot| >= tau_TR AND s[V_S] <= tau_B -> the bare slot name
+        (e.g. "Tx"); else the slot name with a trailing "*" (e.g. "Tx*"),
+        annotated with vib_label(s[V_S]).
 Step 4  every mode NOT assigned an external slot in Step 2: vib_label(s[V_S])
-        -> STRETCHING / BENDING / MIXED_STRETCH_BEND. Per-bond s_AB attached
-        for STRETCHING / MIXED_STRETCH_BEND.
+        -> STRETCHING ("S") / BENDING ("B") / MIXED_STRETCH_BEND ("SB").
+        Per-bond s_AB attached for STRETCHING / MIXED_STRETCH_BEND.
 
 n_T = 3; n_R = 2 if linear else 3 (linear: smallest principal moment ~= 0).
 """
 
 import json
 import os
+import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -46,15 +63,86 @@ DEFAULT_CALIBRATION_PATH = os.path.join("data", "results", "thresholds.json")
 
 
 # --- Classification labels ---------------------------------------------
-CLEAN_TRANSLATION = "CLEAN_TRANSLATION"
-CLEAN_ROTATION = "CLEAN_ROTATION"
-MIXED_EXTERNAL_WITH_VIBRATION = "MIXED_EXTERNAL_WITH_VIBRATION"
-STRETCHING = "STRETCHING"
-BENDING = "BENDING"
-MIXED_STRETCH_BEND = "MIXED_STRETCH_BEND"
+# Clean-external / mixed-external labels are no longer fixed constants -- they
+# are axis-specific strings ("Tx".."Rz", optionally with a trailing "*")
+# assigned dynamically in classify_all_modes() (Step 3) from whichever slot
+# Step 2 assigned. See the module docstring above and the predicates below.
+STRETCHING = "S"
+BENDING = "B"
+MIXED_STRETCH_BEND = "SB"
 
 _T_SLOTS = ("Tx", "Ty", "Tz")
 _R_SLOTS_FULL = ("Rx", "Ry", "Rz")
+
+_EXTERNAL_LABEL_RE = re.compile(r"^[TR][xyz]\*?$")
+
+
+def is_external_label(label):
+    """True if `label` matches the external-slot pattern ^[TR][xyz]\\*?$
+    (clean, e.g. "Tx", or mixed, e.g. "Tx*")."""
+    return isinstance(label, str) and bool(_EXTERNAL_LABEL_RE.match(label))
+
+
+def external_axis(label):
+    """The bare slot name for an external label ("Tx*" -> "Tx"; "Tx" ->
+    "Tx"), or None if `label` is not an external label at all."""
+    if not is_external_label(label):
+        return None
+    return label[:-1] if label.endswith("*") else label
+
+
+def is_clean_external(label):
+    """True iff `label` is an external label with NO trailing "*" (passed
+    both Step-3 purity gates)."""
+    return is_external_label(label) and not label.endswith("*")
+
+
+def is_mixed_external(label):
+    """True iff `label` is an external label WITH a trailing "*" (failed at
+    least one Step-3 purity gate)."""
+    return is_external_label(label) and label.endswith("*")
+
+
+def is_translation(label):
+    """True iff `label` is an external label (clean or mixed) whose slot is
+    a translation (Tx/Ty/Tz)."""
+    axis = external_axis(label)
+    return axis is not None and axis[0] == "T"
+
+
+def is_rotation(label):
+    """True iff `label` is an external label (clean or mixed) whose slot is
+    a rotation (Rx/Ry/Rz)."""
+    axis = external_axis(label)
+    return axis is not None and axis[0] == "R"
+
+
+def classification_bucket(label):
+    """Map any classify_all_modes() classification label to its semantic
+    bucket name -- "translation"/"rotation"/"mixed_external" for external
+    slots (clean vs. mixed distinguished by the trailing "*"), or
+    "stretch"/"bend"/"mixed" for the Step-4 internal vibration labels.
+    Falls back to returning `label` unchanged for anything else (e.g. a
+    string that is already a bucket name), mirroring the ``dict.get(x, x)``
+    fallback pattern used by the old per-label dict lookups this replaces
+    (src/calibrate.py's ``_BUCKET``, src/benzene_validation.py's
+    ``_PRED_TO_BUCKET``) -- a single shared home for that logic instead of
+    two near-duplicate dicts that would otherwise need 6 axis-specific keys
+    each for clean and 6 more for mixed.
+    """
+    if is_mixed_external(label):
+        return "mixed_external"
+    if is_translation(label):
+        return "translation"
+    if is_rotation(label):
+        return "rotation"
+    if label == STRETCHING:
+        return "stretch"
+    if label == BENDING:
+        return "bend"
+    if label == MIXED_STRETCH_BEND:
+        return "mixed"
+    return label
 
 # Tolerance for the "smallest principal moment ~= 0" linear-molecule test,
 # relative to the largest moment (mirrors DEGEN_TOL-style relative guards
@@ -168,8 +256,13 @@ def classify_all_modes(scorer, final, thresholds=None):
         {name, frequency, is_emit, T, R, V, classification, annotation, bonds}
     'bonds' is a list of {'i','j','s_AB'} (0-based atom indices), populated
     only for STRETCHING / MIXED_STRETCH_BEND classifications; [] otherwise.
-    'annotation' is "dominant_external=<slot>; vibration=<vib_label>" for
-    MIXED_EXTERNAL_WITH_VIBRATION modes; "" otherwise.
+    'classification' is the bare Step-2 slot name ("Tx".."Rz") for a clean
+    external, that same slot name with a trailing "*" (e.g. "Tx*") for a
+    mixed external+vibration mode, or "S"/"B"/"SB" (STRETCHING/BENDING/
+    MIXED_STRETCH_BEND) for a Step-4 internal mode.
+    'annotation' is "vibration=<vib_label>" for mixed-external ("*"-suffixed)
+    modes -- the axis is intentionally NOT repeated here since the top-level
+    classification string already names it; "" otherwise.
     """
     thresholds = thresholds or Thresholds.calibrated()
     n_T, n_R, slots = external_slots(scorer)
@@ -214,14 +307,13 @@ def classify_all_modes(scorer, final, thresholds=None):
     for mi, (slot, score_value) in assignment.items():
         v = scored[mi]["V"]
         if abs(score_value) >= thresholds.tau_TR and v <= thresholds.tau_B:
-            scored[mi]["classification"] = (
-                CLEAN_TRANSLATION if slot in _T_SLOTS else CLEAN_ROTATION
-            )
+            scored[mi]["classification"] = slot
         else:
-            scored[mi]["classification"] = MIXED_EXTERNAL_WITH_VIBRATION
-            scored[mi]["annotation"] = (
-                f"dominant_external={slot}; vibration={vib_label(v, thresholds)}"
-            )
+            scored[mi]["classification"] = slot + "*"
+            # The axis is already encoded in the classification string above
+            # (e.g. "Tx*"), so the annotation only adds the one piece of
+            # information it doesn't already carry: the vibration sub-label.
+            scored[mi]["annotation"] = f"vibration={vib_label(v, thresholds)}"
 
     # ---- Step 4: classify remaining (unassigned) internal modes ----
     for mi in range(n_modes):

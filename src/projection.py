@@ -55,7 +55,7 @@ duplicated here.
 
 import numpy as np
 
-from .classifier import Thresholds, vib_label
+from .classifier import Thresholds, vib_label, STRETCHING, BENDING, MIXED_STRETCH_BEND
 
 # The 6 possible ideal external reference labels. A linear molecule's pool
 # (main.build_scorer_and_final) omits "Rx" (n_R=2); this module handles that
@@ -63,8 +63,11 @@ from .classifier import Thresholds, vib_label
 EXTERNAL_LABELS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 
 # Internal/vibration buckets a real normal mode's Theta_tilde**2 is summed
-# into (mirrors classifier.py's Step-4 labels).
-_VIB_GROUPS = ("STRETCHING", "BENDING", "MIXED_STRETCH_BEND")
+# into (mirrors classifier.py's Step-4 labels: the actual STRETCHING/BENDING/
+# MIXED_STRETCH_BEND constants, currently "S"/"B"/"SB" -- imported rather
+# than hardcoded here so a future relabeling in classifier.py cannot silently
+# desync this module's grouping from vib_label()'s real output).
+_VIB_GROUPS = (STRETCHING, BENDING, MIXED_STRETCH_BEND)
 
 
 def mass_weights_from_scorer(scorer):
@@ -189,9 +192,9 @@ def project_emit(ref, final_emit, sum_tol=0.05):
             if lbl in EXTERNAL_LABELS:
                 continue
             totals[groups[lbl]] += Frac[idx_of[lbl], j]
-        row["C2_VS"] = totals["STRETCHING"]
-        row["C2_VB"] = totals["BENDING"]
-        row["C2_VMix"] = totals["MIXED_STRETCH_BEND"]
+        row["C2_VS"] = totals[STRETCHING]
+        row["C2_VB"] = totals[BENDING]
+        row["C2_VMix"] = totals[MIXED_STRETCH_BEND]
 
         total = sum(v for k, v in row.items() if k not in ("Mode", "Eigenvalue"))
         assert abs(total - 1.0) <= sum_tol, (

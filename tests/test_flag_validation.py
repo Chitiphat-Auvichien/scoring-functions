@@ -47,20 +47,21 @@ def test_benzene_emit_36_is_a_false_negative_not_a_true_negative():
     bug to fix."""
     detail, _ = benzene_emit_flag_confusion()
     row = detail[detail["Mode"] == "EMIT 36"].iloc[0]
-    assert row["classifier_label"] == "CLEAN_TRANSLATION"
+    assert row["classifier_label"] == "Tz"
     assert row["ground_truth"] == "MIXED"
     assert row["cell"] == "FN"
 
 
 def test_benzene_emit_34_35_are_true_positives():
-    """EMIT 34/35 (Tx/Ty=1, s[V_S]=0.667/0.577) are correctly flagged
-    MIXED_EXTERNAL_WITH_VIBRATION by the classifier AND are genuinely
-    externally-mixed by projection (~76.7% translational, rest vibrational)
-    -- a true positive, matching the prior anecdotal spot-check."""
+    """EMIT 34/35 (Tx/Ty=1, s[V_S]=0.667/0.577) are correctly flagged with the
+    axis-specific mixed-external label ("Tx*"/"Ty*") by the classifier AND are
+    genuinely externally-mixed by projection (~76.7% translational, rest
+    vibrational) -- a true positive, matching the prior anecdotal spot-check."""
     detail, _ = benzene_emit_flag_confusion()
-    for name in ("EMIT 34", "EMIT 35"):
+    expected = {"EMIT 34": "Tx*", "EMIT 35": "Ty*"}
+    for name, label in expected.items():
         row = detail[detail["Mode"] == name].iloc[0]
-        assert row["classifier_label"] == "MIXED_EXTERNAL_WITH_VIBRATION"
+        assert row["classifier_label"] == label
         assert row["cell"] == "TP"
 
 

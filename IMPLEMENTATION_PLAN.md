@@ -3,8 +3,8 @@
 > Living checklist. Tick `[x]` as parts are completed; pick up unchecked items in any later session.
 > Companion to the JCC manuscript `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, the content plan
 > `JCC/JCC_manuscript_structure_JCCformat.pdf`, and the plan slides `JCC/Scoring_Manuscript_Plan_2026-06-29.pdf`.
-> Last updated: 2026-07-01 (scope revision: Gramicidin/companion-paper split, Decision-8 retraction,
-> τ renaming, Phase-6 re-tiering — see Changelog).
+> Last updated: 2026-07-02 (Phase 3 core landed: library ingest, classification, τ-calibration,
+> confusion matrix — see Changelog).
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -54,7 +54,42 @@
 > ~~Phase-0 Excel column verification~~ ✓ **DONE 2026-07-01** — H2S/SF2 re-scored in-engine,
 > `V_Stretch` matches `data_score`'s eq:vscore candidate column to ~5 sig figs (well within 3 dp); see
 > Phase-0 checklist / Changelog.
-> **Next, in order:** Phase 3 (library ingest + calibration).
+> ~~Phase 3: `src/excel_ingest.py` + library classification + `src/calibrate.py` + confusion matrix~~
+> ✓ **DONE 2026-07-02** (commit `149fc62`, previously built uncommitted in a session that hit its
+> usage limit — recovered and committed intact this session, nothing lost). `src/excel_ingest.py`
+> ingests `data_score`/`data_mode&bond` into `data/results/library_scores.csv`; the 25 geometry-backed
+> molecules (water/benzene/CO2 + 22 hydride-library molecules with `.log`/`.gjf` pairs) get real
+> Algorithm-1 predicted labels + ideal T/R external rows via `attach_geometry_classification`.
+> **Discovered:** H2O/OF2/Cl2O/Br2O's Excel frequencies don't match this repo's own logs (94–386
+> cm⁻¹ off — a different calc/basis, not rounding) — correctly left `has_geometry=False` for those
+> molecules' internal rows rather than force-merged (external T/R rows unaffected, still attached).
+> `src/calibrate.py`: `tau_S`/`tau_B` derived from the ideal-molecule library subset's non-overlapping
+> stretch/bend `V_Stretch` populations (gap width ~0.73, zero-overlap by construction) →
+> **frozen `tau_TR=0.95, tau_S=0.90368, tau_B=0.17327`** in `data/results/thresholds.json`;
+> `tau_TR` swept 0.05–0.999 (step 0.005) against 25 molecules' real T/R ground truth (100% accuracy
+> at every grid point) + benzene's 36 EMIT modes → plateau `(lo,hi)` with only ONE label change in the
+> whole grid (benzene EMIT 19's Rz crossing at `tau_TR~0.335`); 0.95 falls inside the plateau, frozen
+> there per spec. `confusion_matrix_stats()` (fig:confusion's numbers): **precision = 1.0 for all 4
+> clean categories** (stretch/bend/translation/rotation never cross-contaminate); recall 1.0 for
+> translation/rotation (exact completeness), ≥0.95 for bend, but **0.717 for stretch** — the 0.283
+> shortfall lands entirely in the MIXED bucket (28.3%, non-ideal CoM-softening per B8.3), **zero** in
+> BEND — reported honestly (`floor_met=False` overall), not forced to pass.
+> `src/classifier.py`: `Thresholds.calibrated()` loads `thresholds.json` when present (falls back to
+> the provisional 0.95/0.9/0.2 constants otherwise) and is now `classify_all_modes()`'s default;
+> `tests/test_classifier.py` pins the explicit provisional `Thresholds()` so those goldens stay fixed
+> across recalibration, `tests/test_calibrate.py` independently re-verifies the same targets (water
+> externals CLEAN; benzene EMIT 34/35 flagged, EMIT 36 the documented blind spot) under the calibrated
+> values. Also includes a degenerate-EMIT-block sanity check (benzene EMIT 1–9, one eigenvalue):
+> deterministic run-to-run, exactly `n_T+n_R=6` modes total get an external-slot label with no over/
+> under-assignment from the degeneracy (2 of the 6 winners — EMIT 6→Rx, EMIT 9→Ry — sit inside the
+> block; the other 7 correctly get their OWN differing `vib_label`, not copies of one label).
+> **38/38 tests green.** **NOT yet done (still open in Phase 3):** the five remaining figures
+> (`fig:confusion`, `fig:bondscores`, `fig:boxplots`, `fig:modemixing`, `fig:sensitivity`) and the
+> parity check vs the Excel `box plots`/`CM` sheets — `confusion_matrix_stats()`/`tau_sensitivity_sweep.csv`
+> supply the numbers, figure-builder still needs to render them.
+> **Next, in order:** dispatch figure-builder for the 5 remaining Phase-3 figures (data already
+> computed: `data/results/library_scores.csv`, `tau_sensitivity_sweep.csv`,
+> `confusion_matrix_stats()` output), then the Excel-sheet parity spot-check.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).
@@ -259,22 +294,34 @@ library scores from the Excel file.
 
 ## Phase 3 — Library ingest + τ-calibration (freeze τ) + clean-category figures
 > Sequence within phase: **ingest → classify library → calibrate (freeze τ) → label-level validation → figures.**
-- [ ] `src/excel_ingest.py` (NEW): read `data_score` + `characterised modes`; map eq:vscore col → `s[V_S]`;
-      **also emit per-bond `s_AB`, frequency, relative/averaged Δbond-length, an ideal/non-ideal tag, and
-      T/R reference labels** (not just stretch/bend) → `data/results/library_scores.csv`. Confirm the
-      library covers exactly the `tab:ideal`/`tab:nonideal` molecules (else a manuscript table edit is forced).
-- [ ] **Run the classifier over the library** to attach *predicted* labels (incl. clean-T/R cells) —
-      required for `fig:confusion` (reference labels alone can't form the matrix).
-- [ ] `src/calibrate.py` (NEW): derive `τ_S`,`τ_B` from labeled distributions; `τ_TR` sweep +
-      plateau; **persist the full τ-sweep curve** (label-change fraction + accuracy per τ) for
-      `fig:sensitivity`; write `data/results/thresholds.json`; back-fill `Thresholds`. Define "plateau"
-      quantitatively (give a numeric criterion).
-- [ ] **Label-level validation (now τ is frozen):** benzene EMIT 34–36 flagged `mixed_external`;
-      confusion-matrix precision/recall vs lit labels (set a numeric acceptance floor); re-pin label
-      goldens. **Sanity check only (not a mechanism):** confirm plain one-to-one Hungarian assignment
-      happens to label degenerate mode sets consistently (e.g. benzene EMIT 1–9, sharing an eigenvalue)
-      as an emergent property of the scores — no block-special-casing is implemented or needed
-      (retracted 2026-07-01).
+- [x] `src/excel_ingest.py` (NEW) — **DONE 2026-07-02** (commit `149fc62`). Reads `data_score` +
+      `data_mode&bond` (the `characterised modes` sheet's `type` column was cross-checked
+      byte-identical to `data_score`'s own `type` column, so no separate read was needed); maps
+      eq:vscore col → `s[V_S]`; emits per-bond `s_AB`, frequency, mode-averaged + per-bond Δbond-length,
+      the `ideal` tag, and `ref_label` (stretch/bend/translation/rotation) → `data/results/library_scores.csv`.
+      Library covers all 11 `tab:ideal` + the full `tab:nonideal` roster except 5 bromides absent from
+      the workbook entirely (flagged for lead-author/tex-data-sync, not a forced table edit).
+- [x] **Run the classifier over the library** — **DONE 2026-07-02.** `attach_geometry_classification()`
+      runs real Algorithm 1 on the 25 geometry-backed molecules, attaching `predicted_label`/
+      `predicted_annotation`/T,R scores to internal rows (gated on whole-molecule freq agreement) and
+      appending `n_T+n_R` ideal-T/R external rows (independent of that gate) — required for
+      `fig:confusion`, now available.
+- [x] `src/calibrate.py` (NEW) — **DONE 2026-07-02.** `τ_S`/`τ_B` derived from the ideal-molecule
+      library's non-overlapping stretch/bend distributions; `τ_TR` swept 0.05–0.999 (step 0.005) with
+      the full curve persisted to `data/results/tau_sensitivity_sweep.csv` (`fig:sensitivity` source);
+      frozen to `data/results/thresholds.json` (`τ_TR=0.95, τ_S=0.90368, τ_B=0.17327`);
+      `Thresholds.calibrated()` back-fills `Thresholds`. **Plateau defined quantitatively:** longest
+      contiguous grid run with zero label-change fraction vs. the previous point AND accuracy at its
+      run maximum (see `src/calibrate.py` module docstring for the full statement).
+- [x] **Label-level validation (now τ is frozen)** — **DONE 2026-07-02.** Benzene EMIT 34/35 flagged
+      `MIXED_EXTERNAL_WITH_VIBRATION`, EMIT 36 the documented `CLEAN_TRANSLATION` blind spot — both
+      re-verified under the calibrated (not just provisional) thresholds. Confusion-matrix
+      precision/recall via `confusion_matrix_stats()`: precision 1.0 all 4 categories; recall 1.0
+      (T/R), ≥0.95 (bend), 0.717 (stretch, 28.3% into MIXED, 0% into BEND) — numeric floor 0.95 applied
+      and reported honestly as not fully met (stretch recall only). Label goldens re-pinned in
+      `tests/test_calibrate.py`. **Sanity check done:** benzene EMIT 1–9 (degenerate 9-fold block) —
+      deterministic, exactly 6 external-slot winners total, no over/under-assignment from the
+      degeneracy — confirms no block-mechanism is needed (Decision 8), not evidence one exists.
 - [ ] Figure `fig:confusion` (clean-category confusion matrix + precision/recall vs lit labels).
 - [ ] Figure `fig:bondscores` (bond score vs relative Δbond length, ideal vs non-ideal).
 - [ ] Figure `fig:boxplots` (freq, Δ|b|, `s[V_S]`; stretch vs bend).
@@ -374,6 +421,24 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-02 — Phase 3 core landed (ingest, library classification, τ-calibration, confusion
+  matrix); recovered intact from a session that hit its usage limit mid-build.** The prior session's
+  `lead-engineer` build agent finished writing and testing all of Phase 3's core pieces
+  (`src/excel_ingest.py`, `src/calibrate.py`, `tests/test_excel_ingest.py`, `tests/test_calibrate.py`,
+  plus `src/classifier.py`'s `Thresholds.calibrated()` addition) but the session hit its session limit
+  before the work was committed — everything was left sitting correct-and-tested but uncommitted in the
+  working tree. This session verified the full state first (`py -m pytest tests/` → 34/34 green before
+  touching anything), read both new modules end to end to confirm they matched the plan's Phase-3 spec,
+  then committed everything as-is with no rework needed (commit `149fc62`, 38/38 tests green after
+  staging). Nothing was lost. Summary of what shipped (see updated Phase-3 checklist above for detail):
+  `library_scores.csv` (25 geometry-backed molecules + Excel-only rows for the rest);
+  `thresholds.json` (`τ_TR=0.95, τ_S=0.90368, τ_B=0.17327`) + `tau_sensitivity_sweep.csv`;
+  confusion-matrix stats (precision 1.0 all 4 categories; stretch recall 0.717, fully explained by the
+  MIXED bucket, 0% bend-confusion). **Left for a future session:** the 5 remaining Phase-3 figures
+  (`fig:confusion`, `fig:bondscores`, `fig:boxplots`, `fig:modemixing`, `fig:sensitivity`) and the Excel
+  `box plots`/`CM` sheet parity spot-check — figure-builder has everything it needs
+  (`library_scores.csv`, `tau_sensitivity_sweep.csv`, `confusion_matrix_stats()`) to build them without
+  re-deriving any numbers.
 - **2026-07-01 — Phase-0 Excel column identity verified.** Re-scored two hydride-library molecules
   (H2S, SF2 — chosen for simple 3-vibrational-mode C2v/bent-triatomic structure, logs+gjf already in
   repo) headlessly via `run_pipeline(mol, "normal")` and compared per-mode `V_Stretch` against the

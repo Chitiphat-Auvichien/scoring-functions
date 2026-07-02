@@ -9,11 +9,11 @@
 > newest-dated one unless told otherwise). Any agent working on the manuscript's Results & Discussion
 > section (`lead-author` especially, but also `figure-builder`/`lead-engineer` when their output feeds a
 > specific section) should be pointed at this file, not an older one.
-> Last updated: 2026-07-02 (both queued figure fixes are fully DONE end to end — code-side
-> [footer-text readability + S/B/SB notation] and manuscript-side [captions wired + images refreshed +
-> recompiled] — but the S/B/SB gloss was then REVERTED to bare symbols per author visual-review
-> feedback, same day: too long inside the figures. Gloss now deferred to LaTeX captions only —
-> see RESUME HERE for the full writeup. Caption-side gloss text still outstanding.)
+> Last updated: 2026-07-02 (Results & Discussion structural pass complete: stretching/bending subsection
+> reordered to establish τ_S/τ_B from ideal molecules before applying to non-ideal + confusion matrix;
+> fig:benzene replaced by tab:emitselected; fig:sensitivity moved to new SI doc JCC_SI_sensitivity.tex;
+> benzene depicted-mode figure placeholder added; all three documents recompiled clean — see RESUME HERE
+> for the full writeup. Caption-side S/B/SB gloss text (from the prior update) still outstanding.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -449,6 +449,40 @@
 > legend entry (local dedup-key fix in `plot_benzene_normal_modes`; `CATEGORY_LABEL`/`CATEGORY_COLOR`/
 > `CATEGORY_MARKER` untouched, since other figures' tick labels still need "translation"/"rotation" kept
 > distinct). Regenerated `fig_benzene_normal.{pdf,png}` only; 53/53 tests still green.
+> **2026-07-02 (Results & Discussion structural pass, `lead-author`, per `Scoring_Manuscript_Plan_2026-07-02.pdf`
+> p.4):** Five structural changes to `JCC_temp_LaTeXtemplate.tex`, no code/data touched (pure reorder +
+> one ingested table, per "ingest, don't recompute"). (1) **Reordered** "Stretching/bending
+> classification": now establishes `τ_S`/`τ_B` from the IDEAL molecules first (`fig:bondscores` +
+> `fig:boxplots` + the numeric-derivation paragraph, moved up), THEN applies to non-ideal molecules
+> (`fig:modemixing`), THEN the confusion-matrix result (`fig:confusion`) as the resulting accuracy/
+> retention validation (where the `SB` third-class framing now explicitly lands), THEN the non-ideal-
+> ground-truth caveat (relocated/reworded, "(below)"→"(above)" self-reference fixed), THEN the
+> single-center-topology scope note (unchanged, stays last). (2) Refreshed `fig_benzene_normal.pdf` in
+> `images/` from the just-fixed legend-merge regeneration in `data/figures/`. (3) Added a
+> `\figplaceholder{...}` (matching the GTOC placeholder idiom) for a new benzene depicted-mode figure
+> (3-panel small multiple, modes 12/19/30, green arrows analogous to `fig:watermodes`) right after
+> `fig:benzenenormal`'s caption — NOT built, explicitly deferred; caption spec is fully numeric
+> (frequencies, `s[V_S]`, `s_AB` values already in the manuscript text) so a future session can render it
+> without re-deriving anything. (4) **Removed** `fig:benzene` (the all-36-EMIT-mode scatter, in tension
+> with this section's "extreme edge case, not systematic validation" framing) and replaced it with
+> `tab:emitselected` (5 rows: EMIT 2/9/34/35/36 — score signature, `s[V_S]`, label, projected contribution
+> breakdown), sourced from the same numbers already narrated in the surrounding prose (no new
+> computation). `fig_benzene.{pdf,png}` and `src/figures.py::plot_benzene_stress_test` (or equivalent)
+> left untouched on disk — only the manuscript embedding was removed. (5) **Moved** `fig:sensitivity` to
+> a new standalone SI document, `JCC_man_scoring/JCC_SI_sensitivity.tex` (same house style as the
+> existing `JCC_SI_computational_cost.tex`: own `\documentclass`, compiles independently), reproducing the
+> figure's unchanged caption as "Figure S1"; the main-text plateau paragraph now cites "Figure~S1 in the
+> Supporting Information" instead of embedding the image, and the manuscript's own "Supporting
+> Information" subsection lists it explicitly. Because this added a table (`tab:emitselected`) before
+> `tab:cost` in reading order, `tab:cost` shifted from Table 6 → Table 7 — updated all 8 hardcoded
+> "Table~6" cross-references in `JCC_SI_computational_cost.tex` to "Table~7" (that SI doc predates
+> auto-numbering and refers to the main-text table by hardcoded number, not `\ref`). Recompiled all three
+> documents from a scratch dir (OneDrive-safe latexmk): main **32 pages before → 32 pages after**, zero
+> undefined refs/citations after a second pdflatex pass (bibtex is a latexmk heuristic artifact here —
+> the bibliography is a manual `thebibliography` environment, no external `.bib` compile actually
+> needed); `JCC_SI_computational_cost.pdf` 7 pages, `JCC_SI_sensitivity.pdf` 2 pages, both clean
+> independent builds. All three PDFs copied back to `JCC/JCC_man_scoring/`. No `src/` code changed; no
+> test suite impact.
 
 ## Context
 

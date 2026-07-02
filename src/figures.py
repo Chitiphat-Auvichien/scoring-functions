@@ -516,13 +516,31 @@ def plot_benzene_normal_modes(
 
     fig, ax = plt.subplots(figsize=(3.8, 3.6))
 
+    # Legend dedup: translation/rotation share the identical gray-X color +
+    # marker (CATEGORY_COLOR/CATEGORY_MARKER map both to the same encoding --
+    # see that dict's comment above, "always meant to be ONE combined
+    # meaning"), so a naive per-`cat` dedup (keying on "translation" and
+    # "rotation" separately) puts two visually-identical entries ("clean
+    # translation", "clean rotation") in the legend -- confusing, and unlike
+    # every other category here which gets one entry per distinct color+
+    # shape. No other figure in this module builds a legend mixing
+    # translation+rotation (fig:confusion's tick labels are a structurally
+    # different case -- matrix ROWS need the distinct text since they label
+    # different ground-truth categories, not a redundant visual encoding), so
+    # there is no pre-existing convention to replicate; this is a local-only
+    # merge. CATEGORY_LABEL itself stays untouched for that reason.
+    _LEGEND_MERGE_KEY = {"translation": "clean_tr", "rotation": "clean_tr"}
+    _LEGEND_MERGE_TEXT = {"clean_tr": "clean T/R"}
+
     seen_labels = set()
     for _, row in normal.iterrows():
         cat = classification_bucket(row["label"])
         color = CATEGORY_COLOR.get(cat, "black")
         marker = CATEGORY_MARKER.get(cat, "o")
-        leg_label = CATEGORY_LABEL.get(cat, cat) if cat not in seen_labels else None
-        seen_labels.add(cat)
+        leg_key = _LEGEND_MERGE_KEY.get(cat, cat)
+        leg_text = _LEGEND_MERGE_TEXT.get(leg_key, CATEGORY_LABEL.get(cat, cat))
+        leg_label = leg_text if leg_key not in seen_labels else None
+        seen_labels.add(leg_key)
         ax.scatter(row["Freq"], row["V_Stretch"], color=color, marker=marker, s=26,
                    edgecolors="black", linewidths=0.3, zorder=3, label=leg_label)
 

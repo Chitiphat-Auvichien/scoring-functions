@@ -9,27 +9,8 @@
 > newest-dated one unless told otherwise). Any agent working on the manuscript's Results & Discussion
 > section (`lead-author` especially, but also `figure-builder`/`lead-engineer` when their output feeds a
 > specific section) should be pointed at this file, not an older one.
-> **NEXT SESSION, two queued figure fixes (author-flagged 2026-07-02, deferred for budget, not started):**
-> 1. **fig:confusion's in-image footer text is too small once rescaled to column width.** The
->    "Non-ideal tier (n=422): 0%% of bend or stretch..." sentence is drawn via `fig.text()` at 6.8pt
->    inside `plot_confusion_matrix`'s 7.4x6.6in canvas; LaTeX's `\includegraphics[width=0.95\columnwidth]`
->    shrinks it to ~6.2in, so the footer becomes ~5.7pt effective — below a readable floor. Move this
->    sentence out of the rasterized/vector figure and into the actual LaTeX `\captionof{figure}{...}`
->    text instead (typeset at normal caption font size, not shrunk with the image). Same principle may
->    apply to other in-figure footer/annotation text if a similar pattern exists elsewhere — check.
-> 2. **Adopt the short S/B/SB notation in figure legends/labels, matching the classifier's actual
->    output and the manuscript prose.** `src/figures.py`'s `CATEGORY_LABEL` dict currently spells out
->    "stretching"/"bending"/"mixed stretch/bend" while the classifier itself, the main text
->    (`\texttt{S}`/`\texttt{B}`/`\texttt{SB}`), and `tab:benzenemixed` all use the short symbols. Update
->    `CATEGORY_LABEL` (and any other figure-specific legend/tick text using the long forms) to `S`/`B`/`SB`
->    (possibly with a one-time in-caption gloss the first time each symbol appears, e.g. "S (stretching)",
->    if bare single-letter legend entries read as too cryptic — author's call). This touches every figure
->    that reuses `CATEGORY_LABEL`: `fig_confusion`, `fig_bondscores`, `fig_boxplots`, `fig_modemixing`,
->    `fig_benzene_normal` — all would need regenerating, plus a recompile + visual re-verification pass.
-> Both are real, agreed-on fixes, not just noted-for-consideration — do them next session, in that order
-> (fix 1 is small/scoped; fix 2 is broader, touches ~5 figures, budget accordingly).
-> Last updated: 2026-07-02 (label-vocabulary rename: classifier output labels are now short and
-> axis-specific — see Changelog "Label rename" entry and RESUME HERE below).
+> Last updated: 2026-07-02 (both queued figure fixes below — footer-text readability + S/B/SB notation —
+> are now DONE; see RESUME HERE for the full writeup. No new figure fixes queued as of this update.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
@@ -349,12 +330,77 @@
 >    (a). Regenerated `data/figures/fig_benzene.{pdf,png}` and copied the PDF into
 >    `JCC/JCC_man_scoring/images/fig_benzene.pdf`. 53/53 tests still green. `plot_benzene_normal_modes`/
 >    `fig_benzene_normal` itself untouched.
+> ~~Two queued figure fixes (author-flagged 2026-07-02): fig:confusion footer-text readability +
+> S/B/SB short-notation adoption~~ ✓ **DONE 2026-07-02** (same session, `lead-engineer`).
+> **Fix 1 (footer readability):** `plot_confusion_matrix`'s whole-figure `fig.text()` footer sentence
+> ("Non-ideal tier (n=422): 0% of bend or stretch..." at 6.8pt on a 7.4x6.6in canvas -- ~5.7pt effective
+> once LaTeX's `\includegraphics[width=0.95\columnwidth]` rescales it to ~6.2in, below a readable floor)
+> is REMOVED from the raster entirely. The exact sentence is now computed in-function and returned as
+> `summary["nonideal_footer_text"]` (printed by `__main__`, so it's easy to copy into the LaTeX
+> `\captionof{figure}{...}` text at normal caption font size -- lead-author's job, not done here). Exact
+> text (n/percentages recomputed live, so copy this from a fresh run if the underlying data ever
+> changes): *"Non-ideal tier (n=422): 0% of bend or stretch reference-labeled modes crossed to the
+> OPPOSITE clean category (bend->stretch=0.0%, stretch->bend=0.0%); 100% of the non-retained remainder
+> lands in the mixed bucket."* (ASCII `->` used instead of a unicode arrow -- the original had `→`, which
+> crashes Python's `print()` under Windows' default cp1252 stdout encoding once the text moved into a
+> printed summary dict; reads identically fine in a LaTeX caption). **Checked the other 6 figures for
+> the same `fig.text()`-footer-annotation pattern** (the task's explicit ask, not just fig:confusion):
+> found ONE more instance -- `plot_benzene_stress_test`/`fig:benzene` had a smaller in-axes prose note
+> ("non-monotonic by design (flag mechanism, not a parity check)", 6.3pt on a 3.8x3.6in canvas, drawn via
+> `ax_b.text(..., transform=ax_b.transAxes)` rather than `fig.text()` but the same architectural problem
+> -- explanatory prose baked into the raster at sub-readable size) -- fixed identically, exposed as
+> `summary["nonmonotonicity_note"]`. The enlarged-marker/dashed-leader callout boxes in `fig:benzene`
+> (EMIT 34-36) and `fig_benzene_normal` (modes 12/19/30) are a different, fine idiom per the task's own
+> carve-out (short per-point data readouts, not paragraph-length figure-level prose) -- left untouched.
+> No other figure (`fig_bondscores`, `fig_boxplots`, `fig_modemixing`, `fig_sensitivity`) has any
+> `fig.text()` call at all (grepped to confirm, not just skimmed).
+> **Fix 2 (S/B/SB notation):** `CATEGORY_LABEL`'s `"bend"`/`"stretch"`/`"mixed"` entries changed from
+> the spelled-out `"bending"`/`"stretching"`/`"mixed stretch/bend"` to `"B (bending)"`/`"S (stretching)"`/
+> `"SB (mixed S/B)"`, matching `src.classifier`'s actual output strings (`STRETCHING="S"`, `BENDING="B"`,
+> `MIXED_STRETCH_BEND="SB"`) and the manuscript's `\texttt{S}`/`\texttt{B}`/`\texttt{SB}`/`tab:benzenemixed`
+> notation. `translation`/`rotation` entries (`"clean translation"`/`"clean rotation"`) and
+> `mixed_external` (`"mixed external+vibration"`) are UNCHANGED -- the manuscript has no single-letter
+> T/R bucket symbol to match (its actual short labels are axis-specific, `"Tx".."Rz"`) and no short
+> symbol for external+vibration mixing either, so nothing to rename there.
+> **Gloss-form decision (author's call per the plan, made explicitly):** chose the self-contained
+> in-figure gloss ("S (stretching)", not bare "S" relying on a once-per-caption gloss) because these
+> figures are also viewed as standalone PNGs outside the compiled manuscript, and adding a caption gloss
+> is `lead-author`'s job (a `.tex` edit), not something this session's `figures.py`-only change could
+> guarantee would exist. Applied everywhere `CATEGORY_LABEL` is read (`fig_confusion`'s heatmap ticks +
+> precision/recall bars, `fig_modemixing`'s legend, `fig_benzene_normal`'s legend) AND to the two figures
+> that spell out the same vocabulary WITHOUT going through the dict: `fig_bondscores`'s hand-built
+> `Line2D` legend (`"S (stretching), ideal"` etc., since that legend also encodes ideal/non-ideal, which
+> `CATEGORY_LABEL` alone can't) and `fig_boxplots`'s `group_labels` tick-label list. `fig_benzene` itself
+> does NOT use `CATEGORY_LABEL` (checked, per the task's own suggestion) -- its background/highlight
+> labels ("other EMIT modes", "EMIT 2/9", "EMIT 34-36") are a different, unrelated legend vocabulary, so
+> nothing to change there. **Regression found + fixed by rendering, not just eyeballing the diff:**
+> `fig_boxplots`'s longer gloss-form tick labels ("B (bending)"/"S (stretching)" vs. the old bare
+> "bending"/"stretching") collided horizontally at the existing tick spacing -- fixed by rotating those
+> tick labels 30°/`ha="right"` (same idiom `fig:confusion`'s heatmap ticks already use), re-rendered,
+> confirmed collision-free.
+> **All 8 figures regenerated** (`py -m src.figures`; the module's `__main__` runs all 7 named figures +
+> the no-label-yet benzene-normal-modes gallery = 8 PNG/PDF pairs total): `fig_benzene`, `fig_benzene_normal`,
+> `fig_confusion`, `fig_bondscores`, `fig_boxplots`, `fig_modemixing`, `fig_sensitivity` (this last one
+> untouched by either fix -- no `CATEGORY_LABEL`/`fig.text()` use -- regenerated anyway for a clean,
+> consistent `data/figures/` snapshot, confirmed pixel-appropriate by inspection, no unexpected diff).
+> Visually re-verified every changed PNG (not just trusted the code): confusion-figure footer sentence
+> confirmed GONE from the image; `fig_benzene`'s bottom-right prose note confirmed GONE; S/B/SB gloss
+> labels confirmed rendering correctly (readable, non-overlapping) in `fig_confusion`, `fig_bondscores`,
+> `fig_boxplots` (post-rotation-fix), `fig_modemixing`, `fig_benzene_normal`.
+> `py -m pytest tests/` **53/53 still green** throughout (no figure-specific tests exist; this module is
+> presentation-only, per its own docstring -- confirmed nothing else regressed).
+> **Not done here (explicitly out of scope, flagged for the right owner):** wiring `nonideal_footer_text`/
+> `nonmonotonicity_note` into the actual `.tex` `\captionof{figure}{...}` captions -- that's `lead-author`'s
+> job on `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, not touched this session per the task's explicit
+> instruction. The two exact sentence texts are quoted in full above for that purpose.
 > **Next:** Phase 5 (`reproduce.py` orchestrator wiring; SI Cartesian-geometry export; graphical TOC)
 > and the remaining two Phase 6 recommended items (mixed-SB bucket CoM-argument half; leave-one-
 > molecule-out τ evaluation). The `fig:modemixing` irrep-degeneracy sub-panel gap remains BLOCKED
 > pending confirmation, not built. Consider an `expert-reviewer-jcc` pass on the manuscript now that
 > the label rename, benzene restructuring, and water-figure/δ-notation fixes have all landed -- this
-> was requested earlier and deliberately deferred until things stabilized; they have.
+> was requested earlier and deliberately deferred until things stabilized; they have. Also flag
+> `lead-author` to wire the two newly-exposed footer/note sentences (above) into their respective
+> LaTeX captions next time that manuscript is touched.
 > **After each step:** `py -m pytest tests/` should stay green.
 > **Resilience rule:** work in small increments; after each, tick the checkbox here + below and `git commit`
 > so the plan-in-git always reflects true state. Manuscript `.tex` is outside the repo (not committed).

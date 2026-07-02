@@ -644,12 +644,18 @@ def plot_benzene_normal_modes(
 # validation-by-characterization)
 # --------------------------------------------------------------------------
 
-def _confusion_heatmap(ax, fig, tbl, ref_order, title):
+def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL):
     """Shared heatmap renderer for one confusion-matrix tier. `tbl` must
     already be reindexed to `ref_order` rows (columns are whatever buckets
     are present for that tier -- rigorous and non-ideal tiers populate
     different bucket sets, so no forced union of columns across tiers).
     Returns the imshow handle (caller attaches its own colorbar).
+
+    `label_map` defaults to the shared `CATEGORY_LABEL` dict but
+    `plot_confusion_matrix` passes a figure-local override (see that
+    function's `_CONFUSION_LABEL`) so this figure's translation/rotation
+    ticks read "T"/"R" instead of the long "clean translation"/"clean
+    rotation" form, without touching `CATEGORY_LABEL` itself.
     """
     vmax = max(1, tbl.values.max())
     im = ax.imshow(tbl.values, cmap=COLORS["confusion_cmap"], aspect="auto",
@@ -661,12 +667,21 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title):
             ax.text(j, i, str(v), ha="center", va="center", fontsize=8,
                      color=txt_color)
 
+    # Rotation/right-alignment used to be needed to fit the long "clean
+    # translation"/"clean rotation" tick text (and, before that, the
+    # briefly-tried "B (bending)"-style gloss form) without collisions.
+    # Now that `label_map` gives every column/row a short (<=2 char) symbol
+    # (T/R/S/B/SB), the labels fit horizontally with no rotation -- fixed
+    # 2026-07-02 (author follow-up: shorten T/R ticks + restore readable
+    # sizing), matching fig:boxplots' identical rotation-removal precedent
+    # once its own tick labels were shortened back to bare S/B.
     ax.set_xticks(range(len(tbl.columns)))
-    ax.set_xticklabels([CATEGORY_LABEL[PRED_BUCKET_TO_CATEGORY[c]] if c in
+    ax.set_xticklabels([label_map[PRED_BUCKET_TO_CATEGORY[c]] if c in
                          PRED_BUCKET_TO_CATEGORY else c for c in tbl.columns],
-                        rotation=30, ha="right")
+                        rotation=0, ha="center", fontsize=9)
     ax.set_yticks(range(len(tbl.index)))
-    ax.set_yticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[r]] for r in tbl.index])
+    ax.set_yticklabels([label_map[REF_LABEL_TO_CATEGORY[r]] for r in tbl.index],
+                        fontsize=9)
     for tick, r in zip(ax.get_yticklabels(), tbl.index):
         tick.set_color(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[r]])
     for tick, c in zip(ax.get_xticklabels(), tbl.columns):
@@ -677,8 +692,8 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title):
     ax.set_ylabel("Reference label")
     ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cb.set_label("n modes", fontsize=7.5)
-    cb.ax.tick_params(labelsize=6.5)
+    cb.set_label("n modes", fontsize=8)
+    cb.ax.tick_params(labelsize=7.5)
     return im
 
 
@@ -719,6 +734,17 @@ def plot_confusion_matrix(
     _style()
     from src.calibrate import confusion_matrix_stats
 
+    # Local-only override, THIS FIGURE ONLY (author flagged 2026-07-02: the
+    # spelled-out "clean translation"/"clean rotation" tick text was too
+    # long, forcing rotated labels and a generally cramped 2x2 layout).
+    # Mirrors `plot_benzene_normal_modes`'s `_LEGEND_MERGE_TEXT` local-dict
+    # precedent above -- `CATEGORY_LABEL` itself is untouched (other
+    # figures/legends still want the fuller form, or a different merge, for
+    # translation/rotation).
+    _CONFUSION_LABEL = dict(CATEGORY_LABEL)
+    _CONFUSION_LABEL["translation"] = "T"
+    _CONFUSION_LABEL["rotation"] = "R"
+
     lib_df = pd.read_csv(library_csv)
     thresholds = Thresholds.calibrated()
 
@@ -740,7 +766,8 @@ def plot_confusion_matrix(
     tbl_r = table_r.reindex(index=ref_order_r, columns=pred_cols_r, fill_value=0)
     n_rigorous = int(tbl_r.values.sum())
     _confusion_heatmap(ax_ha, fig, tbl_r, ref_order_r,
-                        f"(a) Rigorous ground truth (n={n_rigorous})")
+                        f"(a) Rigorous ground truth (n={n_rigorous})",
+                        label_map=_CONFUSION_LABEL)
 
     cats_r = ["translation", "rotation", "stretch", "bend"]
     x_r = np.arange(len(cats_r))
@@ -762,19 +789,22 @@ def plot_confusion_matrix(
     ax_pa.text(len(cats_r) - 0.5, stats_r["acceptance_floor"], "  floor",
                va="bottom", ha="right", fontsize=7, color=COLORS["threshold"])
     ax_pa.set_xticks(x_r)
-    ax_pa.set_xticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_r],
-                          rotation=20, ha="right")
+    # Rotation/right-alignment removed (2026-07-02 follow-up, same fix as
+    # `_confusion_heatmap` above): now that `_CONFUSION_LABEL` shortens
+    # translation/rotation to "T"/"R" (matching the already-short "S"/"B"),
+    # these 4 tick labels fit flat with no collision risk, verified by
+    # rendering.
+    ax_pa.set_xticklabels([_CONFUSION_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_r],
+                          rotation=0, ha="center", fontsize=9)
     ax_pa.set_ylim(0, 1.18)
     ax_pa.set_ylabel("Precision / recall")
     ax_pa.set_title("(b) Rigorous precision/recall (all = 1.000)", loc="left",
                     fontweight="bold", fontsize=9)
-    # loc="lower left" (previous) sat directly above the rotated x-tick
-    # labels ("clean translation" etc.), visually crowding/overlapping them.
-    # Moved to "upper left": clear of the tick labels (well below the axis)
-    # and, now that the redundant per-bar "1.000" labels are gone, also clear
-    # of any bar annotation -- verified by rendering (2026-07-02 consistency
-    # pass).
-    ax_pa.legend(loc="upper left", frameon=False, fontsize=7)
+    # loc="lower left" (older) sat directly above the previously-rotated
+    # x-tick labels ("clean translation" etc.), visually crowding/
+    # overlapping them. "upper left" stays clear of the (now flat, short)
+    # tick labels and any bar annotation -- verified by rendering.
+    ax_pa.legend(loc="upper left", frameon=False, fontsize=8)
 
     # ================= Tier 2: non-ideal (n=422) =================
     ref_order_n = ["stretch", "bend"]
@@ -785,7 +815,8 @@ def plot_confusion_matrix(
     tbl_n = table_n.reindex(index=ref_order_n, columns=pred_cols_n, fill_value=0)
     n_nonideal = int(tbl_n.values.sum())
     _confusion_heatmap(ax_hb, fig, tbl_n, ref_order_n,
-                        f"(c) Non-ideal characterization (n={n_nonideal})")
+                        f"(c) Non-ideal characterization (n={n_nonideal})",
+                        label_map=_CONFUSION_LABEL)
 
     cats_n = ["bend", "stretch"]
     retention_n = [stats_n["per_category"][c]["recall"] for c in cats_n]
@@ -822,7 +853,11 @@ def plot_confusion_matrix(
                        va="bottom", fontsize=7, color=COLORS["mixed"],
                        fontweight="bold")
     ax_pb.set_xticks(x_n)
-    ax_pb.set_xticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_n])
+    # cats_n is stretch/bend only (already short "S"/"B"; unaffected by the
+    # translation/rotation shortening above) -- `_CONFUSION_LABEL` used here
+    # too only for consistency with panels (a)/(b)'s tick-label font size.
+    ax_pb.set_xticklabels([_CONFUSION_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_n],
+                          fontsize=9)
     ax_pb.set_xlim(-0.55, 1.55)
     ax_pb.set_ylim(0, 1.12)
     ax_pb.set_ylabel("Fraction of reference-labeled modes")
@@ -864,7 +899,14 @@ def plot_confusion_matrix(
         "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL for "
                                "CLEAN_TRANSLATION/CLEAN_ROTATION/STRETCHING/"
                                "BENDING/MIXED_STRETCH_BEND -- same mapping "
-                               "as fig:benzene."),
+                               "as fig:benzene. FIXED 2026-07-02 (author "
+                               "follow-up): translation/rotation tick text "
+                               "is shortened to 'T'/'R' via a figure-local "
+                               "`_CONFUSION_LABEL` override (CATEGORY_LABEL "
+                               "itself unchanged); tick-label rotation "
+                               "(no longer needed once labels are short) "
+                               "and several font sizes were also restored "
+                               "to normal, readable values."),
         "rigorous_n": n_rigorous,
         "rigorous_confusion_table": tbl_r.to_dict(),
         "rigorous_precision": dict(zip(cats_r, precisions_r)),

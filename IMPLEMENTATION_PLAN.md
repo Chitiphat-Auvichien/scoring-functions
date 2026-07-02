@@ -16,6 +16,11 @@
 > for the full writeup. Caption-side S/B/SB gloss text (from the prior update) still outstanding.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-02 (figure-builder, author follow-up fix):** `fig:confusion` tick labels for
+> translation/rotation shortened to "T"/"R" (figure-local `_CONFUSION_LABEL` override in
+> `plot_confusion_matrix`/`_confusion_heatmap`; `CATEGORY_LABEL` itself unchanged) and the
+> now-unneeded tick-label rotation + several cramped font sizes restored to normal readable
+> values; `data/figures/fig_confusion.{pdf,png}` regenerated, `py -m pytest tests/` 53/53 green.
 > **Done so far (Phase 0/1):** centralized constants; `principal_axes()`/`axis_blocks()`; `score_bonds()`
 > with `Σ s_AB==s[V_S]`; range asserts; `Rscore` = consensus form (settled); manuscript Theory section
 > (T/R/V) expanded + `s[R]` eq/`sin φ` discussion. Engine results match tab:water/benzene.

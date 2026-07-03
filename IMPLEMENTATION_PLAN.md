@@ -16,6 +16,100 @@
 > for the full writeup. Caption-side S/B/SB gloss text (from the prior update) still outstanding.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-03 (author decision — REVERSES the "ingest, don't recompute" locked decision below):**
+> Author will supply real Gaussian `.log`/`.gjf` and EMIT files for the FULL hydride-library
+> molecule set (currently only 24 of ~70 have on-disk geometry; see `data/logs/`), to be dropped into
+> `data/logs/`, `data/EMIT/`, `data/gjf/` incrementally over time — no longer "off-server." Directive:
+> prepare the program so **every score column** (`V_Stretch`, `freq`, `Tx..Rz`, per-bond `s_AB`,
+> `delta_b_mean`/`rel_db`, `predicted_label`/`predicted_annotation`) is **recomputed from the raw
+> Gaussian/EMIT files via the real engine** (`main.load_inputs` → `build_scorer_and_final` →
+> `classify_all_modes`, `ModeScorer.score_bonds`), for every molecule that has geometry on disk —
+> `data/vibrational-scoring-functions.xlsx` is to be used **ONLY** as a ground-truth lookup for
+> `ref_label` ('type': bend/stretch) and the `ideal` tag, joined onto the recomputed rows by
+> (molecule, mode index) with an engine-vs-Excel frequency sanity check gating the LABEL ATTACHMENT
+> only (never gating score computation — scores are always the engine's now). This is dispatched to
+> `lead-engineer` this session (see its own progress log below when done); **all subagents must treat
+> this as the new locked decision** — `library_scores.csv`'s score columns are no longer Excel-sourced,
+> full stop. The subset of Excel molecules still lacking on-disk geometry is expected to shrink to zero
+> as the author drops in more files; **no further code changes should be needed** when that happens —
+> the ingest loop is keyed off what's physically present in `data/logs/`+`data/gjf/`, not off Excel rows.
+> **2026-07-03 (lead-engineer, disk-driven `excel_ingest.py` rearchitecture — DONE, formula-auditor +
+> score-validator both PASS):** Executed the author directive immediately above. **Architecture chosen:**
+> `src/excel_ingest.py` was rewritten around a disk-driven molecule loop, not an Excel-row loop —
+> `discover_geometry_molecules()` lists every basename present in BOTH `data/logs/` (`.log`/`.out`) AND
+> `data/gjf/` (`.com`/`.gjf`); `score_geometry_molecule()` runs the real engine
+> (`main.load_inputs` → `build_scorer_and_final` → `src.classifier.classify_all_modes`,
+> `ModeScorer.score_bonds()`) on each one to build every row (external T/R + internal "Vib i") with real
+> `V_Stretch`/`Tx..Rz`/`predicted_label`/`s_AB`/`rel_db`/`delta_b_mean`; `attach_excel_labels()` then
+> joins `ref_label`/`ideal` from Excel's `data_score` sheet onto the internal rows ONLY, gated by a
+> whole-molecule frequency-agreement check (one mismatched mode nulls the WHOLE molecule's label join,
+> not just that mode — same all-or-nothing guarantee as the prior architecture); `build_library_scores()`
+> orchestrates all three and `run_ingest_pipeline()` is the headless entry point `main.py --library`
+> already wired to. Old API (`ingest_internal_rows`, `attach_geometry_classification`,
+> `_bond_string`) is gone; `resolve_log_basename`/`EXCEL_TO_LOG`/`EXCLUDED_MOLECULES` are unchanged and
+> kept (still needed by `src/calibrate.py` and the new `resolve_excel_molecule_name` reverse-direction
+> helper). **This is genuinely "no code changes needed to scale"**: the loop is keyed off
+> `os.listdir(data/logs)` ∩ `os.listdir(data/gjf)`, so dropping in more `.log`/`.gjf` pairs grows the
+> library automatically next time `--library`/`--calibrate` is re-run.
+> `src/scoring.py`'s `ModeScorer._bond_contributions()`/`score_bonds()` gained a third, additive return
+> value `rel_db` (signed per-bond relative bond-length change, `(|b_AB+Δd_AB|-|b_AB|)/|b_AB|`, the
+> diagnostic fig:bondscores' x-axis needs) alongside the unchanged, already-audited `terms`/`sqdisps` that
+> feed `Vscore()`/`s_AB` — confirmed purely additive, zero risk to eq:vscore/eq:bondscore (see audit
+> below).
+> **Bug found and fixed while validating, not just renaming:** the new `score_geometry_molecule()`
+> initially built `s_AB`/`rel_db` bond-label strings from bare 1-based numeric indices (`"1-2:0.0342"`),
+> silently losing the atom-symbol convention (`"C1-C2:0.0342"`) that `src/benzene_validation.py`'s C-C-
+> vs-C-H bond-type diagnostic parses via `_is_cc_bond()` — this zeroed out `cc_fraction_of_V` for every
+> mixed/worked-example benzene mode and broke 4 `test_benzene_validation.py` tests. Fixed by relabeling
+> via `f"{scorer.atoms[idx].symbol}{idx+1}"` (verified against `data/gjf/benzene.com`'s own connectivity
+> ordering — C1-C2/…/C6-C1 ring bonds, Ci-H(i+6) C-H bonds — matches exactly).
+> **Final library size:** 25 molecules, 303 rows (157 internal + 146 external) — down from the prior
+> Excel-driven baseline's ~69 molecules / 659 rows, a real and disclosed shrinkage until the author drops
+> in more `.log`/`.gjf` pairs (not a bug; `discover_geometry_molecules()` currently returns exactly
+> `water, benzene, co2_mp2_3-21g` + 22 hydride-library molecules, matching `data/logs/`+`data/gjf/` as of
+> this session). Recalibrated end-to-end against this new population: `python main.py --calibrate` froze
+> `tau_TR=0.95, tau_S=0.9036817451504533, tau_B=0.17326891344050538` (barely shifted in the 5th decimal
+> from the stale pre-session values; `tau_sensitivity_sweep.csv` came back BYTE-IDENTICAL, a nice
+> incidental reproducibility confirmation) — note the ideal-molecule stretch/bend sample sizes did drop
+> (33/42, down from 41/50) since only 8 of the original 11 `tab:ideal` molecules (SnO2/TeH2/TeH4 still
+> lack on-disk geometry) are in the current 25. `python main.py --figures` regenerated all 7 figure
+> PDF/PNG pairs cleanly. **Confusion-matrix numbers moved in a notable, real direction**: because every
+> library row now gets the FULL Algorithm 1 (Steps 2-4), not just Step 4's `vib_label` applied in
+> isolation to Excel-only rows (the old architecture's necessary limitation for rows with no geometry),
+> stretch recall rose from 0.717 to 0.9375 and bend recall is 0.9383 (both just under the 0.95 floor now,
+> for the same reason — residual non-ideal external mixing landing in the MIXED bucket, 0 opposite-
+> category crossings either way; `floor_met` still honestly `False`). `tests/test_calibrate.py`'s pinned
+> confusion-matrix numbers were updated to match.
+> **Test suite:** rewrote `tests/test_excel_ingest.py` from scratch for the new API (old file imported
+> the retired `attach_geometry_classification` and failed at collection) — 18 tests covering
+> `discover_geometry_molecules`/`resolve_excel_molecule_name`/`resolve_log_basename` (pure-logic, no
+> slow xlsx I/O), a direct fast `score_geometry_molecule("water", ...)` check, a fully synthetic unit test
+> of `attach_excel_labels()`'s frequency-gating contract (matched/mismatched/no-Excel-counterpart cases,
+> including the "missing Excel row counts as a mismatch, not silently skipped" guarantee), and the
+> checked-in `library_scores.csv` golden invariants (`Σ s_AB == s[V_S]`, all-external-clean, the 4
+> known H2O/OF2/Cl2O/Br2O frequency-mismatch cases left `ref_label`-null but fully scored). Updated
+> `tests/test_calibrate.py`'s frozen numbers for the new library size/composition (only 2 of its 10 tests
+> needed number changes; the other 8 — including the benzene EMIT 34/35/36 and water-external targets —
+> were unaffected). **`python -m pytest tests/` 60/60 green** (up from 53 pre-session; net +7 new tests).
+> **Validation dispatched and both PASS:** formula-auditor confirmed `rel_db`'s formula matches its own
+> stated definition exactly (same `delDisp` object as the existing `s_AB` numerator, so zero sign/
+> convention drift risk), confirmed `src/excel_ingest.py`'s docstring formula is byte-identical to the
+> code's, and confirmed `Vscore()`/`score_bonds()`'s existing eq:vscore/eq:bondscore math is untouched
+> (two minor non-blocking observations noted: a pre-existing unguarded division in the `s_AB` numerator,
+> and a scope-only doc-comment note for `EPS_NORM` — flagged for a future pass, not fixed here).
+> score-validator confirmed no regression: water `tab:water` exact to 3 dp, `Σ s_AB == s[V_S]` holds
+> library-wide (157/157 internal rows within the CSV's `.4f`-rounding bound; full-precision spot-checks
+> diff ≤1e-16), all 146 external rows reach |score|=1.000 exactly, benzene EMIT 34/35 → `Tx*`/`Ty*`
+> (vibration=SB) and EMIT 36 → clean `Tz` blind spot reproduced exactly, and the EMIT 2-vs-9 `s[R_y]`
+> non-monotonicity (39% projected Ry → |s[Ry]|=0.143 vs. 14% projected Ry → |s[Ry]|=0.215) reproduced
+> exactly.
+> **For future sessions:** the ingest loop scales with zero code changes as more `.log`/`.gjf` pairs
+> arrive — just re-run `python main.py --library && python main.py --calibrate && python main.py
+> --figures` (or `python -m pytest tests/`, which reads the checked-in goldens and does not itself
+> re-ingest). If the checked-in `library_scores.csv`/`thresholds.json` goldens are ever regenerated,
+> re-check `tests/test_calibrate.py`'s pinned confusion-matrix numbers first — those are the ones most
+> sensitive to population composition, everything else in the test suite is either pure logic or a
+> structural invariant that holds regardless of N.
 > **2026-07-03 (lead-engineer, CLI subcommands + README JCE-retraction fix):** Phase 5 checklist item
 > **DONE** — `main.py` gained 5 new flags, each wiring an EXISTING pipeline function (no logic
 > reimplemented): `--classify` (`run_classify_pipeline`, per-molecule, requires `-m` + `--mode`),
@@ -648,8 +742,11 @@ first**, validated on data in hand (water, benzene, gramicidin), then scale out 
 library scores from the Excel file.
 
 ### Locked decisions
-- Hydride-library logs live off-server; **their scores are already in
-  `data/vibrational-scoring-functions.xlsx`** → ingest precomputed scores + reference labels, do not re-score.
+- **SUPERSEDED 2026-07-03 (see RESUME HERE at top):** ~~Hydride-library logs live off-server; their
+  scores are already in `data/vibrational-scoring-functions.xlsx` → ingest precomputed scores +
+  reference labels, do not re-score.~~ The author is now supplying real `.log`/`.gjf`/EMIT files for
+  the full library. **Current rule:** every score column is recomputed from those files via the real
+  engine; the Excel workbook supplies `ref_label`/`ideal` ONLY (ground-truth ties, not scores).
 - Program **generates figures** (matplotlib), reproducing every manuscript figure.
 - Sequence: **core engine first.**
 - Validation is **two-tier**: *score-level* checks (threshold-independent) are pinned early; *label-level*

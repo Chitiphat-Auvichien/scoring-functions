@@ -1,95 +1,103 @@
-"""Phase-3 library ingest: data/vibrational-scoring-functions.xlsx -> data/results/library_scores.csv.
+"""Library ingest: data/logs/+data/gjf/ (real engine) -> data/results/library_scores.csv,
+with data/vibrational-scoring-functions.xlsx used ONLY as a ground-truth label
+lookup (``ref_label``/``ideal``).
 
-Per the locked decision in IMPLEMENTATION_PLAN.md ("ingest library scores rather
-than recompute"), this module reads the hydride/AB_n library's PRECOMPUTED
-scores directly out of the Excel workbook -- it never re-derives s[V_S] from
-the Gaussian logs (Phase 0 already spot-verified the eq:vscore column identity
-on H2S/SF2 to ~1e-5, well within 3 dp; see IMPLEMENTATION_PLAN.md Changelog).
+**Architecture (rearchitected 2026-07-03, author directive; supersedes the
+earlier "ingest, don't recompute" locked decision that this module's docstring
+described until this session -- see IMPLEMENTATION_PLAN.md's RESUME HERE for
+the full record).** The author is supplying real Gaussian ``.log``/``.gjf``
+pairs for the hydride-library molecule set incrementally over time (25 of
+~70 Excel molecules have a pair on disk as of this session). Every score
+column is now recomputed from the raw files via the real engine
+(``main.load_inputs`` -> ``build_scorer_and_final`` -> ``classify_all_modes``,
+``ModeScorer.score_bonds``) for every molecule physically present in
+``data/logs/`` ∩ ``data/gjf/`` -- the Excel workbook no longer drives the loop
+or supplies any score. It supplies exactly two things, joined on
+(molecule, mode index) with a frequency sanity check gating the join (never
+gating score computation): the literature ``ref_label`` ('bend'/'stretch',
+from ``data_score``'s ``type`` column) and the ``ideal`` tag. The subset of
+on-disk molecules is expected to grow toward the full ~70 as the author drops
+in more files; **no code changes are needed for that** -- the ingest loop is
+keyed off ``discover_geometry_molecules()``, i.e. what is physically present
+in ``data/logs/``+``data/gjf/``, not off Excel rows. Excel-only molecules
+(no on-disk geometry) no longer appear in ``library_scores.csv`` at all (a
+real, disclosed shrinkage of the calibration population from ~70 to 25
+molecules until more files arrive -- not a bug; see IMPLEMENTATION_PLAN.md's
+RESUME HERE for the resulting N and the validation performed against it).
 
-Excel sheet layout (verified this session by direct inspection, not assumed
-from sheet names -- the sibling ``Eckart``/``Eckart vs score`` sheets turned
-out NOT to hold what their names implied, so nothing here is taken on faith):
+Per-row provenance (locked schema, unchanged column names so
+``src/calibrate.py``/``src/figures.py`` keep working):
+  - ``freq``, ``V_Stretch``, ``Tx..Rz``, ``predicted_label``,
+    ``predicted_annotation`` -- ALWAYS the real engine's own numbers
+    (``classify_all_modes``'s Step 1-4 output). ``has_geometry`` is therefore
+    ``True`` for every row now (only geometry-backed molecules are ever
+    ingested); the column is kept for schema/backward-compatibility rather
+    than dropped.
+  - ``s_AB`` -- per-bond eq:bondscore contributions (``ModeScorer.score_bonds()``),
+    computed from THIS mode's own displacement, for every internal row
+    (not just STRETCHING/MIXED_STRETCH_BEND rows -- ``classify_all_modes()``
+    itself only keeps bonds for those two labels, so this module calls
+    ``score_bonds()`` again directly rather than reusing its filtered output).
+    Formatted identically to before: semicolon-joined ``"i-j:value"`` with
+    1-based atom indices.
+  - ``rel_db`` -- per-bond SIGNED relative bond-length change,
+    ``rel_db_AB = (|b_AB + Δd_AB| - |b_AB|) / |b_AB|``, where ``b_AB`` is the
+    equilibrium bond vector and ``Δd_AB = d_B - d_A`` is the mode-displacement
+    difference (the SAME convention ``s_AB``/``Vscore`` already use -- see
+    ``ModeScorer._bond_contributions()`` in src/scoring.py). This diagnostic
+    quantity (used as fig:bondscores' x-axis) is not a named JCC equation; its
+    definition was originally reverse-engineered THIS way from the Excel
+    workbook's own ``"(|b'|-|b|)/|b|"`` per-bond column (verified there, in an
+    earlier session, to 1e-16 self-consistency against Excel's own mode-
+    averaged ``Delta|b|`` companion column) -- now computed from geometry
+    instead of read from the spreadsheet, same formula.
+  - ``delta_b_mean`` -- mean of ``|rel_db_AB|`` over a mode's bonds (the
+    mode-level companion to the per-bond ``rel_db`` string, matching the
+    Excel ``Delta|b|`` column's own definition).
+  - ``ref_label``/``ideal`` -- ONLY from Excel's ``data_score`` sheet, ONLY
+    for internal rows, ONLY if the engine's own computed frequency for that
+    mode agrees with Excel's ``freq`` for the SAME (molecule, mode index)
+    within tolerance (``atol=0.05, rtol=1e-4``) for EVERY internal mode of
+    that molecule (checked before writing anything -- one mismatched mode
+    disqualifies the whole molecule's internal-row label join, same
+    all-or-nothing guarantee as before). External (T/R) rows get
+    ``ref_label`` = 'translation'/'rotation' unconditionally -- that is
+    structural truth (Eckart-Sayvetz completeness), not Excel-derived.
+    A molecule with NO Excel counterpart at all is not an error: its internal
+    rows are still fully scored, just with ``ref_label``/``ideal`` left null.
 
-``data_score`` -- one row per (molecule, mode), where "mode" is a 1-based
-INTERNAL vibrational-mode index (3N-6 rows per molecule; there are NO
-translation/rotation rows in this sheet at all -- confirmed for every
-molecule, e.g. SnH4 has exactly 9 rows, C6H6 exactly 30). Columns used:
-  - ``sum_|d2-d1|^2/sum(|d2-d1|^2)*cos(theta)``  -> s[V_S] (eq:vscore; Phase-0 verified)
-  - ``ideal``   ('yes'/'no')     -> the ideal/non-ideal tag, straight from the sheet
-                                    (no need to re-derive from tab:ideal/tab:nonideal)
-  - ``type``    ('bend'/'stretch') -> the literature reference label. Cross-checked
-                                    this session: byte-identical to the independent
-                                    ``characterised modes`` sheet's own 'type' column
-                                    for every one of the 600 rows that has an entry
-                                    in both (the only rows without a ``characterised
-                                    modes`` counterpart are the 87 'Gly5' rows, which
-                                    are excluded anyway -- see EXCLUDED_MOLECULES).
-  - ``freq``, ``Delta|b|`` (mean |relative bond-length change| over that mode's
-    bonds -- verified this session against the independent per-bond average in
-    ``data_mode&bond`` to 1e-16, i.e. it IS that average, not a different quantity).
+Excel sheet layout used (unchanged from the prior session's direct
+inspection): ``data_score`` has one row per (molecule, 1-based internal
+vibrational-mode index) with columns ``molecule``, ``mode``, ``freq``,
+``type`` ('bend'/'stretch'), ``ideal`` ('yes'/'no'). This module reads ONLY
+those columns now (``sum_|d2-d1|^2/...`` V-score/bond columns are no longer
+read at all -- they're recomputed, not ingested). ``data_mode&bond`` is no
+longer read by this module either (its per-bond columns are superseded by
+``ModeScorer.score_bonds()``'s own geometry-based computation).
 
-``data_mode&bond`` -- one row per (molecule, mode, bond); supplies the per-bond
-detail data_score does not carry:
-  - ``|d2-d1|^2/sum(|d2-d1|^2)*|cos(theta)|`` -- per-bond s_AB (eq:bondscore).
-    Verified this session: summed within each (molecule, mode) group, this
-    reproduces data_score's s[V_S] column to ~5e-6 (600/600 rows checked) --
-    it is not a different candidate formula, it is s_AB itself.
-  - ``(|b'|-|b|)/|b|`` -- signed per-bond relative bond-length change (the
-    per-bond counterpart of data_score's mode-averaged ``Delta|b|``).
+**Discovered in the prior (Excel-driven) session, still true and still
+handled the same way under this architecture:** water's Excel 'H2O' row does
+NOT match this repo's ``water.log`` (Excel freqs 1722.454/3501.541/3660.830
+cm-1 vs. the engine's 1628.029/3887.192/4005.506 cm-1 -- 94-386 cm-1 off, not
+rounding) -- likely a different calculation/basis than the log used
+elsewhere in this repo. Water's 3 internal rows are correctly left with null
+``ref_label``/``ideal`` (frequency mismatch -> skipped label join, warned),
+while water's 6 (engine-computed, always-correct) external T/R rows are
+unaffected. Same story for OF2/Cl2O/Br2O (also historically mismatched).
 
-T/R reference labels: data_score/data_mode&bond carry NO external-mode rows
-at all, and constructing an ideal T/R reference requires real atomic geometry
-that this repo simply does not have for most of the ~70 Excel molecules --
-only 22 hydride-library molecules (+ water/benzene/CO2) ship with a matching
-.log/.gjf pair in data/logs//data/gjf/ (see EXCEL_TO_LOG for the name-mapping
-between the Excel molecule name and the on-disk log basename, plus a direct
-case-match fallback for everything else; confirmed by cross-checking the
-engine's parsed frequency against the Excel 'freq' column for 5 hydride
-spot-check molecules this session: max abs deviation 0.0042 cm-1, consistent
-with rounding, not misalignment -- CO2 and benzene likewise match to <=0.015
-cm-1 across all their modes). For that geometry-backed subset,
-``attach_geometry_classification`` runs the REAL classifier
-(main.build_scorer_and_final + classify_all_modes) and (a) attaches predicted
-labels/annotations/T,R scores onto the matching internal rows -- ONLY if every
-one of that molecule's Excel-vs-engine frequencies agrees within tolerance
-first (checked for the whole molecule before writing anything, so a bad
-molecule cannot half-merge) -- and (b) always appends new rows (kind=
-'external') for the n_T+n_R ideal T/R modes, which do not exist in the Excel
-sheet at all and whose construction (Eckart-Sayvetz, from geometry alone) does
-not depend on the vibrational-mode frequency match at all. **Discovered this
-session:** water's Excel 'H2O' row does NOT match this repo's water.log --
-Excel frequencies 1722.454/3501.541/3660.830 cm-1 vs. the engine's parsed
-1628.029/3887.192/4005.506 cm-1 (differences of 94-386 cm-1, not rounding) --
-so water's 3 internal rows are correctly left has_geometry=False (skipped, not
-force-merged); water's 6 ideal T/R rows are still attached normally, since
-those do not depend on this mismatch. This looks like the Excel 'H2O' row was
-populated from a different water calculation (e.g. a different basis/method,
-or literature/experimental frequencies) than the water.log used elsewhere in
-this repo for tab:water -- flagged for the lead-author, not silently patched
-over. CO2 and benzene both match cleanly (see above) and merge normally. For
-the remaining ~45 Excel-only molecules (no .log/.gjf pair in this repo at
-all), the output carries Step-4-relevant columns only (V_Stretch, freq,
-Delta|b|, ideal tag, ref_label, per-bond detail); T/R/predicted-label columns
-are left blank -- a genuine data-availability limit (no coordinates to build a
-reference from), not a design shortcut, and is documented in the output
-schema (``has_geometry`` column) so downstream consumers cannot miss it.
+EXCEL_TO_LOG maps an Excel ``data_score`` molecule name to its on-disk
+``data/logs/``+``data/gjf/`` basename for the subset that ships under a
+different filename/casing convention; every other on-disk basename is tried
+as a direct-name match against ``data_score``'s own molecule column (see
+``resolve_excel_molecule_name``). ``resolve_log_basename`` (the reverse
+direction: Excel/library molecule name -> on-disk basename) is kept because
+``src/calibrate.py`` still needs it to re-load geometry for a given
+``library_scores.csv`` molecule name.
 
-Excluded: 'Gly5' (87 rows, ``type=='0'`` in data_score -- a gramicidin
-fragment; Decision 5, deferred to the companion paper). 'Gramicidin_A' never
-appears in data_score at all (only in 'characterised modes', with no computed
-scores), so it is naturally absent already.
-
-Library-vs-manuscript-table coverage (checked exhaustively this session
-against tab:ideal / tab:nonideal in JCC_temp_LaTeXtemplate.tex): ALL 11
-tab:ideal entries (SnO2, TeH2, InH3, SbH3, IH3, SnH4, XeH4, TeH4, SbH5, XeOH4,
-TeH6) and the full tab:nonideal roster -- bent AB2 (O/S/Se x H/F/Cl/Br) +
-H2O2, trig-planar AB3 (B/Al/Ga x H/F/Cl/Br, minus BBr3/GaBr3) + C2H4,
-trig-pyramidal AB3 (N/P/As x H/F/Cl/Br, complete) + tetrahedral AB4 (C/Si/Ge x
-H/F/Cl/Br, minus CBr4/SiBr4/GeBr4) + C2H6 -- are present in ``data_score``.
-The only real gap: 5 specific bromides (BBr3, GaBr3, CBr4, SiBr4, GeBr4) are
-absent from the workbook entirely. Flagged for the lead-author/tex-data-sync;
-not a large enough gap to force a manuscript table edit (5 of ~75 named
-entries), but should be noted (e.g. a footnote) rather than silently ignored.
+Excluded: 'Gly5' (a gramicidin fragment; Decision 5, deferred to the
+companion paper) -- has no on-disk .log/.gjf pair in this repo anyway, so it
+is naturally absent from the disk-driven loop; still filtered out of the
+Excel side too (belt-and-suspenders) in case that ever changes.
 """
 import os
 import warnings
@@ -98,18 +106,13 @@ import numpy as np
 import openpyxl
 import pandas as pd
 
-# --- Column identities in the Excel workbook (verified 2026-07 session) ---
-_VS_COL = "sum_|d₂-d₁|²/sum(|d₂-d₁|²)*cosθ"
-_BOND_S_AB_COL = "|d₂-d₁|²/sum(|d₂-d₁|²)*|cosθ|"
-_BOND_RELDB_COL = "(|b'|-|b|)/|b|"
-_DELTA_B_COL = "Δ|b|"
-
 EXCLUDED_MOLECULES = {"Gly5"}  # Decision 5: gramicidin fragment, out of scope this paper.
 
 # Excel molecule name -> data/logs & data/gjf basename, for the subset that
 # ships with real Gaussian geometry in this repo under a different filename
 # (case or naming convention). Everything else is tried as a direct/case
-# match against the molecule name itself (see resolve_log_basename).
+# match against the molecule name itself (see resolve_log_basename /
+# resolve_excel_molecule_name).
 EXCEL_TO_LOG = {
     "H2O": "water",
     "C6H6": "benzene",
@@ -119,8 +122,18 @@ EXCEL_TO_LOG = {
     "Br2O": "br2o",
     "SeBr2": "SeBr2-cc",
 }
+_LOG_TO_EXCEL = {v: k for k, v in EXCEL_TO_LOG.items()}
 
 _EXTERNAL_SLOTS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
+
+# Locked output schema (src/calibrate.py and src/figures.py read these exact
+# column names).
+SCHEMA_COLUMNS = [
+    "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
+    "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
+    "predicted_label", "predicted_annotation",
+    "Tx", "Ty", "Tz", "Rx", "Ry", "Rz",
+]
 
 
 def _read_sheet(xlsx_path, sheet_name):
@@ -132,17 +145,18 @@ def _read_sheet(xlsx_path, sheet_name):
 
 
 def load_excel_tables(xlsx_path):
-    """Read the two sheets this module needs into DataFrames."""
-    return {
-        "data_score": _read_sheet(xlsx_path, "data_score"),
-        "data_mode_bond": _read_sheet(xlsx_path, "data_mode&bond"),
-    }
+    """Read the data_score sheet this module needs (label lookup only)."""
+    return {"data_score": _read_sheet(xlsx_path, "data_score")}
 
 
 def resolve_log_basename(molecule, data_dir="data"):
     """Return the data/logs/<basename> stem for `molecule` if a matching .log
     (or .out) AND a connectivity .com/.gjf pair both exist in this repo;
     otherwise None (Excel-only molecule -- no geometry available here).
+
+    Kept for callers that go Excel-name -> on-disk basename (src/calibrate.py
+    still needs this to re-load geometry for a given library_scores.csv
+    molecule name).
     """
     logs_dir = os.path.join(data_dir, "logs")
     gjf_dir = os.path.join(data_dir, "gjf")
@@ -159,184 +173,214 @@ def resolve_log_basename(molecule, data_dir="data"):
     return None
 
 
-def _bond_string(rows, col):
-    """Format a group of per-bond rows as 'atom1-atom2:value;atom1-atom2:value'."""
-    if rows is None or len(rows) == 0:
-        return ""
-    parts = []
-    for _, row in rows.iterrows():
-        val = row[col]
-        if pd.isna(val):
-            continue
-        parts.append(f"{row['atom1']}-{row['atom2']}:{float(val):.4f}")
-    return ";".join(parts)
+def discover_geometry_molecules(data_dir="data"):
+    """Sorted list of basenames present in BOTH data/logs/ (.log or .out) and
+    data/gjf/ (.com or .gjf) -- the disk-driven source of truth for this
+    module's molecule loop. Scales automatically as more files are dropped
+    in; no code changes needed."""
+    logs_dir = os.path.join(data_dir, "logs")
+    gjf_dir = os.path.join(data_dir, "gjf")
+    log_bases = {os.path.splitext(f)[0] for f in os.listdir(logs_dir)
+                 if f.lower().endswith((".log", ".out"))}
+    gjf_bases = {os.path.splitext(f)[0] for f in os.listdir(gjf_dir)
+                 if f.lower().endswith((".com", ".gjf"))}
+    return sorted(log_bases & gjf_bases)
 
 
-def ingest_internal_rows(tables):
-    """Build one row per (molecule, mode) internal vibration from data_score
-    + data_mode&bond. No geometry/classification columns yet (see
-    attach_geometry_classification) -- this function only ever reads
-    precomputed Excel values, never recomputes a score.
-    """
-    ds = tables["data_score"].copy()
-    dmb = tables["data_mode_bond"].copy()
-    ds = ds[~ds["molecule"].isin(EXCLUDED_MOLECULES)].copy()
-    dmb = dmb[~dmb["molecule"].isin(EXCLUDED_MOLECULES)].copy()
-
-    for col in ("freq", _VS_COL, _DELTA_B_COL):
-        ds[col] = pd.to_numeric(ds[col], errors="coerce")
-    for col in (_BOND_S_AB_COL, _BOND_RELDB_COL):
-        dmb[col] = pd.to_numeric(dmb[col], errors="coerce")
-
-    bond_groups = {key: grp for key, grp in dmb.groupby(["molecule", "mode"])}
-
-    rows = []
-    for _, r in ds.iterrows():
-        key = (r["molecule"], r["mode"])
-        bonds = bond_groups.get(key)
-        ref_label = r["type"] if pd.notna(r["type"]) and r["type"] in ("bend", "stretch") else None
-        rows.append({
-            "molecule": r["molecule"],
-            "mode_index": int(r["mode"]),
-            "kind": "internal",
-            "freq": r["freq"],
-            "ref_label": ref_label,
-            "ideal": r["ideal"],
-            "V_Stretch": r[_VS_COL],
-            "delta_b_mean": r[_DELTA_B_COL],
-            "s_AB": _bond_string(bonds, _BOND_S_AB_COL),
-            "rel_db": _bond_string(bonds, _BOND_RELDB_COL),
-            "has_geometry": False,
-            "predicted_label": None,
-            "predicted_annotation": None,
-            "Tx": None, "Ty": None, "Tz": None,
-            "Rx": None, "Ry": None, "Rz": None,
-        })
-    return pd.DataFrame(rows)
+def resolve_excel_molecule_name(base, excel_molecules):
+    """On-disk basename -> Excel data_score molecule name, or None if `base`
+    has no Excel counterpart at all (not an error -- see module docstring
+    point 5)."""
+    if base in _LOG_TO_EXCEL:
+        return _LOG_TO_EXCEL[base]
+    if base in excel_molecules:
+        return base
+    return None
 
 
-def attach_geometry_classification(df, data_dir="data", thresholds=None,
-                                    freq_atol=0.05, freq_rtol=1e-4):
-    """For every molecule in `df` that has a real .log/.gjf pair on disk, run
-    the actual classifier (Algorithm 1) on its real geometry.
+def score_geometry_molecule(base, data_dir="data", thresholds=None):
+    """Run the real engine (Steps 1-4) on one on-disk molecule and return a
+    list of row dicts (one per external T/R slot + one per internal 'Vib i'
+    mode) in the library_scores.csv schema, EXCLUDING 'molecule' (the caller
+    attaches that) and with ref_label/ideal left None (attached separately by
+    attach_excel_labels, label-only, per this module's architecture).
 
-    Two independent attachments, handled separately because they have
-    different validity conditions:
-      (a) internal-row merge (predicted_label/annotation/T,R scores onto the
-          matching "Vib i" rows) -- requires the WHOLE molecule's engine vs.
-          Excel frequencies to agree within tolerance (checked before writing
-          anything, so one bad molecule cannot half-merge); a molecule that
-          fails this check is skipped (has_geometry stays False for its
-          internal rows) and recorded in the returned skip report rather than
-          raising -- this is a real, isolated data-provenance mismatch (see
-          the water/H2O case in the module docstring), not necessarily a code
-          bug, so it must not crash the whole ingest. A row whose "Vib i"
-          name resolves to NO engine mode at all (m is None -- not currently
-          known to happen for any molecule, but not proven impossible) is
-          treated identically to a frequency mismatch, not silently skipped:
-          it is appended to `mismatches` with engine_freq=None so it still
-          trips the same all-or-nothing gate and shows up in the skip report
-          (fixed 2026-07-02, formula-auditor finding -- the previous `continue`
-          could in principle let a molecule half-merge with no report at all).
-      (b) external-row append (the n_T+n_R ideal T/R rows) -- always done
-          when the geometry parses at all, since construct_T()/construct_R()
-          build these directly from geometry and do not depend on the
-          vibrational-mode frequency match at all.
-
-    Returns (df, skip_report) where skip_report is a list of
-    {'molecule', 'n_mismatched', 'example': (mode_index, engine_freq, excel_freq)}
-    dicts, one per molecule whose internal-row merge was skipped.
+    Raises ValueError if no bond connectivity is available (propagated from
+    build_scorer_and_final -- a molecule with a .gjf but no usable
+    connectivity is a real data problem, not silently skipped here; the
+    caller decides whether to skip-and-warn).
     """
     from main import load_inputs, build_scorer_and_final
     from src.classifier import classify_all_modes
 
+    raw, _ = load_inputs(base, "normal", data_dir)
+    scorer, final = build_scorer_and_final(raw, "normal")
+    by_name = {m.get("label", f"Mode {i + 1}"): m for i, m in enumerate(final)}
+    scored = classify_all_modes(scorer, final, thresholds)
+
+    rows = []
+    for m in scored:
+        name = m["name"]
+        if name in _EXTERNAL_SLOTS:
+            rows.append({
+                "mode_index": name, "kind": "external",
+                "freq": m["frequency"],
+                "ref_label": "translation" if name[0] == "T" else "rotation",
+                "ideal": None,
+                "V_Stretch": m["V"], "delta_b_mean": None,
+                "s_AB": "", "rel_db": "",
+                "has_geometry": True,
+                "predicted_label": m["classification"],
+                "predicted_annotation": m["annotation"],
+                "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
+                "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
+            })
+            continue
+
+        # Internal ("Vib i") mode: recompute per-bond detail (s_AB + rel_db)
+        # for THIS mode's own displacement directly via score_bonds() --
+        # classify_all_modes() only retains 'bonds' for STRETCHING/
+        # MIXED_STRETCH_BEND labels (per its own docstring/spec), but every
+        # internal row here wants per-bond detail regardless of label.
+        # Cheap: same scorer/atoms, no reparsing, just reloads dispVec.
+        mode_index = int(name.split()[1])
+        mode_vec = by_name[name]["vector"]
+        scorer.calculate_scores(mode_vec)
+        bonds = scorer.score_bonds()
+
+        def _label(idx):
+            # Atom-symbol + 1-based-index label (e.g. "C1", "H7"), matching
+            # the convention the old Excel-sourced s_AB strings used (see
+            # src/benzene_validation.py's C-C/C-H bond-type parsing, which
+            # relies on this exact "<symbol><1-based index>" format).
+            return f"{scorer.atoms[idx].symbol}{idx + 1}"
+
+        s_ab_str = ";".join(f"{_label(b['i'])}-{_label(b['j'])}:{b['s_AB']:.4f}" for b in bonds)
+        rel_db_str = ";".join(f"{_label(b['i'])}-{_label(b['j'])}:{b['rel_db']:.4f}" for b in bonds)
+        delta_b_mean = float(np.mean([abs(b["rel_db"]) for b in bonds])) if bonds else None
+
+        rows.append({
+            "mode_index": mode_index, "kind": "internal",
+            "freq": m["frequency"],
+            "ref_label": None, "ideal": None,  # attached later from Excel, label-only
+            "V_Stretch": m["V"], "delta_b_mean": delta_b_mean,
+            "s_AB": s_ab_str, "rel_db": rel_db_str,
+            "has_geometry": True,
+            "predicted_label": m["classification"],
+            "predicted_annotation": m["annotation"],
+            "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
+            "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
+        })
+    return rows
+
+
+def attach_excel_labels(df, tables, freq_atol=0.05, freq_rtol=1e-4):
+    """Join ref_label/ideal from Excel's data_score sheet onto `df`'s internal
+    rows, molecule by molecule, gated by a whole-molecule frequency-agreement
+    check (see module docstring). External rows are untouched (already
+    correct, structural). Returns (df, skip_report) where skip_report is a
+    list of {'molecule', 'n_mismatched', 'example': (mode_index, engine_freq,
+    excel_freq)} dicts, one per molecule whose internal-row label join was
+    skipped (excel_freq is None if no Excel row exists at all for that mode
+    index -- treated identically to a numeric mismatch, not silently
+    skipped, per the fail-loud guarantee established in the prior session).
+    """
+    ds = tables["data_score"].copy()
+    ds = ds[~ds["molecule"].isin(EXCLUDED_MOLECULES)].copy()
+    ds["freq"] = pd.to_numeric(ds["freq"], errors="coerce")
+    ds["mode"] = pd.to_numeric(ds["mode"], errors="coerce")
+    ds_molecules = set(ds["molecule"].dropna().unique())
+
+    ds_by_key = {}
+    for _, r in ds.iterrows():
+        if pd.isna(r["mode"]):
+            continue
+        ds_by_key[(r["molecule"], int(r["mode"]))] = r
+
     df = df.copy()
-    extra_rows = []
     skip_report = []
     for mol in df["molecule"].unique():
-        base = resolve_log_basename(mol, data_dir)
-        if base is None:
-            continue
-        try:
-            raw, _ = load_inputs(base, "normal", data_dir)
-            scorer, final = build_scorer_and_final(raw, "normal")
-        except (FileNotFoundError, ValueError):
-            # Missing bonds / parse trouble -- skip rather than fabricate geometry.
-            continue
-        scored = classify_all_modes(scorer, final, thresholds)
-        by_name = {m["name"]: m for m in scored}
+        if mol not in ds_molecules:
+            continue  # no Excel counterpart at all -- not an error (schema doc point 5)
 
-        mol_mask = df["molecule"] == mol
-        mol_rows = df[mol_mask]
-
-        matched = []          # (idx, engine_mode_dict) pairs that align
-        mismatches = []        # (mode_index, engine_freq, excel_freq)
-        for idx, row in mol_rows.iterrows():
-            m = by_name.get(f"Vib {row['mode_index']}")
-            if m is None:
-                # No engine mode resolves for this Excel row at all (not
-                # currently known to happen for any molecule -- see the
-                # module docstring -- but not silently skipped either: an
-                # unresolved row is exactly as disqualifying as a frequency
-                # mismatch, so it counts toward the mismatch gate below and
-                # the whole molecule's internal-row merge is excluded and
-                # reported, matching the documented all-or-nothing guarantee.
-                mismatches.append((row["mode_index"], None, row["freq"]))
+        internal_idx = df.index[(df["molecule"] == mol) & (df["kind"] == "internal")]
+        matched = []
+        mismatches = []
+        for idx in internal_idx:
+            mode_index = int(df.at[idx, "mode_index"])
+            engine_freq = df.at[idx, "freq"]
+            ex_row = ds_by_key.get((mol, mode_index))
+            if ex_row is None:
+                mismatches.append((mode_index, engine_freq, None))
                 continue
-            if np.isclose(m["frequency"], row["freq"], atol=freq_atol, rtol=freq_rtol):
-                matched.append((idx, m))
-            else:
-                mismatches.append((row["mode_index"], m["frequency"], row["freq"]))
+            excel_freq = ex_row["freq"]
+            if pd.isna(excel_freq) or not np.isclose(engine_freq, excel_freq,
+                                                       atol=freq_atol, rtol=freq_rtol):
+                mismatches.append((mode_index, engine_freq,
+                                    None if pd.isna(excel_freq) else float(excel_freq)))
+                continue
+            matched.append((idx, ex_row))
 
         if mismatches:
             skip_report.append({
                 "molecule": mol, "n_mismatched": len(mismatches),
                 "example": mismatches[0],
             })
-        else:
-            for idx, m in matched:
-                df.at[idx, "has_geometry"] = True
-                df.at[idx, "predicted_label"] = m["classification"]
-                df.at[idx, "predicted_annotation"] = m["annotation"]
-                for ax in "xyz":
-                    df.at[idx, f"T{ax}"] = m["T"][ax]
-                    df.at[idx, f"R{ax}"] = m["R"][ax]
+            continue
 
-        # External (T/R) rows are independent of the internal-row frequency
-        # match above -- attach them whenever geometry parsed successfully.
-        for m in scored:
-            if m["name"] in _EXTERNAL_SLOTS:
-                extra_rows.append({
-                    "molecule": mol, "mode_index": m["name"], "kind": "external",
-                    "freq": m["frequency"],
-                    "ref_label": "translation" if m["name"][0] == "T" else "rotation",
-                    "ideal": None, "V_Stretch": m["V"], "delta_b_mean": None,
-                    "s_AB": "", "rel_db": "", "has_geometry": True,
-                    "predicted_label": m["classification"],
-                    "predicted_annotation": m["annotation"],
-                    "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
-                    "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
-                })
-    if extra_rows:
-        df = pd.concat([df, pd.DataFrame(extra_rows)], ignore_index=True)
+        for idx, ex_row in matched:
+            ref_label = ex_row["type"] if ex_row["type"] in ("bend", "stretch") else None
+            df.at[idx, "ref_label"] = ref_label
+            df.at[idx, "ideal"] = ex_row["ideal"]
+
     return df, skip_report
 
 
 def build_library_scores(xlsx_path="data/vibrational-scoring-functions.xlsx",
                           data_dir="data", thresholds=None, return_skip_report=False):
+    """Disk-driven library build: score EVERY molecule in
+    discover_geometry_molecules() with the real engine, then join
+    ref_label/ideal from Excel where a matching, frequency-consistent row
+    exists. See module docstring for the full contract.
+    """
     tables = load_excel_tables(xlsx_path)
-    df = ingest_internal_rows(tables)
-    df, skip_report = attach_geometry_classification(df, data_dir, thresholds)
+    ds_molecules = set(tables["data_score"]["molecule"].dropna().unique()) - EXCLUDED_MOLECULES
+
+    bases = discover_geometry_molecules(data_dir)
+    all_rows = []
+    load_errors = []
+    for base in bases:
+        molecule_label = resolve_excel_molecule_name(base, ds_molecules) or base
+        try:
+            rows = score_geometry_molecule(base, data_dir, thresholds)
+        except (FileNotFoundError, ValueError) as e:
+            load_errors.append((base, str(e)))
+            continue
+        for r in rows:
+            r["molecule"] = molecule_label
+        all_rows.extend(rows)
+
+    df = pd.DataFrame(all_rows, columns=SCHEMA_COLUMNS)
+    df, skip_report = attach_excel_labels(df, tables)
+
+    for base, err in load_errors:
+        warnings.warn(
+            f"excel_ingest: skipped on-disk molecule '{base}' -- parse/scoring "
+            f"failed ({err}) -- not included in library_scores.csv at all.",
+            stacklevel=2)
     for entry in skip_report:
         mode_index, eng_f, exc_f = entry["example"]
-        eng_f_str = f"{eng_f:.4f}" if eng_f is not None else "NO ENGINE MODE RESOLVED"
+        exc_f_str = f"{exc_f:.4f}" if exc_f is not None else "NO EXCEL ROW FOUND"
         warnings.warn(
-            f"excel_ingest: '{entry['molecule']}' internal rows NOT geometry-"
-            f"merged ({entry['n_mismatched']} mode(s) mismatched, e.g. mode "
-            f"{mode_index}: engine {eng_f_str} vs Excel {exc_f:.4f} cm-1) -- "
-            "this molecule's Excel row likely came from a different "
-            "calculation than data/logs/. Its ideal T/R rows are still "
-            "attached (geometry-only, unaffected).", stacklevel=2)
+            f"excel_ingest: '{entry['molecule']}' internal rows NOT label-"
+            f"joined ({entry['n_mismatched']} mode(s) mismatched, e.g. mode "
+            f"{mode_index}: engine {eng_f:.4f} vs Excel {exc_f_str} cm-1) -- "
+            "this molecule's Excel data_score row likely came from a "
+            "different calculation than data/logs/. Its scores (V_Stretch, "
+            "Tx..Rz, predicted_label, ...) are still the real engine's own "
+            "and are NOT affected; only ref_label/ideal are left null.",
+            stacklevel=2)
+
     if return_skip_report:
         return df, skip_report
     return df

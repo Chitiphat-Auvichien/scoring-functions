@@ -29,28 +29,95 @@ def _find_log(logs_dir, mol_name):
     raise FileNotFoundError(f"No log file for '{mol_name}' in {logs_dir} (expected .log or .out)")
 
 
-def load_inputs(mol_name, mode_type, data_dir="data"):
-    """Parse geometry, modes, and connectivity for a molecule.
+def _find_emit(emit_dir, mol_name):
+    for name in (f"{mol_name}_EMIT.txt", f"{mol_name}.txt"):
+        p = os.path.join(emit_dir, name)
+        if os.path.exists(p):
+            return p
+    raise FileNotFoundError(
+        f"No EMIT file for '{mol_name}' in {emit_dir} (expected {mol_name}_EMIT.txt)")
+
+
+def _find_gjf(gjf_dir, mol_name):
+    for ext in (".com", ".gjf"):
+        p = os.path.join(gjf_dir, f"{mol_name}{ext}")
+        if os.path.exists(p):
+            return p
+    return None
+
+
+def intermediate_path(dirs, mol_name, mode_type):
+    """data/intermediate/<mol>_<normal|emit>_data.txt -- mode-type-suffixed so
+    a molecule with both a normal-mode and an EMIT intermediate doesn't have
+    the two overwrite each other (the older, unsuffixed '<mol>_data.txt'
+    naming had exactly that collision)."""
+    return os.path.join(dirs["intermediate"], f"{mol_name}_{mode_type}_data.txt")
+
+
+def _cache_is_fresh(inter_path, source_paths):
+    """True iff `inter_path` exists and is at least as new as every file in
+    `source_paths` (mtime-based invalidation). An intermediate older than any
+    of its sources is stale -- e.g. the Gaussian log was re-run with a better
+    basis set, or a .gjf/EMIT file was added/edited after the cache was
+    built -- and must be regenerated rather than silently trusted. An
+    intermediate that IS newer than every source is trusted as-is, which is
+    also how manually-added bonds (edited into the intermediate when a
+    molecule has no .gjf) persist across runs instead of being clobbered."""
+    if not os.path.exists(inter_path):
+        return False
+    inter_mtime = os.path.getmtime(inter_path)
+    return all(inter_mtime >= os.path.getmtime(p) for p in source_paths)
+
+
+def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
+    """Parse geometry, modes, and connectivity for a molecule -- via a
+    mtime-invalidated cache in data/intermediate/ so repeated runs (and the
+    library-scale pipelines that score many molecules per invocation) don't
+    re-parse an unchanged Gaussian log/EMIT file every time.
 
     mode_type is 'normal' (Gaussian vibrational modes) or 'emit' (EMIT modes).
     Returns (raw_data, dirs). Raises on missing files or wrong mode counts (the
     parsers fail loud). Does NOT prompt; suitable for headless / reproduce use.
+
+    Caching contract: if data/intermediate/<mol>_<mode_type>_data.txt exists
+    and is at least as new as every source file it could have come from (the
+    log, the .gjf if present, and the EMIT file if mode_type=='emit'), it is
+    loaded directly and the raw log/EMIT files are NOT re-parsed. Otherwise
+    (missing, or a source is newer -- e.g. the log was regenerated) this
+    re-parses from source and OVERWRITES the intermediate with the fresh
+    result, so the cache self-heals rather than silently going stale. Pass
+    `use_cache=False` to force a fresh parse regardless (still refreshes the
+    cache for next time). The written intermediate is later re-read by the
+    interactive missing-bonds flow in main() if `raw['bonds']` comes back
+    empty -- if the user hand-edits bonds into it, that edit's mtime keeps
+    the cache fresh on subsequent runs (source files unchanged), so manually
+    added connectivity persists instead of being overwritten every run.
     """
     if mode_type not in ("normal", "emit"):
         raise ValueError(f"mode_type must be 'normal' or 'emit', got {mode_type!r}")
     dirs = resolve_dirs(data_dir)
-    gp = GaussianParser(_find_log(dirs["logs"], mol_name))
+    inter_path = intermediate_path(dirs, mol_name, mode_type)
+
+    log_path = _find_log(dirs["logs"], mol_name)
+    source_paths = [log_path]
+    gjf_path = _find_gjf(dirs["gjf"], mol_name)
+    if gjf_path:
+        source_paths.append(gjf_path)
+    if mode_type == "emit":
+        emit_path = _find_emit(dirs["EMIT"], mol_name)
+        source_paths.append(emit_path)
+
+    if use_cache and _cache_is_fresh(inter_path, source_paths):
+        return IntermediateIO.load(inter_path), dirs
+
+    gp = GaussianParser(log_path)
     if mode_type == "normal":
         raw = gp.parse(parse_modes=True)
     else:
         raw = gp.parse(parse_modes=False)
-        emit_path = os.path.join(dirs["EMIT"], f"{mol_name}_EMIT.txt")
-        if not os.path.exists(emit_path):
-            emit_path = os.path.join(dirs["EMIT"], f"{mol_name}.txt")
-        if not os.path.exists(emit_path):
-            raise FileNotFoundError(
-                f"No EMIT file for '{mol_name}' in {dirs['EMIT']} (expected {mol_name}_EMIT.txt)")
         raw["modes"] = EMITParser(emit_path, len(raw["atoms"])).parse()
+
+    IntermediateIO.save(raw, inter_path)
     return raw, dirs
 
 
@@ -258,8 +325,9 @@ def _run_flag_pipelines(args):
         df_lib, path, skip_report = run_ingest_pipeline()
         print(f"Wrote {len(df_lib)} rows -> {path}")
         if skip_report:
-            print(f"  {len(skip_report)} molecule(s) had their internal-row geometry "
-                  "merge skipped (frequency mismatch) -- see warnings above.")
+            print(f"  {len(skip_report)} molecule(s) had their internal-row ref_label/ideal "
+                  "join skipped (frequency mismatch vs. Excel) -- see warnings above. "
+                  "Their scores (V_Stretch, Tx..Rz, predicted_label, ...) are unaffected.")
 
     if args.calibrate:
         if args.molecule and not args.library:
@@ -364,10 +432,13 @@ def main():
         return
 
     # Interactive fallback: if connectivity is missing, let the user add bonds to
-    # the intermediate file, then reload. (run_pipeline/score_modes raise instead.)
+    # the intermediate file (already written by load_inputs()'s cache), then
+    # reload. (run_pipeline/score_modes raise instead.) Once bonds are added
+    # and saved, the file's mtime keeps it "fresh" on later runs (see
+    # load_inputs()/_cache_is_fresh()), so this edit persists instead of
+    # being asked for again every time.
     if not raw["bonds"]:
-        inter = os.path.join(dirs["intermediate"], f"{mol_name}_data.txt")
-        IntermediateIO.save(raw, inter)
+        inter = intermediate_path(dirs, mol_name, mode_type)
         print("\n" + "!" * 70)
         print(" ATTENTION: No bonding information found.")
         print(f" Open {inter} and add bonds (e.g. '1 2' per line), then save.")

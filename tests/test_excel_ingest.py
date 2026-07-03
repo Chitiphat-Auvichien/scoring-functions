@@ -4,16 +4,30 @@ Run from ``Github/scoring-functions/``:
     py -m pytest tests/                (with pytest)
     py tests/test_excel_ingest.py     (standalone; no pytest needed)
 
-Design note: opening the ~10 MB workbook with openpyxl takes on the order of
-a minute, so these tests deliberately do NOT re-run the full
-``build_library_scores()``/xlsx-reading pipeline (that has already been run
-and independently spot-checked this session -- see
-IMPLEMENTATION_PLAN.md's Phase-3 Changelog entry for the verification
-numbers). Instead they check the already-committed, already-generated
-``data/results/library_scores.csv`` artifact (fast, plain pandas), plus a
-couple of pure-logic unit tests of ``resolve_log_basename`` that need no I/O
-at all. This mirrors the repo's existing pattern of treating
-``data/results/*.csv`` as checked-in goldens.
+**Rewritten 2026-07-03 for the disk-driven architecture** (see excel_ingest.py's
+module docstring + IMPLEMENTATION_PLAN.md's RESUME HERE): the old API
+(``attach_geometry_classification`` driving an Excel-row loop, ``has_geometry``
+sometimes False) no longer exists. The new API is ``discover_geometry_molecules``
+(disk-driven molecule roster) -> ``score_geometry_molecule`` (real engine, per
+molecule) -> ``attach_excel_labels`` (label-only join gated by a per-molecule
+frequency check) -> ``build_library_scores`` (orchestrates all three). Every row
+in ``library_scores.csv`` is now geometry-backed (``has_geometry`` is always
+True); "no Excel counterpart" or "frequency mismatch" only ever nulls out
+``ref_label``/``ideal``, never the score columns.
+
+Design note: opening the ~10 MB workbook with openpyxl takes on the order of a
+minute, so these tests avoid re-running the full ``build_library_scores()``
+pipeline (already run and spot-checked this session -- see
+IMPLEMENTATION_PLAN.md's RESUME HERE for the verification numbers). Instead
+they check: (a) the already-committed, already-generated
+``data/results/library_scores.csv`` artifact (fast, plain pandas) as a checked-
+in golden, (b) pure-logic/no-I/O unit tests of ``resolve_log_basename`` /
+``resolve_excel_molecule_name``, (c) the disk listing ``discover_geometry_
+molecules`` (fast, just os.listdir), (d) a direct, fast call to
+``score_geometry_molecule`` on water (9 modes, sub-second) to validate the real-
+engine row-building logic independent of the CSV golden, and (e) a fully
+synthetic, no-I/O unit test of ``attach_excel_labels``'s frequency-gating logic
+(the one piece of ingest logic most likely to silently regress).
 """
 import os
 import sys
@@ -24,11 +38,15 @@ sys.path.insert(0, ROOT)
 import pandas as pd                                                # noqa: E402
 
 from src.excel_ingest import (                                     # noqa: E402
-    resolve_log_basename, EXCLUDED_MOLECULES, attach_geometry_classification,
+    resolve_log_basename, resolve_excel_molecule_name,
+    discover_geometry_molecules, score_geometry_molecule,
+    attach_excel_labels, EXCLUDED_MOLECULES, EXCEL_TO_LOG,
+    _EXTERNAL_SLOTS,
 )
 from src.classifier import is_clean_external                       # noqa: E402
 
 LIB_CSV = os.path.join(ROOT, "data", "results", "library_scores.csv")
+DATA_DIR = os.path.join(ROOT, "data")
 
 
 def _load():
@@ -37,22 +55,77 @@ def _load():
 
 def test_resolve_log_basename_direct_and_mapped():
     """Unit test of the Excel-name -> on-disk-log-basename resolution (no I/O
-    beyond os.path.exists checks against the real repo tree)."""
-    data_dir = os.path.join(ROOT, "data")
+    beyond os.path.exists checks against the real repo tree). Unaffected by
+    the disk-driven rearchitecture -- this function is unchanged."""
     # Direct-match molecules (same name in Excel and on disk).
-    assert resolve_log_basename("SnH4", data_dir) == "SnH4"
-    assert resolve_log_basename("H2S", data_dir) == "H2S"
+    assert resolve_log_basename("SnH4", DATA_DIR) == "SnH4"
+    assert resolve_log_basename("H2S", DATA_DIR) == "H2S"
     # Explicitly name-mapped molecules.
-    assert resolve_log_basename("H2O", data_dir) == "water"
-    assert resolve_log_basename("C6H6", data_dir) == "benzene"
-    assert resolve_log_basename("CO2", data_dir) == "co2_mp2_3-21g"
-    assert resolve_log_basename("Cl2O", data_dir) == "ocl2"
-    assert resolve_log_basename("OF2", data_dir) == "of2"
-    assert resolve_log_basename("Br2O", data_dir) == "br2o"
-    assert resolve_log_basename("SeBr2", data_dir) == "SeBr2-cc"
+    assert resolve_log_basename("H2O", DATA_DIR) == "water"
+    assert resolve_log_basename("C6H6", DATA_DIR) == "benzene"
+    assert resolve_log_basename("CO2", DATA_DIR) == "co2_mp2_3-21g"
+    assert resolve_log_basename("Cl2O", DATA_DIR) == "ocl2"
+    assert resolve_log_basename("OF2", DATA_DIR) == "of2"
+    assert resolve_log_basename("Br2O", DATA_DIR) == "br2o"
+    assert resolve_log_basename("SeBr2", DATA_DIR) == "SeBr2-cc"
     # An Excel-only molecule with no .log/.gjf pair in this repo.
-    assert resolve_log_basename("BH3", data_dir) is None
-    assert resolve_log_basename("NotAMolecule", data_dir) is None
+    assert resolve_log_basename("BH3", DATA_DIR) is None
+    assert resolve_log_basename("NotAMolecule", DATA_DIR) is None
+
+
+def test_resolve_excel_molecule_name_mapped_direct_and_absent():
+    """The reverse direction (on-disk basename -> Excel molecule name) that
+    build_library_scores() actually uses to label rows. Mapped names take
+    priority over a direct match; a basename with no Excel counterpart at all
+    (not in _LOG_TO_EXCEL, not itself an Excel molecule name) returns None,
+    which build_library_scores() then falls back to using the basename itself
+    -- not an error (module docstring point 5)."""
+    excel_molecules = {"SnH4", "H2S", "TeH6"}
+    # Explicitly mapped (EXCEL_TO_LOG reversed).
+    assert resolve_excel_molecule_name("water", excel_molecules) == "H2O"
+    assert resolve_excel_molecule_name("benzene", excel_molecules) == "C6H6"
+    assert resolve_excel_molecule_name("co2_mp2_3-21g", excel_molecules) == "CO2"
+    assert resolve_excel_molecule_name("ocl2", excel_molecules) == "Cl2O"
+    assert resolve_excel_molecule_name("of2", excel_molecules) == "OF2"
+    assert resolve_excel_molecule_name("br2o", excel_molecules) == "Br2O"
+    assert resolve_excel_molecule_name("SeBr2-cc", excel_molecules) == "SeBr2"
+    # Direct match (basename itself is an Excel molecule name).
+    assert resolve_excel_molecule_name("SnH4", excel_molecules) == "SnH4"
+    assert resolve_excel_molecule_name("TeH6", excel_molecules) == "TeH6"
+    # No Excel counterpart at all.
+    assert resolve_excel_molecule_name("totally_unmapped_xyz", excel_molecules) is None
+
+
+def test_every_excel_to_log_target_is_present_in_reverse_map():
+    """EXCEL_TO_LOG's forward map must be exactly invertible (no duplicate
+    on-disk targets silently shadowing each other) -- a defensive check on the
+    fixed name-mapping table itself."""
+    targets = list(EXCEL_TO_LOG.values())
+    assert len(targets) == len(set(targets)), "EXCEL_TO_LOG has duplicate on-disk targets"
+
+
+def test_discover_geometry_molecules_is_disk_driven_and_scales():
+    """The disk listing that drives build_library_scores()'s whole molecule
+    loop -- must reflect exactly what's in data/logs/ + data/gjf/ right now,
+    with no hardcoded roster. Currently 25 molecules (grows automatically as
+    more .log/.gjf pairs are dropped in; no code change needed -- see module
+    docstring)."""
+    bases = discover_geometry_molecules(DATA_DIR)
+    assert bases == sorted(bases)  # sorted, deterministic order
+    assert len(bases) == len(set(bases))  # no duplicates
+    for expected in ("water", "benzene", "co2_mp2_3-21g", "SnH4", "H2S"):
+        assert expected in bases, expected
+    assert len(bases) == 25
+
+
+def test_library_row_count_and_molecule_count_match_disk_roster():
+    """library_scores.csv's molecule count must equal discover_geometry_
+    molecules()'s count exactly (one row-group per on-disk molecule, no
+    Excel-only molecules sneaking in and no on-disk molecule silently
+    dropped)."""
+    df = _load()
+    bases = discover_geometry_molecules(DATA_DIR)
+    assert df["molecule"].nunique() == len(bases) == 25
 
 
 def test_library_excludes_gramicidin_fragment():
@@ -62,34 +135,26 @@ def test_library_excludes_gramicidin_fragment():
     assert not df["molecule"].isin(EXCLUDED_MOLECULES).any()
 
 
-def test_library_covers_tab_ideal_and_tab_nonideal_molecules():
-    """All 11 tab:ideal entries and the tab:nonideal bent-AB2 + two-center
-    exemplars are present (checked exhaustively against the .tex this
-    session; see excel_ingest.py's module docstring for the 5-bromide gap
-    that is the only real omission)."""
+def test_all_rows_are_geometry_backed():
+    """Under the disk-driven architecture, EVERY row in library_scores.csv
+    comes from a real .log/.gjf pair -- has_geometry is unconditionally True
+    (kept as a column for schema/backward-compatibility, not because it ever
+    varies now)."""
     df = _load()
-    present = set(df["molecule"].unique())
-    tab_ideal = {"SnO2", "TeH2", "InH3", "SbH3", "IH3", "SnH4", "XeH4",
-                 "TeH4", "SbH5", "XeOH4", "TeH6"}
-    assert tab_ideal <= present, tab_ideal - present
-
-    tab_nonideal_bent_ab2 = {"OF2", "Cl2O", "Br2O", "H2S", "SF2", "SCl2",
-                              "SBr2", "H2Se", "SeF2", "SeCl2", "SeBr2", "H2O2"}
-    assert tab_nonideal_bent_ab2 <= present, tab_nonideal_bent_ab2 - present
+    assert df["has_geometry"].all()
+    assert len(df) > 0
 
 
-def test_geometry_backed_molecules_have_external_rows():
-    """The 25 molecules with a real .log/.gjf pair get n_T+n_R appended
-    'external' rows (never present in the raw Excel sheet)."""
+def test_geometry_backed_molecules_have_expected_external_row_counts():
+    """Every molecule gets n_T+n_R appended 'external' rows: 5 for linear
+    molecules (n_R=2), 6 otherwise."""
     df = _load()
     ext = df[df["kind"] == "external"]
     counts = ext.groupby("molecule").size()
-    # Linear molecules (n_R=2) get 5 external rows; everything else gets 6.
     linear = {"CO2", "CS2", "CSe2", "CTe2"}
     for mol, n in counts.items():
         expected = 5 if mol in linear else 6
         assert n == expected, f"{mol}: expected {expected} external rows, got {n}"
-    # 22 hydride-library molecules with logs + water/benzene/CO2 = 25.
     assert len(counts) == 25, sorted(counts.index)
     assert {"SnH4", "H2S", "C6H6", "H2O", "CO2"} <= set(counts.index)
 
@@ -97,84 +162,175 @@ def test_geometry_backed_molecules_have_external_rows():
 def test_external_rows_classify_clean_translation_rotation():
     """Ideal T/R references (Eckart-Sayvetz, exact for normal modes) must
     classify clean (bare "Tx".."Rz", no trailing "*") for every geometry-backed
-    molecule -- this is the completeness guarantee, not an anecdotal check."""
+    molecule -- the completeness guarantee, not an anecdotal check."""
     df = _load()
     ext = df[df["kind"] == "external"]
     bad = ext[~ext["predicted_label"].apply(is_clean_external)]
     assert len(bad) == 0, bad[["molecule", "mode_index", "predicted_label"]]
+    # And ref_label is the unconditional structural truth, never null, for
+    # every external row (independent of any Excel join).
+    assert ext["ref_label"].isin(("translation", "rotation")).all()
 
 
-def test_water_o_series_internal_rows_correctly_unmerged():
+def test_frequency_mismatched_molecules_leave_internal_label_null_only():
     """H2O/OF2/Cl2O/Br2O's Excel rows do not match this repo's own logs
-    (discovered this session -- a real data-provenance mismatch, not a bug);
-    their internal rows must be left has_geometry=False rather than
-    force-merged, while their external (T/R) rows -- independent of the
-    vibrational-frequency mismatch -- are still attached normally."""
+    (discovered in a prior session -- a real data-provenance mismatch, not a
+    bug). Under the new architecture their internal rows are still fully
+    SCORED (has_geometry True, V_Stretch/predicted_label populated) -- only
+    ref_label/ideal are left null because the frequency-gated label join is
+    skipped. External (T/R) rows are completely unaffected."""
     df = _load()
     for mol in ("H2O", "OF2", "Cl2O", "Br2O"):
         internal = df[(df["molecule"] == mol) & (df["kind"] == "internal")]
-        assert len(internal) > 0
-        assert not internal["has_geometry"].any(), mol
+        assert len(internal) > 0, mol
+        assert internal["ref_label"].isna().all(), mol
+        assert internal["ideal"].isna().all(), mol
+        # Scores are NOT affected by the label-join skip.
+        assert internal["has_geometry"].all(), mol
+        assert internal["V_Stretch"].notna().all(), mol
+        assert internal["predicted_label"].notna().all(), mol
+
         external = df[(df["molecule"] == mol) & (df["kind"] == "external")]
         assert external["has_geometry"].all(), mol
+        assert external["ref_label"].isin(("translation", "rotation")).all(), mol
         assert external["predicted_label"].apply(is_clean_external).all(), mol
 
 
 def test_bond_scores_sum_to_v_stretch():
     """Per-bond s_AB (parsed out of the semicolon-joined string) sums back to
-    V_Stretch for every internal row that has bond detail (eq:bondscore)."""
+    V_Stretch for every internal row that has bond detail (eq:bondscore).
+    Every internal row now carries bond detail regardless of label (the new
+    module always calls score_bonds() directly, not classify_all_modes()'s
+    filtered subset)."""
     df = _load()
     checked = 0
     for _, row in df[df["kind"] == "internal"].iterrows():
-        if not isinstance(row["s_AB"], str) or not row["s_AB"]:
-            continue
+        assert isinstance(row["s_AB"], str) and row["s_AB"], \
+            (row["molecule"], row["mode_index"])
         total = sum(float(part.split(":")[1]) for part in row["s_AB"].split(";"))
         assert abs(total - row["V_Stretch"]) < 1e-3, (row["molecule"], row["mode_index"])
         checked += 1
     assert checked > 100, f"only checked {checked} rows -- unexpectedly few"
 
 
-def test_unresolved_engine_mode_is_reported_not_silently_skipped():
-    """formula-auditor finding (2026-07-02): a "Vib i" row that resolves to
-    NO engine mode at all (m is None) must count as a mismatch -- not be
-    silently `continue`d past -- so the molecule still trips the
-    all-or-nothing gate and shows up in the skip report. Synthesize a
-    molecule ('H2O' -> data/logs/water.log, a real geometry-backed molecule)
-    with one bogus, unresolvable mode_index (999; water only has 3
-    vibrational modes) alongside a mismatch that SHOULD have triggered a
-    warning even before this fix, to isolate the new code path."""
-    bogus_row = {
-        "molecule": "H2O", "mode_index": 999, "kind": "internal",
-        "freq": 12345.0, "ref_label": "bend", "ideal": "no",
-        "V_Stretch": 0.5, "delta_b_mean": None, "s_AB": "", "rel_db": "",
-        "has_geometry": False, "predicted_label": None,
-        "predicted_annotation": None,
-        "Tx": None, "Ty": None, "Tz": None, "Rx": None, "Ry": None, "Rz": None,
-    }
-    df_in = pd.DataFrame([bogus_row])
-    data_dir = os.path.join(ROOT, "data")
-    df_out, skip_report = attach_geometry_classification(df_in, data_dir)
+def test_rel_db_string_present_and_parseable_for_every_internal_row():
+    """rel_db is the diagnostic companion column (fig:bondscores' x-axis);
+    every internal row must carry a parseable, same-bond-count string."""
+    df = _load()
+    for _, row in df[df["kind"] == "internal"].iterrows():
+        assert isinstance(row["rel_db"], str) and row["rel_db"], \
+            (row["molecule"], row["mode_index"])
+        s_ab_bonds = row["s_AB"].split(";")
+        rel_db_bonds = row["rel_db"].split(";")
+        assert len(s_ab_bonds) == len(rel_db_bonds), (row["molecule"], row["mode_index"])
+        for part in rel_db_bonds:
+            float(part.split(":")[1])  # must parse cleanly
+
+
+def test_score_geometry_molecule_water_direct():
+    """Direct, fast (no xlsx I/O) call to score_geometry_molecule() on water
+    -- validates the real-engine row-building logic itself, independent of
+    the checked-in CSV golden. Water: 3N=9 -> 3 T + 3 R + 3 internal rows."""
+    rows = score_geometry_molecule("water", DATA_DIR)
+    assert len(rows) == 9
+    external = [r for r in rows if r["kind"] == "external"]
+    internal = [r for r in rows if r["kind"] == "internal"]
+    assert len(external) == 6  # water is non-linear: n_T=3, n_R=3
+    assert len(internal) == 3
+    assert {r["mode_index"] for r in external} == set(_EXTERNAL_SLOTS)
+    assert sorted(r["mode_index"] for r in internal) == [1, 2, 3]
+
+    for r in external:
+        assert is_clean_external(r["predicted_label"])
+        assert r["ref_label"] in ("translation", "rotation")
+        assert r["ideal"] is None  # label-only join not yet attached
+        assert r["has_geometry"] is True
+
+    for r in internal:
+        assert r["ref_label"] is None and r["ideal"] is None  # attached later
+        assert r["has_geometry"] is True
+        assert 0.0 <= r["V_Stretch"] <= 1.0
+        assert isinstance(r["s_AB"], str) and r["s_AB"]
+        assert r["delta_b_mean"] is not None and r["delta_b_mean"] >= 0.0
+        # Per-bond s_AB sums to V_Stretch for this mode too.
+        total = sum(float(part.split(":")[1]) for part in r["s_AB"].split(";"))
+        assert abs(total - r["V_Stretch"]) < 1e-3
+
+
+def test_attach_excel_labels_gates_on_frequency_and_leaves_unlisted_molecules_alone():
+    """Fully synthetic (no xlsx I/O) unit test of attach_excel_labels()'s
+    core contract: a matching, frequency-consistent internal row gets
+    ref_label/ideal filled in; a mismatched (or Excel-absent) mode disqualifies
+    the WHOLE molecule's internal-row label join (all-or-nothing gate); a
+    molecule with no Excel counterpart at all is untouched (not an error);
+    external rows are never touched."""
+    tables = {"data_score": pd.DataFrame([
+        {"molecule": "TESTMOL", "mode": 1, "freq": 1000.0, "type": "stretch", "ideal": "yes"},
+        {"molecule": "TESTMOL", "mode": 2, "freq": 500.0, "type": "bend", "ideal": "no"},
+        {"molecule": "TESTMOL2", "mode": 1, "freq": 1000.0, "type": "stretch", "ideal": "yes"},
+    ])}
+
+    df = pd.DataFrame([
+        # TESTMOL: both internal modes match within tolerance -> fully joined.
+        {"molecule": "TESTMOL", "mode_index": 1, "kind": "internal",
+         "freq": 1000.0001, "ref_label": None, "ideal": None},
+        {"molecule": "TESTMOL", "mode_index": 2, "kind": "internal",
+         "freq": 500.0, "ref_label": None, "ideal": None},
+        {"molecule": "TESTMOL", "mode_index": "Tx", "kind": "external",
+         "freq": 0.0, "ref_label": "translation", "ideal": None},
+        # TESTMOL2: mode 1 is off by 1.0 cm-1, outside atol=0.05/rtol=1e-4 ->
+        # whole molecule's internal join skipped.
+        {"molecule": "TESTMOL2", "mode_index": 1, "kind": "internal",
+         "freq": 999.0, "ref_label": None, "ideal": None},
+        # NOTINEXCEL: no Excel counterpart at all -> untouched, no warning.
+        {"molecule": "NOTINEXCEL", "mode_index": 1, "kind": "internal",
+         "freq": 42.0, "ref_label": None, "ideal": None},
+    ])
+
+    out, skip_report = attach_excel_labels(df, tables)
+
+    tm = out[out["molecule"] == "TESTMOL"]
+    assert tm.loc[tm["mode_index"] == 1, "ref_label"].iloc[0] == "stretch"
+    assert tm.loc[tm["mode_index"] == 1, "ideal"].iloc[0] == "yes"
+    assert tm.loc[tm["mode_index"] == 2, "ref_label"].iloc[0] == "bend"
+    assert tm.loc[tm["mode_index"] == 2, "ideal"].iloc[0] == "no"
+    # External row untouched (already correct before the call).
+    assert tm.loc[tm["kind"] == "external", "ref_label"].iloc[0] == "translation"
+
+    tm2 = out[out["molecule"] == "TESTMOL2"]
+    assert tm2["ref_label"].isna().all()
+    assert tm2["ideal"].isna().all()
+
+    ne = out[out["molecule"] == "NOTINEXCEL"]
+    assert ne["ref_label"].isna().all()
 
     assert len(skip_report) == 1
-    entry = skip_report[0]
-    assert entry["molecule"] == "H2O"
-    assert entry["n_mismatched"] == 1
-    mode_index, engine_freq, excel_freq = entry["example"]
-    assert mode_index == 999
-    assert engine_freq is None          # the m-is-None sentinel, not skipped
-    assert excel_freq == 12345.0
+    assert skip_report[0]["molecule"] == "TESTMOL2"
+    assert skip_report[0]["n_mismatched"] == 1
+    mode_index, engine_freq, excel_freq = skip_report[0]["example"]
+    assert mode_index == 1
+    assert engine_freq == 999.0
+    assert excel_freq == 1000.0
 
-    # The bogus internal row must NOT have been half-merged.
-    internal_out = df_out[df_out["kind"] == "internal"]
-    assert len(internal_out) == 1
-    assert not bool(internal_out.iloc[0]["has_geometry"])
-    assert internal_out.iloc[0]["predicted_label"] is None
 
-    # External (T/R) rows are independent of this gate and are still
-    # appended normally for this geometry-backed molecule.
-    external_out = df_out[df_out["kind"] == "external"]
-    assert len(external_out) == 6
-    assert external_out["has_geometry"].all()
+def test_attach_excel_labels_missing_excel_row_counts_as_mismatch():
+    """A mode_index with no corresponding Excel row at all (not just a
+    numeric mismatch) must also disqualify the molecule's join and be
+    reported with excel_freq=None -- not silently skipped past."""
+    tables = {"data_score": pd.DataFrame([
+        {"molecule": "TESTMOL3", "mode": 1, "freq": 1000.0, "type": "stretch", "ideal": "yes"},
+    ])}
+    df = pd.DataFrame([
+        {"molecule": "TESTMOL3", "mode_index": 1, "kind": "internal",
+         "freq": 1000.0, "ref_label": None, "ideal": None},
+        {"molecule": "TESTMOL3", "mode_index": 2, "kind": "internal",
+         "freq": 2000.0, "ref_label": None, "ideal": None},  # no Excel row for mode 2
+    ])
+    out, skip_report = attach_excel_labels(df, tables)
+    assert out["ref_label"].isna().all()  # all-or-nothing: mode 1's match doesn't survive
+    assert len(skip_report) == 1
+    mode_index, engine_freq, excel_freq = skip_report[0]["example"]
+    assert excel_freq is None
 
 
 def test_ideal_stretch_bend_populations_do_not_overlap():

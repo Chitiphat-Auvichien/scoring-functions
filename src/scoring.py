@@ -426,23 +426,35 @@ class ModeScorer:
         return out
 
     def _bond_contributions(self):
-        """Per-bond pieces of the V-score (eq:vscore numerator and denominator).
+        """Per-bond pieces of the V-score (eq:vscore numerator and denominator),
+        plus the diagnostic signed relative bond-length change.
 
-        Returns two parallel lists over self.bList:
+        Returns three parallel lists over self.bList:
           terms   : |(d_B - d_A) . b_AB| * |d_B - d_A| / |b_AB|
                     (== |Δb_AB|² * |unit(Δb_AB) · b̂_AB|, the numerator term)
           sqdisps : |d_B - d_A|²                         (the denominator term)
+          rel_db  : (|b_AB + Δd_AB| - |b_AB|) / |b_AB|    (signed relative
+                    bond-length change; Δd_AB = d_B - d_A, the SAME
+                    displacement-difference convention as terms/sqdisps above.
+                    This is NOT part of eq:vscore/eq:bondscore -- it is a
+                    diagnostic quantity (fig:bondscores' x-axis) originally
+                    reverse-engineered from the Excel workbook's own
+                    "(|b'|-|b|)/|b|" per-bond column (see
+                    src/excel_ingest.py's module docstring); computed here
+                    from geometry + mode displacement using the engine's own
+                    displacement convention, not read from the spreadsheet.)
         Both Vscore() and score_bonds() build on this so the per-bond s_AB
         sum back to s[V_S] exactly.
         """
         terms = []
         sqdisps = []
+        rel_db = []
         for b in range(self.nBond):
             idx1, idx2 = self.bList[b]
             atom1 = self.atoms[idx1]
             atom2 = self.atoms[idx2]
 
-            # Current bond vector
+            # Current (equilibrium) bond vector
             bVec_curr = self.bVec[b]
             bLength = sizeVec(bVec_curr)
 
@@ -455,11 +467,16 @@ class ModeScorer:
 
             terms.append(abs(dot_val) * delDispLength / bLength)
             sqdisps.append(delDispLength**2)
-        return terms, sqdisps
+
+            if bLength > EPS_NORM:
+                rel_db.append((sizeVec(bVec_curr + delDisp) - bLength) / bLength)
+            else:
+                rel_db.append(0.0)
+        return terms, sqdisps, rel_db
 
     def Vscore(self):
         """Calculates Vibrational Score (V). Adapted from atom.py."""
-        terms, sqdisps = self._bond_contributions()
+        terms, sqdisps, _ = self._bond_contributions()
         modeScr = sum(terms)
         denom = sum(sqdisps)
 
@@ -468,22 +485,25 @@ class ModeScorer:
         return 0.0
 
     def score_bonds(self):
-        """Per-bond stretch contribution s_AB (eq:bondscore), summing to s[V_S].
+        """Per-bond stretch contribution s_AB (eq:bondscore), summing to s[V_S],
+        plus the diagnostic signed relative bond-length change rel_db (see
+        _bond_contributions()).
 
         s_AB = |Δb_AB|² * |unit(Δb_AB) · b̂_AB| / Σ_bonds |Δb|²  (global denominator)
 
-        Returns a list of dicts {'i', 'j', 's_AB'} aligned with self.bList.
-        Asserts Σ s_AB == s[V_S] to 1e-6. Call calculate_scores()/load
-        displacements first so the atom dispVecs are populated.
+        Returns a list of dicts {'i', 'j', 's_AB', 'rel_db'} aligned with
+        self.bList. Asserts Σ s_AB == s[V_S] to 1e-6. Call
+        calculate_scores()/load displacements first so the atom dispVecs are
+        populated.
         """
-        terms, sqdisps = self._bond_contributions()
+        terms, sqdisps, rel_db = self._bond_contributions()
         denom = sum(sqdisps)
 
         bonds = []
         for b in range(self.nBond):
             idx1, idx2 = self.bList[b]
             s_AB = terms[b] / denom if denom > EPS_DENOM else 0.0
-            bonds.append({"i": idx1, "j": idx2, "s_AB": s_AB})
+            bonds.append({"i": idx1, "j": idx2, "s_AB": s_AB, "rel_db": rel_db[b]})
 
         total = sum(bd["s_AB"] for bd in bonds)
         vs = self.Vscore()

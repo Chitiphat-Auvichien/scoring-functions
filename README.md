@@ -30,9 +30,10 @@ Concretely, the code covers:
   reference basis (ideal T/R + real vibrational modes) to get fractional T/R/stretch/bend
   contributions per EMIT mode.
 * **Library calibration.** The two-gate purity thresholds (`tau_TR`, `tau_S`, `tau_B`) are calibrated
-  against a ~25-molecule hydride-library dataset (ingested from a spreadsheet of precomputed scores,
-  never re-derived from scratch) and validated with a confusion matrix and a threshold-sensitivity
-  sweep.
+  against a hydride-library dataset built directly from the Gaussian files in `data/logs/`+`data/gjf/`
+  (every score is computed by this program's own engine; a reference spreadsheet supplies only the
+  literature stretch/bend ground-truth labels, never the scores themselves) and validated with a
+  confusion matrix and a threshold-sensitivity sweep.
 * **Figures.** All of the manuscript's data-driven figures can be regenerated from the pipeline's own
   CSV outputs.
 
@@ -98,40 +99,51 @@ and confirmed to produce real output files.
 
 **Per-molecule flags** (`-m`/`--molecule` required):
 
+Run the Steps 2-4 classification for one molecule. `--mode` is required (it picks which CSV gets
+written). Writes `data/results/<mol>_{normal,emit}_classified.csv`.
+
 ```bash
-# Steps 2-4 classification for one molecule. --mode is required (it picks which
-# CSV gets written). Writes data/results/<mol>_{normal,emit}_classified.csv.
 python main.py -m water --mode normal --classify
+```
 
-# Project raw EMIT eigenvectors onto the mass-weighted normal-mode reference basis.
-# Writes data/results/<mol>_EMIT_contributions.csv (grouped) and
-# data/results/<mol>_EMIT_projection_full.csv (per-reference-mode detail). Fails
-# loudly with a clear message if data/EMIT/<mol>_EMIT.txt is missing.
+Project raw EMIT eigenvectors onto the mass-weighted normal-mode reference basis. Writes
+`data/results/<mol>_EMIT_contributions.csv` (grouped) and `data/results/<mol>_EMIT_projection_full.csv`
+(per-reference-mode detail). Fails loudly with a clear message if `data/EMIT/<mol>_EMIT.txt` is missing.
+
+```bash
 python main.py -m water --emit-projection
+```
 
-# Flags combine freely and run in a fixed order (classify, then emit-projection) --
-# useful for doing both steps for one molecule in a single command.
+Flags combine freely and run in a fixed order (classify, then emit-projection) — useful for doing both
+steps for one molecule in a single command.
+
+```bash
 python main.py -m benzene --mode emit --classify --emit-projection
 ```
 
 **Global flags** (molecule-independent; `-m` is ignored if supplied alongside them):
 
+Build the hydride-library dataset from `data/logs/`+`data/gjf/` into `data/results/library_scores.csv`.
+Grows automatically as more molecule files are added; can be slow once the library is large, since every
+molecule is scored from scratch.
+
 ```bash
-# Ingest the hydride-library spreadsheet -> data/results/library_scores.csv.
-# Known-slow (~630s to parse the workbook via openpyxl) -- the command prints a
-# warning before starting so you don't think it has hung.
 python main.py --library
+```
 
-# Calibrate tau_TR/tau_S/tau_B against the ingested library and run the
-# threshold-sensitivity sweep. Writes data/results/thresholds.json and
-# data/results/tau_sensitivity_sweep.csv. Re-ingests the library itself, so this
-# is also slow the first time.
+Calibrate `tau_TR`/`tau_S`/`tau_B` against the library and run the threshold-sensitivity sweep. Writes
+`data/results/thresholds.json` and `data/results/tau_sensitivity_sweep.csv`. Rebuilds the library itself
+first, so this is also slow.
+
+```bash
 python main.py --calibrate
+```
 
-# Regenerate every manuscript figure from data/results/*.csv ->
-# data/figures/*.{pdf,png} (7 figures: fig:benzene, fig:confusion, fig:bondscores,
-# fig:boxplots, fig:modemixing, fig:sensitivity, and the standalone
-# benzene-normal-modes gallery).
+Regenerate every manuscript figure from `data/results/*.csv` into `data/figures/*.{pdf,png}` (7 figures:
+`fig:benzene`, `fig:confusion`, `fig:bondscores`, `fig:boxplots`, `fig:modemixing`, `fig:sensitivity`,
+and the standalone benzene-normal-modes gallery).
+
+```bash
 python main.py --figures
 ```
 

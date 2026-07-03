@@ -491,8 +491,11 @@ class ModeScorer:
 
         s_AB = |Δb_AB|² * |unit(Δb_AB) · b̂_AB| / Σ_bonds |Δb|²  (global denominator)
 
-        Returns a list of dicts {'i', 'j', 's_AB', 'rel_db'} aligned with
-        self.bList. Asserts Σ s_AB == s[V_S] to 1e-6. Call
+        Returns a list of dicts {'i', 'j', 's_AB', 'rel_db', 'i_label',
+        'j_label'} aligned with self.bList. 'i_label'/'j_label' are
+        human-readable atom tags ("<symbol><1-based index>", e.g. "C1", "H7")
+        for building interpretable bond identifiers like "C1-C2" instead of
+        bare index pairs like "1-2". Asserts Σ s_AB == s[V_S] to 1e-6. Call
         calculate_scores()/load displacements first so the atom dispVecs are
         populated.
         """
@@ -503,7 +506,11 @@ class ModeScorer:
         for b in range(self.nBond):
             idx1, idx2 = self.bList[b]
             s_AB = terms[b] / denom if denom > EPS_DENOM else 0.0
-            bonds.append({"i": idx1, "j": idx2, "s_AB": s_AB, "rel_db": rel_db[b]})
+            bonds.append({
+                "i": idx1, "j": idx2, "s_AB": s_AB, "rel_db": rel_db[b],
+                "i_label": f"{self.atoms[idx1].symbol}{idx1 + 1}",
+                "j_label": f"{self.atoms[idx2].symbol}{idx2 + 1}",
+            })
 
         total = sum(bd["s_AB"] for bd in bonds)
         vs = self.Vscore()

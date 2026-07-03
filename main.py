@@ -211,6 +211,15 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
     return df, df_full, (out_grouped, out_full)
 
 
+def _print_table(df, title):
+    """Echo a results DataFrame to the terminal as a clean, borderless,
+    whitespace-aligned table (pandas' own to_string()) -- readable at a
+    glance, and paste-friendly into Excel (no box-drawing/'|'/'-' characters
+    to strip first, unlike tabulate's grid styles)."""
+    print(f"\n--- {title} ---")
+    print(df.to_string(index=False, float_format="%.4f"))
+
+
 def _run_flag_pipelines(args):
     """Handle the --classify / --emit-projection / --library / --calibrate /
     --figures flags (Phase-5 CLI subcommands). These wire up the EXISTING
@@ -277,6 +286,7 @@ def _run_flag_pipelines(args):
         except (FileNotFoundError, ValueError) as e:
             print(f"Error running --classify for '{args.molecule}' ({args.mode}): {e}")
             return True
+        _print_table(df, f"{args.molecule} classification ({args.mode})")
         print(f"Wrote {len(df)}-row classification -> {path}")
 
     if args.emit_projection:
@@ -289,8 +299,10 @@ def _run_flag_pipelines(args):
         except ValueError as e:
             print(f"Error running --emit-projection for '{args.molecule}': {e}")
             return True
+        _print_table(df, f"{args.molecule} EMIT->normal-mode contributions")
         print(f"Wrote {len(df)}-row grouped contributions -> {path_grouped}")
-        print(f"Wrote {len(df_full)}-row full projection detail -> {path_full}")
+        print("(per-reference-mode full detail is wide -- not echoed here; "
+              f"see the CSV) Wrote {len(df_full)}-row full projection detail -> {path_full}")
 
     if args.figures:
         print("Regenerating all manuscript figures (src.figures.regenerate_all)...")
@@ -372,8 +384,7 @@ def main():
     df = pd.DataFrame(rows)
     suffix = "normal" if mode_type == "normal" else "EMIT"
     output_file = os.path.join(dirs["results"], f"{mol_name}_{suffix}_scores.csv")
-    print("\n--- Scoring Results ---")
-    print(df.to_string(index=False, float_format="%.3f"))
+    _print_table(df, "Scoring Results")
     df.to_csv(output_file, index=False, float_format="%.4f")
     print(f"\nResults saved to: {output_file}")
 

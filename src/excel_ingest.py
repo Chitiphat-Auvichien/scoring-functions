@@ -248,15 +248,11 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None):
         scorer.calculate_scores(mode_vec)
         bonds = scorer.score_bonds()
 
-        def _label(idx):
-            # Atom-symbol + 1-based-index label (e.g. "C1", "H7"), matching
-            # the convention the old Excel-sourced s_AB strings used (see
-            # src/benzene_validation.py's C-C/C-H bond-type parsing, which
-            # relies on this exact "<symbol><1-based index>" format).
-            return f"{scorer.atoms[idx].symbol}{idx + 1}"
-
-        s_ab_str = ";".join(f"{_label(b['i'])}-{_label(b['j'])}:{b['s_AB']:.4f}" for b in bonds)
-        rel_db_str = ";".join(f"{_label(b['i'])}-{_label(b['j'])}:{b['rel_db']:.4f}" for b in bonds)
+        # i_label/j_label are ModeScorer.score_bonds()'s own atom-symbol +
+        # 1-based-index labels (e.g. "C1", "H7"), matching the convention
+        # src/benzene_validation.py's C-C/C-H bond-type parsing relies on.
+        s_ab_str = ";".join(f"{b['i_label']}-{b['j_label']}:{b['s_AB']:.4f}" for b in bonds)
+        rel_db_str = ";".join(f"{b['i_label']}-{b['j_label']}:{b['rel_db']:.4f}" for b in bonds)
         delta_b_mean = float(np.mean([abs(b["rel_db"]) for b in bonds])) if bonds else None
 
         rows.append({

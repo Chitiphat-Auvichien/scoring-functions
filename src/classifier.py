@@ -254,8 +254,9 @@ def classify_all_modes(scorer, final, thresholds=None):
     -------
     list of dicts, one per mode in 'final' (same order), each:
         {name, frequency, is_emit, T, R, V, classification, annotation, bonds}
-    'bonds' is a list of {'i','j','s_AB'} (0-based atom indices), populated
-    only for STRETCHING / MIXED_STRETCH_BEND classifications; [] otherwise.
+    'bonds' is a list of {'i','j','s_AB','rel_db','i_label','j_label'} (see
+    ModeScorer.score_bonds()), populated only for STRETCHING /
+    MIXED_STRETCH_BEND classifications; [] otherwise.
     'classification' is the bare Step-2 slot name ("Tx".."Rz") for a clean
     external, that same slot name with a trailing "*" (e.g. "Tx*") for a
     mixed external+vibration mode, or "S"/"B"/"SB" (STRETCHING/BENDING/
@@ -335,14 +336,15 @@ def classify_to_rows(scored):
     """Flatten classify_all_modes() output into CSV-row dicts.
 
     Columns: Mode, Freq/Eigenvalue, Tx,Ty,Tz,Rx,Ry,Rz,V_Stretch, label,
-    annotation, s_AB (1-based 'i-j:value' list, semicolon-joined; blank if
-    bonds not attached for this mode's classification).
+    annotation, s_AB (atom-symbol 'Elem#-Elem#:value' list, e.g.
+    "C1-C2:0.0342", semicolon-joined; blank if bonds not attached for this
+    mode's classification).
     """
     rows = []
     for m in scored:
         is_emit = m["is_emit"]
         bonds_str = ";".join(
-            f"{b['i']+1}-{b['j']+1}:{b['s_AB']:.4f}" for b in m["bonds"]
+            f"{b['i_label']}-{b['j_label']}:{b['s_AB']:.4f}" for b in m["bonds"]
         )
         rows.append({
             "Mode": m["name"],

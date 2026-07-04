@@ -4,30 +4,39 @@ Run from ``Github/scoring-functions/``:
     py -m pytest tests/                (with pytest)
     py tests/test_excel_ingest.py     (standalone; no pytest needed)
 
-**Rewritten 2026-07-03 for the disk-driven architecture** (see excel_ingest.py's
-module docstring + IMPLEMENTATION_PLAN.md's RESUME HERE): the old API
-(``attach_geometry_classification`` driving an Excel-row loop, ``has_geometry``
-sometimes False) no longer exists. The new API is ``discover_geometry_molecules``
-(disk-driven molecule roster) -> ``score_geometry_molecule`` (real engine, per
-molecule) -> ``attach_excel_labels`` (label-only join gated by a per-molecule
-frequency check) -> ``build_library_scores`` (orchestrates all three). Every row
-in ``library_scores.csv`` is now geometry-backed (``has_geometry`` is always
-True); "no Excel counterpart" or "frequency mismatch" only ever nulls out
-``ref_label``/``ideal``, never the score columns.
+**Updated 2026-07-04 for the dual-source architecture** (see excel_ingest.py's
+module docstring + IMPLEMENTATION_PLAN.md's RESUME HERE): ``source="excel"``
+was restored as the default (interim decision, reproducing the population/
+values the manuscript's currently-typeset figures were built from) alongside
+the still-fully-working ``source="gaussian"`` disk-driven path from
+2026-07-03. The checked-in ``data/results/library_scores.csv`` golden this
+file reads is now EXCEL-sourced (~69 molecules / 659 rows, ``has_geometry``
+False for the ~45 Excel-only molecules, True for the ~25 that also have an
+on-disk ``.log``/``.gjf`` pair) -- NOT the disk-driven ~25-molecule population
+this file's tests were written against on 2026-07-03. Tests that check
+excel-sourced-golden-specific facts read ``_load()`` (the checked-in CSV)
+directly; tests that check source="gaussian"-specific behavioral guarantees
+(every row geometry-backed, molecule count == disk roster) instead build a
+small in-memory ``source="gaussian"`` DataFrame via ``_gaussian_df()``
+(memoized per test session) so they stay valid regardless of which source
+currently produced the checked-in golden.
 
 Design note: opening the ~10 MB workbook with openpyxl takes on the order of a
-minute, so these tests avoid re-running the full ``build_library_scores()``
-pipeline (already run and spot-checked this session -- see
-IMPLEMENTATION_PLAN.md's RESUME HERE for the verification numbers). Instead
-they check: (a) the already-committed, already-generated
-``data/results/library_scores.csv`` artifact (fast, plain pandas) as a checked-
-in golden, (b) pure-logic/no-I/O unit tests of ``resolve_log_basename`` /
-``resolve_excel_molecule_name``, (c) the disk listing ``discover_geometry_
-molecules`` (fast, just os.listdir), (d) a direct, fast call to
-``score_geometry_molecule`` on water (9 modes, sub-second) to validate the real-
-engine row-building logic independent of the CSV golden, and (e) a fully
-synthetic, no-I/O unit test of ``attach_excel_labels``'s frequency-gating logic
-(the one piece of ingest logic most likely to silently regress).
+minute, so these tests avoid re-running the full ``source="excel"``
+``build_library_scores()`` pipeline (already run and spot-checked this
+session -- see IMPLEMENTATION_PLAN.md's RESUME HERE for the verification
+numbers); the cheaper ``source="gaussian"`` build (one Excel sheet + 25 small
+Gaussian logs, no ``data_mode&bond`` read) is used instead for the handful of
+tests that need a live disk-driven DataFrame. Otherwise these tests check:
+(a) the already-committed, already-generated ``data/results/library_scores.csv``
+artifact (fast, plain pandas) as a checked-in golden, (b) pure-logic/no-I/O
+unit tests of ``resolve_log_basename``/``resolve_excel_molecule_name``,
+(c) the disk listing ``discover_geometry_molecules`` (fast, just os.listdir),
+(d) a direct, fast call to ``score_geometry_molecule`` on water (9 modes,
+sub-second) to validate the real-engine row-building logic independent of the
+CSV golden, and (e) a fully synthetic, no-I/O unit test of
+``attach_excel_labels``'s frequency-gating logic (the one piece of ingest
+logic most likely to silently regress).
 """
 import os
 import sys
@@ -40,8 +49,8 @@ import pandas as pd                                                # noqa: E402
 from src.excel_ingest import (                                     # noqa: E402
     resolve_log_basename, resolve_excel_molecule_name,
     discover_geometry_molecules, score_geometry_molecule,
-    attach_excel_labels, EXCLUDED_MOLECULES, EXCEL_TO_LOG,
-    _EXTERNAL_SLOTS,
+    attach_excel_labels, build_library_scores,
+    EXCLUDED_MOLECULES, EXCEL_TO_LOG, _EXTERNAL_SLOTS,
 )
 from src.classifier import is_clean_external                       # noqa: E402
 
@@ -51,6 +60,19 @@ DATA_DIR = os.path.join(ROOT, "data")
 
 def _load():
     return pd.read_csv(LIB_CSV)
+
+
+_gaussian_df_cache = {}
+
+
+def _gaussian_df():
+    """Memoized source="gaussian" build (disk-driven, ~25 molecules) --
+    independent of whatever source produced the checked-in library_scores.csv
+    golden. Computed once per test session (module-level dict cache), not
+    once per test, to keep the suite fast."""
+    if "df" not in _gaussian_df_cache:
+        _gaussian_df_cache["df"] = build_library_scores(data_dir=DATA_DIR, source="gaussian")
+    return _gaussian_df_cache["df"]
 
 
 def test_resolve_log_basename_direct_and_mapped():
@@ -119,11 +141,14 @@ def test_discover_geometry_molecules_is_disk_driven_and_scales():
 
 
 def test_library_row_count_and_molecule_count_match_disk_roster():
-    """library_scores.csv's molecule count must equal discover_geometry_
+    """source="gaussian"'s molecule count must equal discover_geometry_
     molecules()'s count exactly (one row-group per on-disk molecule, no
     Excel-only molecules sneaking in and no on-disk molecule silently
-    dropped)."""
-    df = _load()
+    dropped). Uses the in-memory source="gaussian" build (_gaussian_df), NOT
+    the checked-in golden -- that golden is source="excel" by default as of
+    2026-07-04 and legitimately has ~69 molecules (see
+    test_excel_sourced_default_has_full_population below)."""
+    df = _gaussian_df()
     bases = discover_geometry_molecules(DATA_DIR)
     assert df["molecule"].nunique() == len(bases) == 25
 
@@ -136,11 +161,12 @@ def test_library_excludes_gramicidin_fragment():
 
 
 def test_all_rows_are_geometry_backed():
-    """Under the disk-driven architecture, EVERY row in library_scores.csv
-    comes from a real .log/.gjf pair -- has_geometry is unconditionally True
-    (kept as a column for schema/backward-compatibility, not because it ever
-    varies now)."""
-    df = _load()
+    """Under source="gaussian", EVERY row comes from a real .log/.gjf pair --
+    has_geometry is unconditionally True. Uses _gaussian_df(), not the
+    checked-in golden (which is source="excel" by default as of 2026-07-04
+    and has has_geometry==False for its ~45 Excel-only molecules -- see
+    test_excel_sourced_default_has_full_population)."""
+    df = _gaussian_df()
     assert df["has_geometry"].all()
     assert len(df) > 0
 
@@ -172,14 +198,18 @@ def test_external_rows_classify_clean_translation_rotation():
     assert ext["ref_label"].isin(("translation", "rotation")).all()
 
 
-def test_frequency_mismatched_molecules_leave_internal_label_null_only():
-    """H2O/OF2/Cl2O/Br2O's Excel rows do not match this repo's own logs
-    (discovered in a prior session -- a real data-provenance mismatch, not a
-    bug). Under the new architecture their internal rows are still fully
-    SCORED (has_geometry True, V_Stretch/predicted_label populated) -- only
-    ref_label/ideal are left null because the frequency-gated label join is
-    skipped. External (T/R) rows are completely unaffected."""
-    df = _load()
+def test_frequency_mismatched_molecules_leave_internal_label_null_only_gaussian():
+    """(source="gaussian") H2O/OF2/Cl2O/Br2O's Excel rows do not match this
+    repo's own logs (discovered in a prior session -- a real data-provenance
+    mismatch, not a bug). Under source="gaussian" their internal rows are
+    still fully SCORED (has_geometry True, V_Stretch/predicted_label
+    populated) -- only ref_label/ideal are left null because the frequency-
+    gated label join is skipped. External (T/R) rows are completely
+    unaffected. Uses _gaussian_df(), not the checked-in (source="excel")
+    golden -- see test_excel_sourced_frequency_mismatched_molecules_keep_
+    ref_label_without_geometry_overlay for that source's differently-shaped
+    (but equally correct) contract for the same 4 molecules."""
+    df = _gaussian_df()
     for mol in ("H2O", "OF2", "Cl2O", "Br2O"):
         internal = df[(df["molecule"] == mol) & (df["kind"] == "internal")]
         assert len(internal) > 0, mol
@@ -190,6 +220,49 @@ def test_frequency_mismatched_molecules_leave_internal_label_null_only():
         assert internal["V_Stretch"].notna().all(), mol
         assert internal["predicted_label"].notna().all(), mol
 
+        external = df[(df["molecule"] == mol) & (df["kind"] == "external")]
+        assert external["has_geometry"].all(), mol
+        assert external["ref_label"].isin(("translation", "rotation")).all(), mol
+        assert external["predicted_label"].apply(is_clean_external).all(), mol
+
+
+def test_excel_sourced_default_has_full_population():
+    """The checked-in library_scores.csv golden is source="excel" by default
+    (2026-07-04 interim decision -- see excel_ingest.py's module docstring):
+    the full ~69-molecule hydride library, not just the ~25 with on-disk
+    geometry. Matches the pre-2026-07-03 (commit 149fc62) population this
+    repo's manuscript figures were originally built from."""
+    df = _load()
+    assert df["molecule"].nunique() == 69
+    assert len(df) == 659
+    # Both geometry-backed (on-disk .log/.gjf) and Excel-only rows coexist.
+    assert df["has_geometry"].any()
+    assert not df["has_geometry"].all()
+
+
+def test_excel_sourced_frequency_mismatched_molecules_keep_ref_label_without_geometry_overlay():
+    """(source="excel") H2O/OF2/Cl2O/Br2O's internal rows get their
+    V_Stretch/ref_label/ideal DIRECTLY from Excel (never gated by the
+    frequency check -- that check only gates the geometry OVERLAY of
+    predicted_label/Tx..Rz), so ref_label stays populated even though
+    has_geometry is False for these 4 (their on-disk .log frequencies don't
+    match Excel's, so the overlay is correctly skipped). This is the
+    source="excel" mirror of test_frequency_mismatched_molecules_leave_
+    internal_label_null_only_gaussian -- same 4 molecules, differently-shaped
+    but equally correct contract under the other source."""
+    df = _load()
+    for mol in ("H2O", "OF2", "Cl2O", "Br2O"):
+        internal = df[(df["molecule"] == mol) & (df["kind"] == "internal")]
+        assert len(internal) > 0, mol
+        assert internal["ref_label"].isin(("bend", "stretch")).all(), mol
+        assert internal["V_Stretch"].notna().all(), mol
+        # Geometry overlay skipped (frequency mismatch) -- no engine
+        # predicted_label/Tx..Rz for these internal rows.
+        assert not internal["has_geometry"].any(), mol
+        assert internal["predicted_label"].isna().all(), mol
+
+        # External (ideal T/R) rows are unaffected -- geometry-only, no
+        # frequency dependency at all.
         external = df[(df["molecule"] == mol) & (df["kind"] == "external")]
         assert external["has_geometry"].all(), mol
         assert external["ref_label"].isin(("translation", "rotation")).all(), mol

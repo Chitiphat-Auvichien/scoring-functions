@@ -16,6 +16,84 @@
 > for the full writeup. Caption-side S/B/SB gloss text (from the prior update) still outstanding.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-04 (author decision + lead-engineer, dual-source `excel_ingest.py` — REFINEMENT of, NOT a
+> reversal of, the 2026-07-03 "recompute from Gaussian" directive below):** The manuscript's
+> ALREADY-TYPESET figures (fig:confusion, fig:bondscores, fig:boxplots, fig:modemixing) were built from
+> the OLD Excel-scored ~70-molecule `library_scores.csv`, i.e. the commit-`149fc62` population/values,
+> BEFORE the 2026-07-03 disk-driven rearchitecture shrank the population to ~25 molecules (only those
+> with on-disk Gaussian `.log`+`.gjf` pairs). The author is having Gaussian trouble right now and will
+> keep adding real files for the rest of the hydride library incrementally, but wants the manuscript's
+> current figures reproducible in the meantime. **Decision: `src/excel_ingest.py`'s
+> `build_library_scores()`/`run_ingest_pipeline()` (and `src/calibrate.py`'s
+> `run_calibration_pipeline()`) gained an explicit `source="excel"|"gaussian"` parameter** (CLI:
+> `main.py --library`/`--calibrate` gained a matching `--source {excel,gaussian}` flag, default
+> `"excel"`). Both sources produce the exact same locked `SCHEMA_COLUMNS` output, so
+> `src/calibrate.py`/`src/figures.py` never need to know or care which source produced a given
+> `library_scores.csv`.
+> - `source="excel"` (**new default**, commit-`149fc62` logic restored verbatim, not rewritten from
+>   scratch): precomputed scores read directly from `data/vibrational-scoring-functions.xlsx`
+>   (`ingest_internal_rows` from `data_score`+`data_mode&bond`) for the full ~70-molecule library;
+>   `attach_geometry_classification` overlays real-engine `predicted_label`/`Tx..Rz`/`has_geometry` onto
+>   internal rows AND always appends the ideal external T/R rows for the subset (~25 today) that also has
+>   on-disk `.log`/`.gjf` geometry, gated by the same whole-molecule frequency-agreement check as before.
+>   `V_Stretch`/`s_AB`/`rel_db`/`delta_b_mean`/`ref_label`/`ideal` on internal rows are ALWAYS Excel's own
+>   values under this source, even for geometry-backed molecules — only the overlay columns and the
+>   always-geometry-only external rows come from the engine.
+> - `source="gaussian"` (2026-07-03 disk-driven rearchitecture, kept alive and fully working, unchanged):
+>   every score column recomputed from scratch via the real engine for every molecule with a `.log`+`.gjf`
+>   pair on disk; Excel supplies only `ref_label`/`ideal`. This remains the intended EVENTUAL default once
+>   the full library has on-disk geometry — **no code changes needed when that happens**, same as before.
+> **`data/results/library_scores.csv` regenerated with the new default (`source="excel"`) via
+> `py main.py --library`: 659 rows / 69 molecules** (`df["molecule"].nunique() == 69`) — confirmed to
+> match the documented pre-2026-07-03 baseline exactly (2026-07-02's DONE entry below cites "the 25
+> geometry-backed molecules... get real Algorithm-1 predicted labels" and the 2026-07-03 entry itself
+> separately cites "the prior Excel-driven baseline's ~69 molecules / 659 rows" when describing the
+> shrinkage this session reverses). The same 4 known frequency-mismatch molecules (H2O/OF2/Cl2O/Br2O)
+> reproduce the same warnings as before, just gating the geometry OVERLAY now (internal rows keep
+> `ref_label` from Excel; only `has_geometry`/`predicted_label`/`Tx..Rz` are left null for those 4).
+> **`py main.py --calibrate` (source="excel" default) re-froze `tau_TR=0.95, tau_S=0.90368,
+> tau_B=0.17327`** — identical to the pre-2026-07-03 values (`derive_stretch_bend_thresholds` on the
+> 69-molecule ideal subset: `ideal_stretch_n=41, ideal_bend_n=50, gap_width=0.73041`, matching the
+> "gap width ~0.73" already on record). `confusion_matrix_stats()` reverted to the pre-2026-07-03 numbers
+> too: **precision 1.0 all 4 categories; recall 1.0 T/R, 0.96466 bend (mixed 3.53%), 0.71739 stretch
+> (mixed 28.26%)** — the SAME numbers fig:confusion was originally built from, not the 2026-07-03 disk-
+> driven session's 0.9375/6.25% (that population-specific result is preserved for `source="gaussian"`,
+> re-derivable any time by re-running with that source). `py main.py --figures` regenerated all 7
+> figure PDF/PNG pairs from the excel-sourced CSV.
+> **`source="gaussian"` re-verified standalone, unaffected:** `build_library_scores(source="gaussian")`
+> still returns 303 rows / 25 molecules with `has_geometry` unconditionally `True`, identical to its
+> 2026-07-03 behavior — confirmed by direct call, not assumed.
+> **Tests:** `tests/test_excel_ingest.py`'s three tests that encoded source="gaussian"-specific
+> invariants against the checked-in CSV (`test_library_row_count_and_molecule_count_match_disk_roster`,
+> `test_all_rows_are_geometry_backed`, `test_frequency_mismatched_molecules_leave_internal_label_null_
+> only` → renamed `..._gaussian`) now build a small in-memory `source="gaussian"` DataFrame via a new
+> memoized `_gaussian_df()` helper instead of reading `_load()` (the checked-in CSV, which is
+> source="excel" by default now) — decouples those tests from whichever source currently produced the
+> committed golden. Two new tests added for the excel-sourced golden's own contract
+> (`test_excel_sourced_default_has_full_population`, `test_excel_sourced_frequency_mismatched_molecules_
+> keep_ref_label_without_geometry_overlay`). `tests/test_calibrate.py`'s two confusion-matrix tests
+> (`test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket`,
+> `test_confusion_matrix_ideal_nonideal_recall_split`) had their pinned numbers restored to the
+> source="excel" values above (docstrings explain both directions of the flip so a future reader isn't
+> confused about which population a given number belongs to). **`py -m pytest tests/` 66/66 green**
+> (up from 64; net +2 new tests, 0 removed, ~176s — the added `_gaussian_df()` rebuild in
+> `test_excel_ingest.py` is the main new cost, run once per session via memoization).
+> **score-validator PASS** (this session touched ONLY `src/excel_ingest.py`'s data-sourcing + a `source`
+> passthrough param on `src/calibrate.py::run_calibration_pipeline` — `src/scoring.py`/`src/classifier.py`
+> confirmed untouched, not even appearing in `git diff --stat`): water `tab:water` exact to 3 dp; `Σ s_AB
+> == V_Stretch` holds across all 513 internal rows (max |diff| 4.8e-4, pure `.4f`-string-rounding noise
+> pre-dating this session — the same formatting `_bond_string()` used in commit `149fc62`, not a
+> regression); all 146 external rows reach exactly 1.000 on their own T/R axis; benzene EMIT 34/35 →
+> `Tx*`/`Ty*` (vibration=SB), EMIT 36 clean `Tz` blind spot, reproduced exactly; H2S/SF2 eq:vscore spot-
+> checks match the plan's own recorded values exactly; `confusion_matrix_stats()` recomputed live matches
+> the numbers above to full precision (stretch recall 0.717391304347826, bend recall 0.9646643109540636).
+> **For future sessions:** `source="excel"` is the default ONLY as an interim measure while the author's
+> Gaussian file coverage is incomplete — do NOT treat this as a permanent reversal of the 2026-07-03
+> "recompute from Gaussian" direction. When the author has dropped in enough `.log`/`.gjf` pairs that
+> `source="gaussian"`'s population is close to the full library, flip the default back
+> (`build_library_scores`'s `source` parameter default, `main.py --source`'s default, and
+> `run_calibration_pipeline`'s default) and re-verify manuscript figures still hold under the
+> Gaussian-recomputed numbers before doing so — do not flip defaults silently.
 > **2026-07-03 (author decision — REVERSES the "ingest, don't recompute" locked decision below):**
 > Author will supply real Gaussian `.log`/`.gjf` and EMIT files for the FULL hydride-library
 > molecule set (currently only 24 of ~70 have on-disk geometry; see `data/logs/`), to be dropped into

@@ -353,14 +353,21 @@ def run_calibration_pipeline(data_dir="data",
                               xlsx_path=None,
                               tau_grid=DEFAULT_TAU_GRID,
                               preferred_tau_tr=0.95,
-                              write=True):
+                              write=True,
+                              source="excel"):
     """Headless entry point: ingest the library fresh, calibrate, and
     (optionally) write data/results/thresholds.json +
     data/results/tau_sensitivity_sweep.csv. Returns
     (thresholds, result_dict, sweep_df, (path_json, path_sweep)).
+
+    `source` ("excel" default, or "gaussian") is passed straight through to
+    src.excel_ingest.build_library_scores() -- see its docstring for the
+    2026-07-04 dual-source contract. Default matches run_ingest_pipeline()'s
+    default so --library and --calibrate calibrate against the same
+    population unless told otherwise.
     """
     xlsx_path = xlsx_path or os.path.join(data_dir, "vibrational-scoring-functions.xlsx")
-    lib_df = build_library_scores(xlsx_path, data_dir)
+    lib_df = build_library_scores(xlsx_path, data_dir, source=source)
     thresholds, result, sweep_df = calibrate(lib_df, data_dir, tau_grid, preferred_tau_tr)
 
     path_json = os.path.join(data_dir, "results", "thresholds.json")

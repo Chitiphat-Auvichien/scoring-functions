@@ -319,10 +319,10 @@ def _run_flag_pipelines(args):
     if args.library:
         if args.molecule:
             print("Note: --library is global and ignores -m/--molecule.")
-        print("Running library ingest (src.excel_ingest.run_ingest_pipeline) -- "
-              "this is known-slow (~630s to parse the workbook via openpyxl). Please wait...")
+        print(f"Running library ingest (src.excel_ingest.run_ingest_pipeline, "
+              f"source={args.source!r}) -- this is known-slow. Please wait...")
         from src.excel_ingest import run_ingest_pipeline
-        df_lib, path, skip_report = run_ingest_pipeline()
+        df_lib, path, skip_report = run_ingest_pipeline(source=args.source)
         print(f"Wrote {len(df_lib)} rows -> {path}")
         if skip_report:
             print(f"  {len(skip_report)} molecule(s) had their internal-row ref_label/ideal "
@@ -332,9 +332,10 @@ def _run_flag_pipelines(args):
     if args.calibrate:
         if args.molecule and not args.library:
             print("Note: --calibrate is global and ignores -m/--molecule.")
-        print("Running threshold calibration (src.calibrate.run_calibration_pipeline)...")
+        print(f"Running threshold calibration (src.calibrate.run_calibration_pipeline, "
+              f"source={args.source!r})...")
         from src.calibrate import run_calibration_pipeline
-        thresholds, result, sweep_df, (path_json, path_sweep) = run_calibration_pipeline()
+        thresholds, result, sweep_df, (path_json, path_sweep) = run_calibration_pipeline(source=args.source)
         print(f"Frozen thresholds tau_TR={thresholds.tau_TR}, tau_S={thresholds.tau_S}, "
               f"tau_B={thresholds.tau_B} -> {path_json}")
         print(f"Wrote {len(sweep_df)}-row sensitivity sweep -> {path_sweep}")
@@ -398,6 +399,15 @@ def main():
     ap.add_argument("--calibrate", action="store_true",
                     help="Calibrate tau_TR/tau_S/tau_B against the ingested library -> "
                          "data/results/thresholds.json + tau_sensitivity_sweep.csv. Global (ignores -m).")
+    ap.add_argument("--source", choices=["excel", "gaussian"], default="excel",
+                    help="Data source for --library/--calibrate (src.excel_ingest."
+                         "build_library_scores). 'excel' (default): precomputed Excel scores "
+                         "for the full ~70-molecule library, geometry-overlaid where an on-disk "
+                         ".log/.gjf pair exists -- matches the population the manuscript's "
+                         "current figures were built from (2026-07-04 interim decision). "
+                         "'gaussian': disk-driven real-engine recompute for every molecule with "
+                         "a .log+.gjf pair on disk (~25 today, growing) -- the intended eventual "
+                         "default once the full library has on-disk geometry.")
     ap.add_argument("--figures", action="store_true",
                     help="Regenerate all manuscript figures from data/results/*.csv -> "
                          "data/figures/*.{pdf,png}. Global (ignores -m).")

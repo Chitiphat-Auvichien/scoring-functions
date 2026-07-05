@@ -14,6 +14,23 @@
 > tier moved to a new SI self-consistency check, `plot_rigorous_tier_check`; see RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-05 (session wrap-up — multi-centre exclusion + rigorous-tier restructure arc, all verified
+> clean):** The full arc across this session is done: (1) excluded C2H2/C2H4/C2H6/H2O2/C6H6/
+> iso-C4H10/n-C4H10 (non-single-centre) from pooled hydride-library stats (`04fcefb`), (2) restructured
+> `fig:confusion` to drop the circular rigorous-tier claim (`4d6e513`), (3) split benzene's own
+> `fig:benzeneconfusion` (heatmap main text, precision/recall to new SI `JCC_SI_benzene_precision_recall.tex`)
+> (`564a308`), (4) lead-author rewrote every cascading manuscript number (tab:nonideal, fig:bondscores/
+> boxplots/modemixing captions, non-ideal-tier retention 97.8%/57.0%, new `JCC_SI_rigorous_tier_check.tex`
+> Table S1). One leftover inconsistency I (orchestrating session) caught and fixed directly:
+> `JCC_SI_sensitivity.tex`'s tau_TR-sweep paragraph still said "69-molecule library" after the main text's
+> parallel sentence was updated to "62-molecule" — reworded to clarify the 25-molecule T/R-sweep
+> population deliberately is NOT single-centre-restricted (T/R exactness holds for any topology), so it
+> correctly still includes benzene even though benzene is excluded from the 62-molecule single-centre
+> library. Final verification (this session): brace balance, duplicate-label check, and
+> `\includegraphics` existence check clean across all 5 .tex files; full `latexmk -pdf` recompile of the
+> main manuscript + all 4 SI docs (`JCC_SI_sensitivity`, `JCC_SI_computational_cost`,
+> `JCC_SI_benzene_precision_recall`, `JCC_SI_rigorous_tier_check`) shows 0 undefined refs/citations in
+> every document. `Github/scoring-functions` repo clean and pushed through `3789b3b`.
 > **2026-07-05 (author decision, figure-builder, `fig:confusion` restructure — drops the rigorous-tier
 > "precision/recall = 1.000, clears the 0.95 floor" framing as circular, not independent validation):**
 > Two arguments made this restructure necessary, not just cosmetic: (1) rigorous-tier T/R recovery is

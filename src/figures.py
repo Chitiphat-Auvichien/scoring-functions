@@ -57,6 +57,17 @@ the full argument) now live in ``plot_rigorous_tier_check``, a 9th figure
 (no ``fig:`` label of its own -- SI-bound, framed explicitly as a
 self-consistency check, not an accuracy claim).
 
+``plot_irrep_coupling`` (added 2026-07-06) is an 11th figure, no ``fig:``
+label of its own -- SI-bound: the irrep-degeneracy mixing-mechanism figure
+that fills the ``fig:modemixing`` pending gap flagged in
+IMPLEMENTATION_PLAN.md (molecule/panel form now confirmed as the AB3
+trigonal-planar / AB2 bent series, NOT ethane). Reproduces the group's
+earlier project report's Figures 3c/3d: mode score vs. central-atom
+displacement amplitude, faceted by whether a mode's irrep has a same-irrep
+coupling partner in its point group. Reads ``data/data_score.csv`` directly
+(the only source with the needed ``irrep``/``|d_CA|`` columns), not
+``data/results/library_scores.csv``.
+
 Cross-figure visual consistency (one meaning per color/marker, paper-wide)
 --------------------------------------------------------------------------
 Every figure that encodes a classification CATEGORY (clean translation/
@@ -1607,7 +1618,170 @@ def plot_mode_mixing(
         "n_ideal_modes": n_ideal,
         "n_nonideal_modes": n_nonideal,
         "tau_S": th.tau_S, "tau_B": th.tau_B,
-        "irrep_degeneracy_panel": "NOT BUILT -- pending lead-author/tex-data-sync confirmation.",
+        "irrep_degeneracy_panel": ("NOT BUILT in this figure -- see the new, "
+                                   "separate SI figure plot_irrep_coupling "
+                                   "(fig_irrep_coupling) below, added "
+                                   "2026-07-06 once the molecule/panel form "
+                                   "was confirmed (AB3 trigonal-planar / AB2 "
+                                   "bent series, reproducing the group's "
+                                   "earlier report's Figures 3c/3d)."),
+    }
+    return summary
+
+
+# --------------------------------------------------------------------------
+# SI: irrep-degeneracy mixing mechanism (AB3 trigonal-planar / AB2 bent
+# series) -- NEW figure, added 2026-07-06.
+#
+# Supports the manuscript's own prose claim (Stretching/bending
+# classification section, near "Modes whose irreducible representations are
+# unique retain ideal scores"): "Mixing occurs only where modes of the same
+# irreducible representation can couple, i.e. in lower-symmetry molecules."
+# That claim previously had no supporting figure -- this reproduces, with
+# the CURRENT pipeline's own recomputed scores (not re-derived here; see
+# data source note below), the group's earlier project report's Figures 3c
+# (trigonal-planar AB3) and 3d (bent AB2), which made exactly this point
+# visually: mode score vs. central-atom displacement amplitude |d_CA|,
+# faceted by whether a mode's irreducible representation has a same-irrep
+# coupling partner within its own point group.
+#
+#   - AB3 (D3h): A2'' (bend) and A1' (stretch) are each the ONLY mode of
+#     that label -- no coupling partner, so they stay flat/clean regardless
+#     of |d_CA|. E' appears twice (once as the doubly-degenerate in-plane
+#     bend, once as the doubly-degenerate asymmetric stretch) -- those two
+#     E' mode sets CAN couple; only the stretch-E' branch visibly droops
+#     from ~1 as |d_CA| grows (heavier/more electronegative substituents),
+#     while bend-E' stays near 0 throughout.
+#   - AB2 (C2v): A1 appears twice (symmetric bend AND symmetric stretch) --
+#     both A1 branches show drooping/mixing with |d_CA| (bend-A1 creeps up
+#     from 0, stretch-A1 droops down from 1). B2 (antisymmetric stretch) is
+#     the only B2-labeled mode -- unique, and stays comparatively clean.
+#
+# Data source: ``data/data_score.csv`` (NOT ``data/results/library_scores.csv``,
+# which lacks the `irrep`/`|d_CA|` columns this figure needs) -- read
+# directly, never recomputed here (this module is presentation-only,
+# same as every other function above).
+# --------------------------------------------------------------------------
+
+def _unique_marker_kwargs(color_key, unique):
+    """Marker styling for one (type, irrep) category in fig_irrep_coupling:
+    color encodes bend/stretch (CATEGORY_COLOR's 'bending'/'stretching' hue,
+    via `color_key`), fill encodes unique-irrep (filled, no same-irrep
+    coupling partner in its point group) vs. shared-irrep (hollow,
+    coupling-capable) -- deliberately reusing the SAME filled/hollow visual
+    grammar as IDEAL_STYLE (filled = clean/protected, hollow = exposed to a
+    perturbation) rather than inventing a new one, even though the semantic
+    axis here (unique vs. shared irrep) is distinct from ideal/non-ideal
+    molecule membership. ONE marker shape (circle) throughout -- color+fill
+    already fully distinguish every category in both panels (at most 2
+    irreps share a color within any one panel), so a third, redundant shape
+    encoding is not added, matching this module's established
+    "don't over-encode a 2-way split" convention (see `_marker_kwargs`'s own
+    docstring).
+    """
+    color = COLORS[color_key]
+    if unique:
+        return dict(marker="o", facecolors=color, edgecolors=color,
+                    linewidths=0.6, alpha=0.9)
+    return dict(marker="o", facecolors="none", edgecolors=color,
+                linewidths=0.9, alpha=0.9)
+
+
+def plot_irrep_coupling(
+    data_score_csv="data/data_score.csv",
+    out_dir="data/figures",
+    label="fig_irrep_coupling",
+):
+    """Build the irrep-degeneracy mixing-mechanism SI figure: (a) trigonal-
+    planar AB3 series (A=B,Al,Ga; B=H,F,Cl,Br -- ``tab:nonideal``'s "Trig.
+    planar AB3" row), (b) bent AB2 series (A=O,S,Se; B=H,F,Cl,Br, plus the
+    grid-external single-centre oxide/chalcogenide species O3/SO2/NO2/TeF2
+    that ``tab:nonideal``'s caption also folds into the pooled non-ideal
+    population -- ``tab:nonideal``'s "Bent AB2" row). Both panels plot mode
+    score (``vib_scr``) vs. central-atom displacement amplitude (``|d_CA|``),
+    faceted by (type, irrep): filled = unique irrep in that point group (no
+    same-irrep coupling partner, stays clean regardless of |d_CA|), hollow =
+    shared irrep (has a same-irrep partner among the molecule's other modes,
+    so CAN couple with it) -- color is bend (blue)/stretch (vermillion), the
+    same CATEGORY_COLOR hues used everywhere else in this module.
+
+    Reproduces the group's earlier project report's Figures 3c/3d with the
+    current pipeline's own recomputed scores (see data source note in this
+    section's header comment above) -- confirmed against `data/data_score.csv`
+    directly (not `data/results/library_scores.csv`, which lacks the
+    `irrep`/`|d_CA|` columns needed here).
+
+    Not one of the 6 originally-scoped ``fig:*`` labels -- a new SI figure
+    filling the "irrep-degeneracy sub-panel" pending gap flagged against
+    ``fig:modemixing`` (IMPLEMENTATION_PLAN.md); confirmed molecule/panel
+    form (AB3/AB2, not ethane) 2026-07-06.
+    """
+    _style()
+    df = pd.read_csv(data_score_csv)
+
+    ab3 = df[(df["shape"] == "trigonal planar") & (df["ideal"] == "no")].copy()
+    ab2 = df[(df["shape"] == "bend") & (df["ideal"] == "no")].copy()
+
+    # (type, irrep) -> (color_key, unique_flag, legend text). Defined
+    # per-panel (not a single shared dict) since the two point groups use
+    # different irrep labels and different unique/shared assignments (AB2's
+    # A1 is shared in BOTH branches; AB3's A1'/A2'' are each unique).
+    ab3_categories = [
+        ("bend", "A₂\"", "bending", True, "bend A2″ (unique irrep)"),
+        ("bend", "E'", "bending", False, "bend E' (shared irrep)"),
+        ("stretch", "A₁'", "stretching", True, "stretch A1' (unique irrep)"),
+        ("stretch", "E'", "stretching", False, "stretch E' (shared irrep)"),
+    ]
+    ab2_categories = [
+        ("bend", "A₁", "bending", False, "bend A1 (shared irrep)"),
+        ("stretch", "A₁", "stretching", False, "stretch A1 (shared irrep)"),
+        ("stretch", "B₂", "stretching", True, "stretch B2 (unique irrep)"),
+    ]
+
+    fig, (ax_3, ax_2) = plt.subplots(1, 2, figsize=(7.2, 3.4))
+
+    def _plot_panel(ax, sub_df, categories, title):
+        n_plotted = 0
+        for mode_type, irrep, color_key, unique, legend_text in categories:
+            pts = sub_df[(sub_df["type"] == mode_type) & (sub_df["irrep"] == irrep)]
+            if pts.empty:
+                continue
+            kw = _unique_marker_kwargs(color_key, unique)
+            ax.scatter(pts["|d_CA|"], pts["vib_scr"], s=26, zorder=3,
+                       label=legend_text, **kw)
+            n_plotted += len(pts)
+        ax.set_xlabel(r"$|\mathbf{d}_{CA}|$ (central-atom displacement amplitude)")
+        ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
+        ax.set_xlim(-0.03, sub_df["|d_CA|"].max() * 1.08)
+        ax.set_ylim(-0.05, 1.08)
+        ax.legend(loc="center left", frameon=False, fontsize=6.8,
+                   handletextpad=0.4, labelspacing=0.4, borderaxespad=0.2)
+        return n_plotted
+
+    n_ab3 = _plot_panel(ax_3, ab3, ab3_categories,
+                         "(a) Trigonal-planar AB$_3$ (non-ideal)")
+    n_ab2 = _plot_panel(ax_2, ab2, ab2_categories,
+                         "(b) Bent AB$_2$ (non-ideal)")
+    ax_3.set_ylabel(r"Mode score $s[\mathrm{V}]$")
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary = {
+        "pdf": pdf_path, "png": png_path,
+        "shared_categories": ("reuses CATEGORY_COLOR's bending/stretching "
+                               "hues; fill encodes unique-irrep (filled) vs. "
+                               "shared/coupling-capable-irrep (hollow), the "
+                               "same visual grammar as IDEAL_STYLE but on a "
+                               "different semantic axis (irrep uniqueness, "
+                               "not ideal/non-ideal molecule membership). ONE "
+                               "marker shape (circle) throughout."),
+        "ab3_molecules": sorted(ab3["molecule"].unique().tolist()),
+        "ab2_molecules": sorted(ab2["molecule"].unique().tolist()),
+        "n_ab3_points": n_ab3,
+        "n_ab2_points": n_ab2,
+        "data_source": "data/data_score.csv (irrep/|d_CA| columns; not library_scores.csv)",
     }
     return summary
 
@@ -1695,12 +1869,12 @@ def regenerate_all(verbose=True):
     already-computed ``data/results/*.csv`` inputs with their own defaults;
     this function takes no molecule-specific arguments.
 
-    Returns a dict {tex_label: result_dict} for all 10 figures (6 labeled
+    Returns a dict {tex_label: result_dict} for all 11 figures (6 labeled
     fig:* + the standalone benzene-normal-modes gallery + the SI rigorous-
     tier consistency check + fig:benzeneconfusion + its SI precision/recall
-    companion), in the same order they are built. Raises whatever the
-    underlying plot_* function raises (e.g. a missing input CSV) -- fail
-    loud, no silent partial regeneration.
+    companion + the SI irrep-degeneracy coupling figure), in the same order
+    they are built. Raises whatever the underlying plot_* function raises
+    (e.g. a missing input CSV) -- fail loud, no silent partial regeneration.
     """
     fns = [
         ("fig:benzene", plot_benzene_stress_test),
@@ -1712,6 +1886,7 @@ def regenerate_all(verbose=True):
         ("fig:bondscores", plot_bond_scores),
         ("fig:boxplots", plot_boxplots),
         ("fig:modemixing", plot_mode_mixing),
+        ("SI irrep-degeneracy coupling (no fig: label yet)", plot_irrep_coupling),
         ("fig:sensitivity", plot_sensitivity),
     ]
     results = {}

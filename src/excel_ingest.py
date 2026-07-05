@@ -85,6 +85,27 @@ to the companion paper).
 shared by both sources (name-mapping between the Excel molecule name and the
 on-disk ``data/logs``+``data/gjf`` basename, for the subset that ships under a
 different filename/casing convention).
+
+**ref_label/ideal/citation-key source (2026-07-05 author decision, applies to
+BOTH ``source="excel"`` and ``source="gaussian"``, full switch across all
+molecules):** ``src/csv_label_ingest.py``'s three CSVs
+(``data/data_score.csv``, ``data/characterised_modes.csv``,
+``data/ref-label_citation.csv``) now supersede the xlsx workbook's
+``data_score``/``characterised modes`` sheets for ``ref_label``/``ideal``
+content, with a fallback to the xlsx ``data_score`` sheet ONLY for the 6
+molecules (``C2H2``, ``C2H4``, ``C2H6``, ``H2O2``, ``iso-C4H10``,
+``n-C4H10``) the new CSVs do not cover at all yet (see
+``csv_label_ingest``'s module docstring). This is the vehicle for benzene's
+literature relabeling (mode_index 19/23/24 bend->stretch, 21/22 bend->SB --
+the first genuine, literature-sourced 3rd reference class in this pipeline,
+not just the classifier's own predicted mixed bucket) and adds a new
+``ref_key`` column (citation key, e.g. ``"Shi1972"``; blank where the
+author has not yet back-filled a citation) to ``SCHEMA_COLUMNS``.
+Everything else -- freq, V_Stretch, delta_b_mean, s_AB, rel_db,
+has_geometry, predicted_label/annotation, Tx..Rz -- is completely unaffected
+by this and keeps coming from whichever source (Excel or Gaussian) the
+``source=`` parameter already selected; only the label/citation content
+moved.
 """
 import os
 import warnings
@@ -92,6 +113,8 @@ import warnings
 import numpy as np
 import openpyxl
 import pandas as pd
+
+from src import csv_label_ingest
 
 # --- Column identities in the Excel workbook (verified 2026-07 session;
 # used only by source="excel") ---
@@ -121,12 +144,15 @@ _LOG_TO_EXCEL = {v: k for k, v in EXCEL_TO_LOG.items()}
 _EXTERNAL_SLOTS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 
 # Locked output schema (src/calibrate.py and src/figures.py read these exact
-# column names) -- identical regardless of source.
+# column names) -- identical regardless of source. `ref_key` (2026-07-05,
+# citation key from src/csv_label_ingest.py, e.g. "Shi1972") is a new,
+# purely-additive column appended at the end: existing consumers read
+# columns by name, not position, so this does not disturb them.
 SCHEMA_COLUMNS = [
     "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
     "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
     "predicted_label", "predicted_annotation",
-    "Tx", "Ty", "Tz", "Rx", "Ry", "Rz",
+    "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "ref_key",
 ]
 
 
@@ -249,6 +275,7 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None):
                 "predicted_annotation": m["annotation"],
                 "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
                 "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
+                "ref_key": None,  # T/R rows are structural/exact -- no literature citation
             })
             continue
 
@@ -273,7 +300,7 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None):
         rows.append({
             "mode_index": mode_index, "kind": "internal",
             "freq": m["frequency"],
-            "ref_label": None, "ideal": None,  # attached later from Excel, label-only
+            "ref_label": None, "ideal": None,  # attached later, label-only
             "V_Stretch": m["V"], "delta_b_mean": delta_b_mean,
             "s_AB": s_ab_str, "rel_db": rel_db_str,
             "has_geometry": True,
@@ -281,21 +308,33 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None):
             "predicted_annotation": m["annotation"],
             "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
             "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
+            "ref_key": None,  # attached later, label-only
         })
     return rows
 
 
-def attach_excel_labels(df, tables, freq_atol=0.05, freq_rtol=1e-4):
-    """(source="gaussian") Join ref_label/ideal from Excel's data_score sheet
-    onto `df`'s internal rows, molecule by molecule, gated by a whole-molecule
-    frequency-agreement check (see module docstring). External rows are
-    untouched (already correct, structural). Returns (df, skip_report) where
-    skip_report is a list of {'molecule', 'n_mismatched', 'example':
-    (mode_index, engine_freq, excel_freq)} dicts, one per molecule whose
-    internal-row label join was skipped (excel_freq is None if no Excel row
-    exists at all for that mode index -- treated identically to a numeric
-    mismatch, not silently skipped, per the fail-loud guarantee established in
-    a prior session).
+def attach_excel_labels(df, tables, label_lookup, freq_atol=0.05, freq_rtol=1e-4):
+    """(source="gaussian") Join ref_label/ideal/ref_key onto `df`'s internal
+    rows, molecule by molecule, gated by a whole-molecule frequency-agreement
+    check against Excel's own ``data_score`` sheet (see module docstring --
+    this gate is unaffected by the 2026-07-05 label-source switch; it is
+    purely a "does this molecule's Excel row correspond to the same
+    calculation as the on-disk log" consistency check). External rows are
+    untouched (already correct, structural).
+
+    Once a molecule passes the gate, the actual ref_label/ideal/ref_key
+    VALUES written come from `label_lookup`
+    (``src.csv_label_ingest.build_label_lookup()`` -- the new CSVs, with an
+    xlsx fallback for the 6 molecules they don't cover at all), not from the
+    Excel row directly; the Excel row here is used only for the frequency
+    gate.
+
+    Returns (df, skip_report) where skip_report is a list of {'molecule',
+    'n_mismatched', 'example': (mode_index, engine_freq, excel_freq)} dicts,
+    one per molecule whose internal-row label join was skipped (excel_freq is
+    None if no Excel row exists at all for that mode index -- treated
+    identically to a numeric mismatch, not silently skipped, per the
+    fail-loud guarantee established in a prior session).
     """
     ds = tables["data_score"].copy()
     ds = ds[~ds["molecule"].isin(EXCLUDED_MOLECULES)].copy()
@@ -341,19 +380,24 @@ def attach_excel_labels(df, tables, freq_atol=0.05, freq_rtol=1e-4):
             continue
 
         for idx, ex_row in matched:
-            ref_label = ex_row["type"] if ex_row["type"] in ("bend", "stretch") else None
+            mode_index = int(df.at[idx, "mode_index"])
+            ref_label, ideal, ref_key = csv_label_ingest.get_label(label_lookup, mol, mode_index)
             df.at[idx, "ref_label"] = ref_label
-            df.at[idx, "ideal"] = ex_row["ideal"]
+            df.at[idx, "ideal"] = ideal
+            df.at[idx, "ref_key"] = ref_key
 
     return df, skip_report
 
 
 def _build_library_scores_gaussian(xlsx_path, data_dir, thresholds, return_skip_report):
     """source="gaussian": disk-driven, real-engine recompute for every
-    molecule with a .log+.gjf pair on disk; Excel supplies ref_label/ideal
-    only. See module docstring."""
+    molecule with a .log+.gjf pair on disk; the new label CSVs (with an
+    xlsx fallback) supply ref_label/ideal/ref_key only. See module
+    docstring."""
     tables = load_excel_tables(xlsx_path, include_bonds=False)
     ds_molecules = set(tables["data_score"]["molecule"].dropna().unique()) - EXCLUDED_MOLECULES
+    csv_tables = csv_label_ingest.load_label_csvs(data_dir)
+    label_lookup = csv_label_ingest.build_label_lookup(csv_tables, fallback_ds=tables["data_score"])
 
     bases = discover_geometry_molecules(data_dir)
     all_rows = []
@@ -370,7 +414,7 @@ def _build_library_scores_gaussian(xlsx_path, data_dir, thresholds, return_skip_
         all_rows.extend(rows)
 
     df = pd.DataFrame(all_rows, columns=SCHEMA_COLUMNS)
-    df, skip_report = attach_excel_labels(df, tables)
+    df, skip_report = attach_excel_labels(df, tables, label_lookup)
 
     for base, err in load_errors:
         warnings.warn(
@@ -387,7 +431,7 @@ def _build_library_scores_gaussian(xlsx_path, data_dir, thresholds, return_skip_
             "this molecule's Excel data_score row likely came from a "
             "different calculation than data/logs/. Its scores (V_Stretch, "
             "Tx..Rz, predicted_label, ...) are still the real engine's own "
-            "and are NOT affected; only ref_label/ideal are left null.",
+            "and are NOT affected; only ref_label/ideal/ref_key are left null.",
             stacklevel=3)
 
     if return_skip_report:
@@ -400,11 +444,18 @@ def _build_library_scores_gaussian(xlsx_path, data_dir, thresholds, return_skip_
 # (commit-149fc62 logic, restored 2026-07-04).
 # ---------------------------------------------------------------------------
 
-def ingest_internal_rows(tables):
+def ingest_internal_rows(tables, label_lookup):
     """(source="excel") Build one row per (molecule, mode) internal vibration
     from data_score + data_mode&bond. No geometry/classification columns yet
     (see attach_geometry_classification) -- this function only ever reads
-    precomputed Excel values, never recomputes a score.
+    precomputed Excel values for freq/V_Stretch/per-bond detail, never
+    recomputes a score.
+
+    ref_label/ideal/ref_key are NOT read from the Excel `ds` row here (as
+    they were before 2026-07-05) -- they come from `label_lookup`
+    (``src.csv_label_ingest.build_label_lookup()``, built by the caller from
+    the new label CSVs with an xlsx fallback), which is this pipeline's
+    single source of label/citation truth. See module docstring.
     """
     ds = tables["data_score"].copy()
     dmb = tables["data_mode_bond"].copy()
@@ -420,16 +471,17 @@ def ingest_internal_rows(tables):
 
     rows = []
     for _, r in ds.iterrows():
-        key = (r["molecule"], r["mode"])
-        bonds = bond_groups.get(key)
-        ref_label = r["type"] if pd.notna(r["type"]) and r["type"] in ("bend", "stretch") else None
+        mode_index = int(r["mode"])
+        bond_key = (r["molecule"], r["mode"])  # unconverted -- must match dmb's own "mode" dtype exactly, as before
+        bonds = bond_groups.get(bond_key)
+        ref_label, ideal, ref_key = csv_label_ingest.get_label(label_lookup, r["molecule"], mode_index)
         rows.append({
             "molecule": r["molecule"],
-            "mode_index": int(r["mode"]),
+            "mode_index": mode_index,
             "kind": "internal",
             "freq": r["freq"],
             "ref_label": ref_label,
-            "ideal": r["ideal"],
+            "ideal": ideal,
             "V_Stretch": r[_VS_COL],
             "delta_b_mean": r[_DELTA_B_COL],
             "s_AB": _bond_string(bonds, _BOND_S_AB_COL),
@@ -439,6 +491,7 @@ def ingest_internal_rows(tables):
             "predicted_annotation": None,
             "Tx": None, "Ty": None, "Tz": None,
             "Rx": None, "Ry": None, "Rz": None,
+            "ref_key": ref_key,
         })
     return pd.DataFrame(rows, columns=SCHEMA_COLUMNS)
 
@@ -532,6 +585,7 @@ def attach_geometry_classification(df, data_dir="data", thresholds=None,
                     "predicted_annotation": m["annotation"],
                     "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
                     "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
+                    "ref_key": None,  # T/R rows are structural/exact -- no literature citation
                 })
     if extra_rows:
         df = pd.concat([df, pd.DataFrame(extra_rows, columns=SCHEMA_COLUMNS)], ignore_index=True)
@@ -544,7 +598,9 @@ def _build_library_scores_excel(xlsx_path, data_dir, thresholds, return_skip_rep
     appended external T/R rows) for the subset that also has on-disk
     geometry. See module docstring."""
     tables = load_excel_tables(xlsx_path, include_bonds=True)
-    df = ingest_internal_rows(tables)
+    csv_tables = csv_label_ingest.load_label_csvs(data_dir)
+    label_lookup = csv_label_ingest.build_label_lookup(csv_tables, fallback_ds=tables["data_score"])
+    df = ingest_internal_rows(tables, label_lookup)
     df, skip_report = attach_geometry_classification(df, data_dir, thresholds)
     df = df.reindex(columns=SCHEMA_COLUMNS)
     for entry in skip_report:

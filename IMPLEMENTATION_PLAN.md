@@ -16,6 +16,114 @@
 > for the full writeup. Caption-side S/B/SB gloss text (from the prior update) still outstanding.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-05 (author decision + lead-engineer, new ref_label/ideal/citation-key source across ALL
+> molecules -- literature relabeling of benzene modes 21/22/19/23/24):** The author replaced the
+> label/citation content that used to live only inside `data/vibrational-scoring-functions.xlsx`'s
+> `data_score`/`characterised modes` sheets with three tracked CSVs: `data/data_score.csv` (63
+> molecules, re-export of the `type`/`ideal` columns, **plus a literal new `"SB"` (mixed) literature
+> class** for benzene modes 21/22 -- the first genuine, literature-sourced 3rd reference class anywhere
+> in this pipeline, not just the classifier's own predicted mixed bucket), `data/characterised_modes.csv`
+> (63 molecules, richer per-mode detail incl. a `ref` citation-key column, only ~11/63 molecules
+> currently back-filled), `data/ref-label_citation.csv` (citation key -> doi/author/journal/year, ~9
+> distinct keys today). Hand-verified against the CURRENT manuscript text
+> (`JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex` lines 794-917): of benzene's 30 internal modes, mode
+> 19 (1319.27 cm-1) and the degenerate pair 23/24 (1598.90 cm-1) flip literature `bend`->`stretch`; the
+> degenerate pair 21/22 (1532.85 cm-1) flips literature `bend`->`SB`. All other benzene modes and all 63
+> non-benzene molecules are unchanged in VALUE (only re-exported to CSV).
+> **New module `src/csv_label_ingest.py`** builds `{(molecule, mode): {ref_label, ideal, ref_key}}` from
+> the 3 new CSVs, extending the accepted literal `type`/ref_label values from `("bend","stretch")` to
+> `("bend","stretch","SB")` (anything else still maps to `None`, unchanged fail-quiet-not-fail-wrong
+> policy). **Coverage gap, resolved via fallback, not silently dropped:** 6 molecules the old
+> xlsx-driven pipeline scored (`C2H2`,`C2H4`,`C2H6`,`H2O2`,`iso-C4H10`,`n-C4H10`) are entirely absent
+> from the new CSVs (not yet migrated by the author) -- `build_label_lookup(tables, fallback_ds=...)`
+> falls back to the xlsx `data_score` sheet's own `type`/`ideal` ONLY for molecules the new CSVs don't
+> cover at all; every molecule the new CSVs DO cover always wins (full switch, not a merge/override of
+> individual fields). **`src/excel_ingest.py` wiring:** `ingest_internal_rows()` (source="excel") and
+> `attach_excel_labels()` (source="gaussian") now source `ref_label`/`ideal`/`ref_key` from this lookup
+> instead of the xlsx `data_score` sheet directly; `SCHEMA_COLUMNS` gained one new APPENDED column,
+> `ref_key` (citation key, e.g. `"Shi1972"`; blank where the author hasn't back-filled a citation yet)
+> -- purely additive, existing consumers (`calibrate.py`/`figures.py`) read columns by name so this does
+> not disturb them. Freq/V_Stretch/delta_b_mean/s_AB/rel_db/has_geometry/predicted_label/Tx..Rz are
+> COMPLETELY untouched by this change and still come from whichever source (Excel or Gaussian) the
+> existing `source=` parameter already selected -- only label/citation content moved.
+> **Regression-verified:** regenerated `library_scores.csv` (both `source="excel"` -- 659 rows/69
+> molecules -- and `source="gaussian"` -- 303 rows/25 molecules, both matching their documented prior
+> baselines exactly) and diffed column-by-column against the prior committed golden: **every molecule
+> EXCEPT C6H6 is byte-for-byte identical in `ref_label`/`ideal`/every other column**; C6H6's `ref_label`
+> differs ONLY at mode_index 19/21/22/23/24, exactly as hand-derived above. **Side-effect noted, not a
+> regression:** C6H6's `freq` column also shifted by up to 0.015 cm-1 across all 30 modes (e.g. the
+> 13/14 and 23/24 near-degenerate pairs are now EXACTLY degenerate to the printed precision, 1056.3901/
+> 1056.3901 and 1598.8987/1598.8987, vs. tiny spurious splittings before) -- this traces to
+> `data/vibrational-scoring-functions.xlsx` itself having been resaved by the author today (its on-disk
+> mtime is newer than the last `library_scores.csv` commit), independent of this session's code change;
+> `freq` sourcing was not touched by this session at all. No other molecule's freq shows any drift.
+> **`src/benzene_validation.py` extended for the new 3-class ground truth (NOT touching
+> `src/scoring.py`/`src/classifier.py`/any threshold):** `benzene_normal_reference_detail()`'s `correct`
+> column now uses `_expected_pred_bucket(ref_label)` (`{"SB": "mixed"}.get(ref_label, ref_label)`) instead
+> of comparing `predicted_bucket` to `ref_label` directly, since there is no predicted bucket literally
+> named `"SB"` (`classification_bucket()` collapses the engine's own `MIXED_STRETCH_BEND` label to
+> `"mixed"`) -- a literature `"SB"` mode counts as correctly classified iff the engine calls it `"mixed"`.
+> `benzene_normal_reference_summary()`'s loop extended to 5 categories (added `"SB"`). **New function
+> `benzene_internal_confusion_matrix()`**: genuine 3x3 (ref bend/stretch/SB x predicted bend/stretch/mixed)
+> confusion table + per-category recall for benzene's 30 internal modes, built via `pd.crosstab` (mirrors
+> `calibrate.py::confusion_matrix_stats`'s pattern; not a copy, since that function's external-row/
+> ideal-tier assumptions don't apply to this benzene-only view). **Exact numbers, hand-derived by the
+> author and independently re-verified by score-validator:**
+>   - ref bend (n=18): 16 correct, 2 -> mixed (modes 13,14) — recall 0.8889.
+>   - ref stretch (n=10): 7 correct, 3 -> mixed (modes 19,23,24) — recall 0.700.
+>   - ref SB (n=2, modes 21,22): 0 correct, BOTH -> predicted clean `bend` (V_Stretch 0.09072/0.08119,
+>     both < tau_B=0.17327) — recall 0.000, the tau_B two-gate purity test's "bending blind spot" hitting
+>     a genuine literature-mixed mode for the first time. Zero pure bend<->stretch crossings (both
+>     categories' `n_crossed_opposite==0`) — that part of the "zero crossings" claim still holds exactly.
+> **New function `benzene_sb_vs_stretch_bond_diagnostic()`** (Task B', a sibling to the existing
+> `benzene_mixed_bond_diagnostic`, NOT an extension of it, since 21/22 are specifically NOT
+> predicted-mixed — finding them via `predicted_bucket=="mixed"` would find nothing): per-bond C-C vs.
+> C-H breakdown for 21/22 (`case="blind_spot_bend"`) contrasted directly against the near-degenerate pair
+> 23/24 (`case="overflagged_mixed"`, literature stretch but predicted mixed) — the manuscript's two
+> contrasting miss mechanisms side by side. The contrast pair (23/24, not lone mode 19 which is already
+> the dedicated SB worked example elsewhere per Task E) is derived by keeping only literature-stretch/
+> predicted-mixed candidates that share an exact frequency with another candidate (a near-degeneracy
+> check), not hardcoded. Shares a refactored `_bond_row_stats(r)` helper with `benzene_mixed_bond_
+> diagnostic` (behavior-preserving refactor, confirmed by formula-auditor and by the unchanged
+> `benzene_mixed_bond_diagnostic` test suite). Finding (supporting evidence, not the primary test): 21/22
+> sit at only ~83-85% C-C fraction of V_Stretch (meaningful C-H contribution, 0.0136/0.0138) vs. >95% for
+> 23/24/13/14/19 — a plausible mechanistic reason 21/22 read as more bend-like to the framework than the
+> literature's own "mixed" call.
+> **Side effect on the EXISTING (non-benzene-specific) hydride-library confusion machinery
+> (`src/calibrate.py::confusion_matrix_stats`, `fig:confusion`'s numbers) -- untouched code, but its
+> INPUT population changed since benzene is part of the pooled ~69-molecule library:** bend's PRECISION
+> is no longer exactly 1.0 -- now 271/273 = 0.99267 (was 1.0). Modes 21/22 still predict "bend"
+> (predicted_label/thresholds untouched) but their true reference is now the 3rd class "SB", which this
+> pooled 4-category (stretch/bend/translation/rotation only) confusion table does not recognize as a ref
+> category at all -- so those 2 modes count toward bend's `n_pred` denominator but not its `tp` numerator,
+> a real and honest precision cost of introducing genuine 3-class ground truth for 2 modes, not a
+> regression. Pooled bend recall moved 0.96466->0.97482 and stretch recall 0.71739->0.70815 (removing 5
+> modes from bend's ref population while redistributing 3 to stretch changes both denominators); floor_met
+> still False (stretch recall still well under 0.95). `tau_S`/`tau_B`/`tau_TR` themselves are UNCHANGED
+> (derived only from `ideal=='yes'` rows; benzene's `ideal` is `'no'` for every row, so this is purely a
+> non-ideal-tier population effect) -- `recall_ideal["stretch"]==1.0`/`recall_ideal["bend"]==1.0` still
+> hold exactly, as required by construction. **Not yet done, flagged for `lead-author`/`figure-builder`:**
+> `fig:confusion`'s already-typeset caption claims "precision 1.0 all 4 categories" -- that specific claim
+> is no longer literally true once this CSV switch is applied and the figure/manuscript prose regenerated
+> from the new `library_scores.csv`; the figure itself (`src/figures.py::plot_confusion_matrix`) was
+> deliberately NOT touched this session (out of scope; it needs a wording decision, not a code fix).
+> **Tests:** `tests/test_csv_label_ingest.py` (new, 8 tests) unit-tests `build_label_lookup`'s SB
+> acceptance + fallback-vs-supersede semantics in isolation (no xlsx/CSV I/O needed for most cases).
+> `tests/test_excel_ingest.py`'s two `attach_excel_labels()` unit tests updated to build a
+> fallback-only `label_lookup` (via a new `_fallback_only_label_lookup()` test helper) since that
+> function's signature gained a required `label_lookup` parameter. `tests/test_calibrate.py`'s two
+> confusion-matrix tests re-pinned to the new precision/recall numbers above (docstrings explain the
+> "why" so a future reader isn't confused about which population a number belongs to).
+> `tests/test_benzene_validation.py`: the two Task-A tests updated to the new 5-category numbers; two new
+> tests added for `benzene_internal_confusion_matrix` (pins the exact 3x3 table above) and
+> `benzene_sb_vs_stretch_bond_diagnostic` (finds exactly {21,22,23,24}, not 19). **`py -m pytest tests/`
+> 77/77 green** (up from 66; net +11 new tests, 0 removed, ~118s). **formula-auditor PASS** (data-sourcing
+> change only; `_expected_pred_bucket` mapping confirmed sound against `classification_bucket()`;
+> `_bond_row_stats` refactor confirmed behavior-preserving; `src/scoring.py`/`src/classifier.py` confirmed
+> untouched). **score-validator PASS** (ref_label diff scoped exactly as claimed; water/Σs_AB/external-1.000/
+> benzene-EMIT invariants unaffected and reproduced exactly; new 3-class confusion numbers independently
+> re-verified). Commits: see `git log` for the exact hashes (csv_label_ingest.py + excel_ingest.py wiring;
+> benzene_validation.py 3-class extension; test updates; regenerated data/results/*.csv).
 > **2026-07-04 (author decision + lead-engineer, dual-source `excel_ingest.py` — REFINEMENT of, NOT a
 > reversal of, the 2026-07-03 "recompute from Gaussian" directive below):** The manuscript's
 > ALREADY-TYPESET figures (fig:confusion, fig:bondscores, fig:boxplots, fig:modemixing) were built from

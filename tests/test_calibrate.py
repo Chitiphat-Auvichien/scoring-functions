@@ -195,42 +195,53 @@ def test_degenerate_emit_block_sanity_check():
 
 def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     """Clean-category confusion matrix over the full library (fig:confusion's
-    numbers). Precision is 1.0 for all four clean categories -- the crisp
-    labels never cross-contaminate in either direction. Recall is 1.0 for
-    translation/rotation (exact completeness), but NOT quite >=0.95 for
-    stretch (0.7174) or bend (0.9647) -- and that is not a defect: every
-    stretch/bend 'miss' lands in the MIXED bucket (28.26%/3.53% of true
-    stretch/bend respectively, non-ideal center-of-mass softening per B8.3),
-    never crossing to the OPPOSITE clean category (0 cases either way).
+    numbers). Recall is 1.0 for translation/rotation (exact completeness),
+    but NOT quite >=0.95 for stretch (0.7082) or bend (0.9748) -- and that
+    is not a defect: most stretch/bend 'misses' land in the MIXED bucket
+    (29.18%/2.52% of true stretch/bend respectively, non-ideal center-of-
+    mass softening per B8.3), never crossing to the OPPOSITE clean category
+    (0 cases either way).
 
-    **Numbers restored 2026-07-04** to the source="excel" (~69-molecule)
-    values -- see IMPLEMENTATION_PLAN.md's RESUME HERE for the dual-source
-    decision. These are the SAME numbers `library_scores.csv`/thresholds.json
-    carried before the 2026-07-03 disk-driven rearchitecture (commit
-    149fc62's population): stretch recall 0.7174/mixed 28.26% (not the
-    2026-07-03 disk-driven session's 0.9375/6.25%, which applied only to the
-    ~25-molecule source="gaussian" population -- see test_excel_ingest.py's
-    `_gaussian_df()`-based tests for that source's own, different, numbers).
-    This test pins the exact numbers so a future change that silently
-    degrades precision (the real invariant) or moves recall is caught.
+    **Numbers updated 2026-07-05** (author decision -- new default label
+    source, `src/csv_label_ingest.py`, superseding the xlsx `data_score`/
+    `characterised modes` sheets across ALL molecules): benzene's (C6H6)
+    literature relabeling flips mode_index 19/23/24 bend->stretch and
+    21/22 bend->SB (a literal literature 3rd class -- see
+    `src/benzene_validation.py`'s 3-class confusion table for the benzene-
+    specific numbers). Since this pooled hydride-library confusion table
+    still only recognizes stretch/bend/translation/rotation reference
+    categories (SB rows are excluded from the per-category ref_mask, exactly
+    like any other non-recognized ref_label), removing modes 21/22 from
+    "bend"'s reference population WHILE they keep predicting "bend"
+    (predicted_label/thresholds untouched by this session) means bend's
+    PRECISION is no longer exactly 1.0 -- 271/273 (0.99267): those same 2
+    modes are now "false positives" for bend from the library's point of
+    view (their true reference is the 3rd class "SB", not "bend"). This is
+    the correct, honest consequence of introducing genuine 3-class ground
+    truth for those 2 modes, not a regression -- see
+    `src/benzene_validation.py::benzene_internal_confusion_matrix` for the
+    benzene-scoped mechanistic explanation (the tau_B "bending blind spot").
+    Stretch/translation/rotation precision remain exactly 1.0 (unaffected --
+    no SB mode is ever predicted "stretch").
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
     res = confusion_matrix_stats(lib_df, calibrated, acceptance_floor=0.95)
 
-    for cat in ("stretch", "bend", "translation", "rotation"):
+    for cat in ("stretch", "translation", "rotation"):
         assert res["per_category"][cat]["precision"] == 1.0, cat
+    assert abs(res["per_category"]["bend"]["precision"] - 0.99267) < 1e-3
 
     assert res["per_category"]["translation"]["recall"] == 1.0
     assert res["per_category"]["rotation"]["recall"] == 1.0
 
     stretch = res["per_category"]["stretch"]
-    assert abs(stretch["recall"] - 0.71739) < 1e-3
-    assert abs(stretch["mixed_fraction"] - 0.28261) < 1e-3
+    assert abs(stretch["recall"] - 0.70815) < 1e-3
+    assert abs(stretch["mixed_fraction"] - 0.29185) < 1e-3
 
     bend = res["per_category"]["bend"]
-    assert abs(bend["recall"] - 0.96466) < 1e-3
-    assert abs(bend["mixed_fraction"] - 0.03534) < 1e-3
+    assert abs(bend["recall"] - 0.97482) < 1e-3
+    assert abs(bend["mixed_fraction"] - 0.02518) < 1e-3
 
     # The floor is NOT met overall, because stretch recall sits well under
     # 0.95 (bend clears it) -- reported honestly, not forced to pass.
@@ -263,6 +274,14 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     Excel-only rows get only Step 4's vib_label applied in isolation, not the
     full Algorithm 1 (see excel_ingest.py's module docstring for why: those
     rows have no on-disk geometry for Steps 2/3 to run against at all).
+
+    **Non-ideal-tier numbers updated 2026-07-05** for the same reason as
+    `test_confusion_matrix_precision_perfect_recall_explained_by_mixed_
+    bucket` above (benzene's literature relabeling; all of benzene's
+    internal rows are `ideal=='no'`, so this is purely a non-ideal-tier
+    effect -- `recall_ideal`/`n_ref_ideal` for stretch/bend, which are
+    derived ONLY from the `ideal=='yes'` population, are completely
+    unaffected and still hold exactly).
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -273,12 +292,12 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     assert res["per_category"]["stretch"]["n_ref_ideal"] == 41
     assert res["per_category"]["bend"]["n_ref_ideal"] == 50
 
-    # Non-ideal tier: reverts to the pre-2026-07-03 Excel-driven baseline
-    # split (~65.6% stretch / ~95.7% bend) -- see docstring.
-    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.95708) < 1e-3
-    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.65608) < 1e-3
-    assert res["per_category"]["bend"]["n_ref_nonideal"] == 233
-    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 189
+    # Non-ideal tier: 2026-07-05 benzene relabeling shifts the split (bend
+    # loses 5 modes to stretch/SB, stretch gains 3) -- see docstring.
+    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.96930) < 1e-3
+    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.64583) < 1e-3
+    assert res["per_category"]["bend"]["n_ref_nonideal"] == 228
+    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 192
 
     # Translation/rotation: every row is an external (T/R) reference, so the
     # ideal tier reproduces the pooled recall exactly and there is no
@@ -289,8 +308,8 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
         assert res["per_category"][cat]["recall_nonideal"] != res["per_category"][cat]["recall_nonideal"]  # NaN
 
     # Pooled keys (existing behavior) must be untouched by this addition.
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.71739) < 1e-3
-    assert abs(res["per_category"]["bend"]["recall"] - 0.96466) < 1e-3
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.70815) < 1e-3
+    assert abs(res["per_category"]["bend"]["recall"] - 0.97482) < 1e-3
 
 
 if __name__ == "__main__":

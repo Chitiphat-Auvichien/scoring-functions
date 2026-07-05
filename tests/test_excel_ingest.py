@@ -53,6 +53,21 @@ from src.excel_ingest import (                                     # noqa: E402
     EXCLUDED_MOLECULES, EXCEL_TO_LOG, _EXTERNAL_SLOTS,
 )
 from src.classifier import is_clean_external                       # noqa: E402
+from src.csv_label_ingest import build_label_lookup                # noqa: E402
+
+
+def _fallback_only_label_lookup(fallback_ds):
+    """Build a label_lookup that has ZERO new-CSV coverage, so every entry
+    comes from `fallback_ds` (the xlsx-shaped ``data_score`` table) via
+    `build_label_lookup`'s fallback path -- reproduces the pre-2026-07-05
+    attach_excel_labels() behavior exactly for synthetic unit tests that
+    construct their own fake xlsx-shaped `tables["data_score"]` and have no
+    business going through the real on-disk label CSVs."""
+    empty_csv_tables = {
+        "data_score": pd.DataFrame(columns=["molecule", "mode", "type", "ideal"]),
+        "characterised_modes": pd.DataFrame(columns=["molecule", "mode", "ref"]),
+    }
+    return build_label_lookup(empty_csv_tables, fallback_ds=fallback_ds)
 
 LIB_CSV = os.path.join(ROOT, "data", "results", "library_scores.csv")
 DATA_DIR = os.path.join(ROOT, "data")
@@ -360,7 +375,8 @@ def test_attach_excel_labels_gates_on_frequency_and_leaves_unlisted_molecules_al
          "freq": 42.0, "ref_label": None, "ideal": None},
     ])
 
-    out, skip_report = attach_excel_labels(df, tables)
+    label_lookup = _fallback_only_label_lookup(tables["data_score"])
+    out, skip_report = attach_excel_labels(df, tables, label_lookup)
 
     tm = out[out["molecule"] == "TESTMOL"]
     assert tm.loc[tm["mode_index"] == 1, "ref_label"].iloc[0] == "stretch"
@@ -399,7 +415,8 @@ def test_attach_excel_labels_missing_excel_row_counts_as_mismatch():
         {"molecule": "TESTMOL3", "mode_index": 2, "kind": "internal",
          "freq": 2000.0, "ref_label": None, "ideal": None},  # no Excel row for mode 2
     ])
-    out, skip_report = attach_excel_labels(df, tables)
+    label_lookup = _fallback_only_label_lookup(tables["data_score"])
+    out, skip_report = attach_excel_labels(df, tables, label_lookup)
     assert out["ref_label"].isna().all()  # all-or-nothing: mode 1's match doesn't survive
     assert len(skip_report) == 1
     mode_index, engine_freq, excel_freq = skip_report[0]["example"]

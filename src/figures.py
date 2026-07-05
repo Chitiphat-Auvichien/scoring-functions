@@ -752,6 +752,11 @@ def plot_confusion_matrix(
     Never recomputes scores -- only ``confusion_matrix_stats`` (already
     computed from calibrated thresholds) is called, on two filtered slices
     of the same ``library_scores.csv`` this module always reads.
+    ``confusion_matrix_stats`` itself additionally restricts both slices to
+    the single-centre AB_n hydride-library scope (2026-07-05 author
+    decision, ``src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE`` -- excludes
+    C2H2/C2H4/C2H6/H2O2/C6H6/iso-C4H10/n-C4H10) before computing anything,
+    so this function does not need its own copy of that filter.
     """
     _style()
     from src.calibrate import confusion_matrix_stats
@@ -779,7 +784,13 @@ def plot_confusion_matrix(
     fig, ((ax_ha, ax_pa), (ax_hb, ax_pb)) = plt.subplots(
         2, 2, figsize=(7.4, 6.6), gridspec_kw={"width_ratios": [1.15, 1.0]})
 
-    # ================= Tier 1: rigorous (n=237) =================
+    # ================= Tier 1: rigorous (n=231) =================
+    # (was n=237 before the 2026-07-05 single-centre-only scope filter --
+    # confusion_matrix_stats() now drops benzene's 6 geometry-backed
+    # external T/R rows via src.calibrate.filter_single_centre_library,
+    # since C6H6 is a six-centre molecule outside the hydride library's
+    # AB_n scope and has its own dedicated confusion matrix elsewhere,
+    # fig:benzeneconfusion; 237-6=231, computed not assumed.)
     ref_order_r = ["translation", "rotation", "stretch", "bend"]
     table_r = stats_r["confusion_table"]
     pred_order_r = ["translation", "rotation", "stretch", "bend"]
@@ -828,7 +839,13 @@ def plot_confusion_matrix(
     # tick labels and any bar annotation -- verified by rendering.
     ax_pa.legend(loc="upper left", frameon=False, fontsize=8)
 
-    # ================= Tier 2: non-ideal (n=422) =================
+    # ================= Tier 2: non-ideal (n=277) =================
+    # (was n=422 before the 2026-07-05 single-centre-only scope filter --
+    # confusion_matrix_stats() now drops the 145 non-ideal internal modes
+    # belonging to the 7 non-single-centre molecules (C2H2, C2H4, C2H6,
+    # H2O2, C6H6, iso-C4H10, n-C4H10), which brings the non-ideal molecule
+    # count from 58 down to 51 -- matching an independent hand-count of
+    # tab:nonideal's own AB_n grid; 422-145=277, computed not assumed.)
     ref_order_n = ["stretch", "bend"]
     table_n = stats_n["confusion_table"]
     pred_order_n = ["stretch", "bend", "mixed"]
@@ -1082,9 +1099,20 @@ def plot_bond_scores(
     2026-07-02 consistency pass; CATEGORY_MARKER's square/circle shapes are
     still used elsewhere, e.g. fig:confusion/fig:benzene_normal, where shape
     legitimately distinguishes >2 buckets).
+
+    Restricted to the single-centre AB_n hydride-library scope (2026-07-05
+    author decision -- src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE, applied
+    right after reading the CSV): C2H2/C2H4/C2H6/H2O2/C6H6/iso-C4H10/
+    n-C4H10 (two-, four-, or six-centre topologies) are dropped before any
+    bond is exploded, matching the same scope restriction now applied to
+    src.calibrate.confusion_matrix_stats and the other library-pooled
+    figures below.
     """
     _style()
+    from src.calibrate import filter_single_centre_library
+
     lib_df = pd.read_csv(library_csv)
+    lib_df = filter_single_centre_library(lib_df)
     bonds = _explode_bonds(lib_df)
     bonds = bonds[bonds["ref_label"].isin(("stretch", "bend")) & bonds["ideal"].isin(("yes", "no"))]
     bonds["abs_rel_db"] = bonds["rel_db"].abs()
@@ -1170,9 +1198,17 @@ def plot_boxplots(
     = non-ideal, matching the group's earlier undergraduate-report
     convention and this module's shared IDEAL_STYLE) -- over every internal
     row in the library with a literature stretch/bend label.
+
+    Restricted to the single-centre AB_n hydride-library scope (2026-07-05
+    author decision -- see src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE /
+    plot_bond_scores' identical note); applied right after reading the CSV,
+    before the internal-row selection below.
     """
     _style()
+    from src.calibrate import filter_single_centre_library
+
     lib_df = pd.read_csv(library_csv)
+    lib_df = filter_single_centre_library(lib_df)
     internal = lib_df[(lib_df["kind"] == "internal") &
                        lib_df["ref_label"].isin(("stretch", "bend")) &
                        lib_df["ideal"].isin(("yes", "no"))].copy()
@@ -1330,9 +1366,17 @@ def plot_mode_mixing(
     mentions ethane here) are NOT built -- the intended molecule/panel form
     for THIS manuscript is still unconfirmed with lead-author/tex-data-sync,
     so nothing is invented for it.
+
+    Restricted to the single-centre AB_n hydride-library scope (2026-07-05
+    author decision -- see src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE /
+    plot_bond_scores' identical note); applied right after reading the CSV,
+    before the internal-row selection below.
     """
     _style()
+    from src.calibrate import filter_single_centre_library
+
     lib_df = pd.read_csv(library_csv)
+    lib_df = filter_single_centre_library(lib_df)
     internal = lib_df[(lib_df["kind"] == "internal") &
                        lib_df["ref_label"].isin(("stretch", "bend")) &
                        lib_df["ideal"].isin(("yes", "no"))].copy()

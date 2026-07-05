@@ -81,6 +81,55 @@ from src.excel_ingest import (
 
 DEFAULT_TAU_GRID = tuple(round(x, 4) for x in np.arange(0.05, 0.9991, 0.005))
 
+# --- Single-centre-only scope filter (2026-07-05 author decision) ---
+# The manuscript's "hydride library" validation (tau_S/tau_B derivation +
+# the ideal/non-ideal confusion-matrix statistics in the "Stretching/
+# bending classification" section) is explicitly scoped to single-centre
+# AB_n topologies only -- "one distinguishable atom anchors all bonds
+# symmetrically" (JCC .tex, "Stretching/bending classification" subsection;
+# tab:ideal lists exactly 11 single-centre AB_n molecules). These 7
+# molecules in library_scores.csv are two-, four-, or six-centre topologies
+# that do not fit that scope and were being pooled into the non-ideal
+# statistics by mistake (58 non-ideal molecules instead of the 51 an
+# independent hand-count of tab:nonideal's own AB_n grid gives):
+#   C2H2 (ethyne, two-centre), C2H4 (ethylene, two-centre), C2H6 (ethane,
+#   two-centre), H2O2 (hydrogen peroxide, two-centre), C6H6 (benzene,
+#   six-centre), iso-C4H10/n-C4H10 (isobutane/n-butane, four-centre).
+# H2O (single-centre AB2) is NOT excluded -- it stays in the non-ideal
+# population as a familiar illustrative molecule (separately also used for
+# the 7-scoring-functions validation table, an unrelated existing use).
+#
+# This is a DATA-LOSS-FREE, analysis-time filter, not an ingest-time one:
+# library_scores.csv itself keeps every one of these molecules' rows
+# (excel_ingest.py's EXCLUDED_MOLECULES = {"Gly5"} is a different,
+# ingest-time exclusion for an out-of-scope companion-paper molecule that
+# has no rows in the library at all; this filter is for molecules that DO
+# belong in the library/CSV but must not be pooled into hydride-library
+# summary STATISTICS). Benzene in particular keeps its own separate,
+# dedicated confusion matrix (src/benzene_validation.py,
+# benzene_internal_confusion_matrix.csv, fig:benzeneconfusion) built
+# directly from library_scores.csv's own C6H6 rows -- this filter has zero
+# effect there since that module never calls confusion_matrix_stats() or
+# this filter.
+SINGLE_CENTRE_ONLY_EXCLUDE = frozenset({
+    "C2H2", "C2H4", "C2H6", "H2O2", "C6H6", "iso-C4H10", "n-C4H10",
+})
+
+
+def filter_single_centre_library(lib_df):
+    """Drop every row (internal AND external, any molecule state) belonging
+    to a molecule outside the hydride library's single-centre AB_n scope
+    (see SINGLE_CENTRE_ONLY_EXCLUDE above). Applied inside
+    confusion_matrix_stats() so every caller (plot_confusion_matrix's
+    rigorous/non-ideal tiers, the direct-call regression tests) gets the
+    correct scope automatically; src/figures.py's plot_bond_scores/
+    plot_boxplots/plot_mode_mixing (which build their own populations
+    straight from library_scores.csv rather than going through
+    confusion_matrix_stats) call this directly too. Idempotent -- filtering
+    an already-filtered DataFrame is a no-op.
+    """
+    return lib_df[~lib_df["molecule"].isin(SINGLE_CENTRE_ONLY_EXCLUDE)].copy()
+
 
 def derive_stretch_bend_thresholds(lib_df):
     """tau_S / tau_B from the ideal-molecule subset's stretch/bend V_Stretch
@@ -240,7 +289,18 @@ def calibrate(lib_df, data_dir="data", tau_grid=DEFAULT_TAU_GRID, preferred_tau_
 def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
     """Clean-category confusion matrix + per-category precision/recall
     (fig:confusion's underlying numbers), evaluated over the WHOLE ingested
-    library (both Excel-only and geometry-backed rows).
+    library (both Excel-only and geometry-backed rows), RESTRICTED to the
+    single-centre AB_n hydride-library scope (SINGLE_CENTRE_ONLY_EXCLUDE,
+    applied first thing below via filter_single_centre_library --
+    2026-07-05 author decision; see that constant's docstring for the full
+    rationale). Any molecule in `lib_df` outside that scope (C2H2, C2H4,
+    C2H6, H2O2, C6H6, iso-C4H10, n-C4H10 as of this writing) is dropped
+    before anything else runs, so it never contributes to the confusion
+    table, precision/recall, or the ideal/non-ideal tier splits below --
+    this holds regardless of whether the caller already pre-filtered by
+    `kind`/`ideal` (plot_confusion_matrix's rigorous_df/nonideal_df) or
+    passed the raw, unfiltered library (the direct-call regression tests in
+    tests/test_calibrate.py).
 
     Reference labels: 'stretch'/'bend' for internal rows, 'translation'/
     'rotation' for external rows (the latter are ground truth by
@@ -286,6 +346,11 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
     row can land on the wrong side of its own defining boundary.
     """
     from src.classifier import vib_label, classification_bucket
+
+    # Single-centre-only scope filter (2026-07-05) -- applied FIRST, before
+    # any other row selection below, so it is completely independent of
+    # whether the caller already pre-filtered by kind/ideal.
+    lib_df = filter_single_centre_library(lib_df)
 
     # Bucket lookup is logic-based (classification_bucket(), src/classifier.py),
     # not a flat dict keyed by exact label: clean/mixed-external labels are now

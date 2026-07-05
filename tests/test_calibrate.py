@@ -39,7 +39,8 @@ from src.classifier import (                                        # noqa: E402
 )
 from src.calibrate import (                                         # noqa: E402
     find_plateau, freeze_tau_tr, derive_stretch_bend_thresholds,
-    confusion_matrix_stats,
+    confusion_matrix_stats, filter_single_centre_library,
+    SINGLE_CENTRE_ONLY_EXCLUDE,
 )
 
 THRESHOLDS_JSON = os.path.join(ROOT, "data", "results", "thresholds.json")
@@ -74,6 +75,76 @@ def test_calibrated_thresholds_differ_from_but_are_close_to_provisional():
     assert calibrated.tau_B != provisional.tau_B
     assert abs(calibrated.tau_S - 0.9) < 0.02
     assert abs(calibrated.tau_B - 0.2) < 0.03
+
+
+def test_single_centre_only_exclude_matches_scope_decision():
+    """The 2026-07-05 single-centre-only scope decision names exactly 7
+    molecules -- two-, four-, or six-centre topologies pooled into the
+    "hydride library" (single-centre AB_n) statistics by mistake. H2O is
+    deliberately NOT in this set (it is single-centre itself and stays in
+    the non-ideal population as a familiar illustrative molecule)."""
+    assert SINGLE_CENTRE_ONLY_EXCLUDE == {
+        "C2H2", "C2H4", "C2H6", "H2O2", "C6H6", "iso-C4H10", "n-C4H10",
+    }
+    assert "H2O" not in SINGLE_CENTRE_ONLY_EXCLUDE
+
+
+def test_filter_single_centre_library_drops_exactly_the_excluded_molecules():
+    """filter_single_centre_library() is DATA-LOSS-FREE at the CSV level
+    (library_scores.csv keeps every molecule's rows -- see
+    excel_ingest.py); this only checks the analysis-time filter itself
+    removes exactly the 7 excluded molecules' rows and nothing else,
+    against the real checked-in library_scores.csv golden."""
+    lib_df = pd.read_csv(LIB_CSV)
+    before_molecules = set(lib_df["molecule"].unique())
+    assert SINGLE_CENTRE_ONLY_EXCLUDE <= before_molecules  # sanity: all present
+
+    filtered = filter_single_centre_library(lib_df)
+    after_molecules = set(filtered["molecule"].unique())
+
+    assert before_molecules - after_molecules == SINGLE_CENTRE_ONLY_EXCLUDE
+    # 145 internal rows (7+12+18+6+30+36+36) + benzene's 6 geometry-backed
+    # external T/R rows (C6H6 has an on-disk .log/.gjf pair, so it also
+    # contributes external rows that this molecule-level filter drops too,
+    # unlike the other 6 excluded molecules which are Excel-only).
+    assert len(lib_df) - len(filtered) == 151
+    # Kept molecule count: 69 (full excel-sourced library) - 7 = 62.
+    assert lib_df["molecule"].nunique() - len(SINGLE_CENTRE_ONLY_EXCLUDE) == filtered["molecule"].nunique()
+
+    # Non-ideal internal population after the filter: 51 molecules (an
+    # independent hand-count of tab:nonideal's own AB_n grid), 277 modes.
+    nonideal = filtered[(filtered["kind"] == "internal") & (filtered["ideal"] == "no")]
+    assert nonideal["molecule"].nunique() == 51
+    assert len(nonideal) == 277
+
+
+def test_confusion_matrix_stats_applies_single_centre_filter_internally():
+    """confusion_matrix_stats() must apply the scope filter itself,
+    regardless of whether the caller already pre-filtered -- this is what
+    makes plot_confusion_matrix's rigorous_df/nonideal_df tiers AND the
+    direct-call regression tests above both automatically correct without
+    each needing their own copy of the filter."""
+    lib_df = pd.read_csv(LIB_CSV)
+    calibrated = Thresholds.calibrated()
+
+    # Calling with the raw (unfiltered) library and with an already-filtered
+    # one must give identical results -- the filter is idempotent and
+    # applied unconditionally inside the function. Compared field-by-field
+    # (not dict equality) since some fields are legitimately NaN (e.g.
+    # translation/rotation's recall_nonideal -- no external row is ever
+    # ideal=='no') and NaN != NaN under plain ``==``.
+    res_raw = confusion_matrix_stats(lib_df, calibrated)
+    res_prefiltered = confusion_matrix_stats(filter_single_centre_library(lib_df), calibrated)
+    for cat in ("stretch", "bend", "translation", "rotation"):
+        entry_raw = res_raw["per_category"][cat]
+        entry_pre = res_prefiltered["per_category"][cat]
+        assert entry_raw.keys() == entry_pre.keys()
+        for key in entry_raw:
+            a, b = entry_raw[key], entry_pre[key]
+            if isinstance(a, float) and a != a:  # NaN
+                assert isinstance(b, float) and b != b
+            else:
+                assert a == b, (cat, key, a, b)
 
 
 def test_derive_stretch_bend_thresholds_matches_frozen_values():
@@ -195,12 +266,14 @@ def test_degenerate_emit_block_sanity_check():
 
 def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     """Clean-category confusion matrix over the full library (fig:confusion's
-    numbers). Recall is 1.0 for translation/rotation (exact completeness),
-    but NOT quite >=0.95 for stretch (0.7082) or bend (0.9748) -- and that
-    is not a defect: most stretch/bend 'misses' land in the MIXED bucket
-    (29.18%/2.52% of true stretch/bend respectively, non-ideal center-of-
-    mass softening per B8.3), never crossing to the OPPOSITE clean category
-    (0 cases either way).
+    numbers), RESTRICTED to the single-centre AB_n hydride-library scope
+    (confusion_matrix_stats() applies src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE
+    internally -- see that constant's docstring). Recall is 1.0 for
+    translation/rotation (exact completeness), but NOT quite >=0.95 for
+    stretch (0.6667) or bend (0.9838) -- and that is not a defect: most
+    stretch/bend 'misses' land in the MIXED bucket (33.33%/1.62% of true
+    stretch/bend respectively, non-ideal center-of-mass softening per B8.3),
+    never crossing to the OPPOSITE clean category (0 cases either way).
 
     **Numbers updated 2026-07-05** (author decision -- new default label
     source, `src/csv_label_ingest.py`, superseding the xlsx `data_score`/
@@ -230,6 +303,28 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     all). See `src/benzene_validation.py::benzene_internal_confusion_matrix`
     for the benzene-scoped mechanistic explanation (the tau_B "bending
     blind spot") of why 21/22 land on "bend".
+
+    **Numbers updated again 2026-07-05 (same day, single-centre-only scope
+    fix):** the non-ideal population previously pooled 58 molecules / 422
+    internal modes, but 7 of those (C2H2, C2H4, C2H6, H2O2, C6H6, iso-C4H10,
+    n-C4H10) are two-, four-, or six-centre topologies outside the
+    manuscript's own "single-centre AB_n only" scope for this validation
+    (JCC .tex "Stretching/bending classification" subsection; tab:ideal
+    lists exactly 11 single-centre molecules) -- an independent hand-count
+    of tab:nonideal's own AB_n grid gives 51 molecules, confirming the
+    table's structure already assumed this scope even though the pooled
+    statistics didn't. Excluding them removes 145 of the unfiltered
+    non-ideal population's 422 internal modes, dropping it to 51 molecules /
+    277 internal modes (SINGLE_CENTRE_ONLY_EXCLUDE, applied inside
+    confusion_matrix_stats()).
+    Old (unfiltered) values were stretch recall 0.70815/mixed 0.29185, bend
+    recall 0.97482/mixed 0.02518 -- H2O2/C2H2/C2H4/C2H6/iso-C4H10/n-C4H10
+    (Excel-only, no on-disk geometry) contributed only NON-ideal internal
+    rows, so precision/translation/rotation/floor_met are unaffected;
+    benzene additionally contributed 6 geometry-backed external T/R rows,
+    which is a separate, "rigorous"-tier effect checked in
+    test_confusion_matrix_ideal_nonideal_recall_split below (that tier
+    stays outside THIS test, which reads the pooled/unsplit library).
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -242,12 +337,12 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     assert res["per_category"]["rotation"]["recall"] == 1.0
 
     stretch = res["per_category"]["stretch"]
-    assert abs(stretch["recall"] - 0.70815) < 1e-3
-    assert abs(stretch["mixed_fraction"] - 0.29185) < 1e-3
+    assert abs(stretch["recall"] - 0.66667) < 1e-3
+    assert abs(stretch["mixed_fraction"] - 0.33333) < 1e-3
 
     bend = res["per_category"]["bend"]
-    assert abs(bend["recall"] - 0.97482) < 1e-3
-    assert abs(bend["mixed_fraction"] - 0.02518) < 1e-3
+    assert abs(bend["recall"] - 0.98378) < 1e-3
+    assert abs(bend["mixed_fraction"] - 0.01622) < 1e-3
 
     # The floor is NOT met overall, because stretch recall sits well under
     # 0.95 (bend clears it) -- reported honestly, not forced to pass.
@@ -288,6 +383,17 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     effect -- `recall_ideal`/`n_ref_ideal` for stretch/bend, which are
     derived ONLY from the `ideal=='yes'` population, are completely
     unaffected and still hold exactly).
+
+    **Non-ideal-tier numbers updated AGAIN 2026-07-05 (same day,
+    single-centre-only scope fix, see the sibling test's docstring above for
+    the full rationale):** `confusion_matrix_stats()` now drops C2H2, C2H4,
+    C2H6, H2O2, C6H6, iso-C4H10, n-C4H10 (145 internal modes) from the
+    non-ideal tier before computing anything -- n_ref_nonideal for bend
+    228->135 (loses benzene's 18 + C2H2/C2H4/C2H6/H2O2/iso-C4H10/n-C4H10's
+    bend modes) and stretch 192->142 (loses benzene's 12 + the same 6
+    molecules' stretch modes), recall_nonideal shifting accordingly.
+    n_ref_ideal/recall_ideal for stretch (41/1.0) and bend (50/1.0) are
+    UNCHANGED -- none of the 7 excluded molecules is `ideal=='yes'`.
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -298,12 +404,12 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     assert res["per_category"]["stretch"]["n_ref_ideal"] == 41
     assert res["per_category"]["bend"]["n_ref_ideal"] == 50
 
-    # Non-ideal tier: 2026-07-05 benzene relabeling shifts the split (bend
-    # loses 5 modes to stretch/SB, stretch gains 3) -- see docstring.
-    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.96930) < 1e-3
-    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.64583) < 1e-3
-    assert res["per_category"]["bend"]["n_ref_nonideal"] == 228
-    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 192
+    # Non-ideal tier: 2026-07-05 single-centre-only scope fix -- see
+    # docstring above.
+    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.97778) < 1e-3
+    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.57042) < 1e-3
+    assert res["per_category"]["bend"]["n_ref_nonideal"] == 135
+    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 142
 
     # Translation/rotation: every row is an external (T/R) reference, so the
     # ideal tier reproduces the pooled recall exactly and there is no
@@ -313,9 +419,11 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
         assert res["per_category"][cat]["n_ref_nonideal"] == 0
         assert res["per_category"][cat]["recall_nonideal"] != res["per_category"][cat]["recall_nonideal"]  # NaN
 
-    # Pooled keys (existing behavior) must be untouched by this addition.
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.70815) < 1e-3
-    assert abs(res["per_category"]["bend"]["recall"] - 0.97482) < 1e-3
+    # Pooled keys (existing behavior) must be untouched by this addition --
+    # updated 2026-07-05 (single-centre-only scope fix) to match the sibling
+    # test's pooled numbers above.
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.66667) < 1e-3
+    assert abs(res["per_category"]["bend"]["recall"] - 0.98378) < 1e-3
 
 
 if __name__ == "__main__":

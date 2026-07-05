@@ -31,6 +31,17 @@ benzene modes 21/22 as a literal 3-class "SB" (mixed) ground truth (commit
 predicted) internal-mode confusion matrix + precision/recall, distinct from
 the whole-hydride-library ``fig:confusion``.
 
+``plot_confusion_matrix`` (``fig:confusion``) was RESTRUCTURED 2026-07-05
+(author decision) from a two-tier 2x2 layout down to a SINGLE-TIER 1x2
+layout showing only the non-ideal tier (the genuine, non-circular
+validation: thresholds fixed on the ideal population, applied without
+retuning to harder non-ideal cases). The removed rigorous-tier panels
+(precision/recall = 1.000, which is circular/close-to-definitional by
+construction -- see the ``fig:confusion`` section header comment below for
+the full argument) now live in ``plot_rigorous_tier_check``, a 9th figure
+(no ``fig:`` label of its own -- SI-bound, framed explicitly as a
+self-consistency check, not an accuracy claim).
+
 Cross-figure visual consistency (one meaning per color/marker, paper-wide)
 --------------------------------------------------------------------------
 Every figure that encodes a classification CATEGORY (clean translation/
@@ -661,9 +672,34 @@ def plot_benzene_normal_modes(
 
 
 # --------------------------------------------------------------------------
-# fig:confusion -- two-tier clean-category confusion matrix + precision/
-# recall (rigorous ground truth) / retention-and-migration (non-ideal
-# validation-by-characterization)
+# fig:confusion -- SINGLE-TIER (non-ideal only) clean-category confusion
+# matrix + retention-and-migration bars, plus a separate SI rigorous-tier
+# consistency check (plot_rigorous_tier_check, below).
+#
+# RESTRUCTURED 2026-07-05 (author decision, executed not re-litigated): the
+# earlier 2x2 layout (rigorous heatmap + precision/recall bars, THEN
+# non-ideal heatmap + retention/migration bars) put the rigorous-tier
+# "precision/recall = 1.000, clears the 0.95 floor" claim in the main text
+# as if it were independent validation. It is not: (1) T/R recovery in the
+# rigorous tier is guaranteed by construction -- the reference T/R basis is
+# built via the same Eckart-Sayvetz projection the mode is then scored
+# against, so agreement is close to definitional, not an empirical finding;
+# (2) tau_S/tau_B are LITERALLY the min/max of the ideal-molecule s[V_S]
+# population (derive_stretch_bend_thresholds, src/calibrate.py) -- the same
+# population fig:boxplots already shows has a clean, non-overlapping gap --
+# so citing "1.000 accuracy" on that population again in fig:confusion is
+# restating the threshold-placement decision, not testing anything new
+# against it. The genuine, non-circular validation is the NON-IDEAL tier:
+# thresholds fixed on the ideal population, then applied WITHOUT retuning to
+# the harder non-ideal cases they were never calibrated on.
+#
+# This figure therefore keeps ONLY that non-ideal-tier content (what used to
+# be panels (c)/(d)), now labeled (a)/(b). The rigorous-tier numbers are not
+# deleted -- they still have genuine value as a construction/self-consistency
+# check ("did the pipeline wire together correctly on the population that is
+# supposed to be exact by construction?") -- but that framing belongs in the
+# Supporting Information, not the main text, and is not dressed up as an
+# accuracy claim there either. See ``plot_rigorous_tier_check`` below.
 # --------------------------------------------------------------------------
 
 def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL):
@@ -724,35 +760,27 @@ def plot_confusion_matrix(
     out_dir="data/figures",
     label="fig_confusion",
 ):
-    """Build fig:confusion as a TWO-TIER figure (rebuilt 2026-07-02; replaces
-    the earlier single pooled-matrix version -- see IMPLEMENTATION_PLAN.md
-    Changelog). The library's literature ``ref_label`` is exact group-theory
-    ground truth only for ``ideal == 'yes'`` internal modes (and for every
-    external T/R row, geometry-exact regardless of the ``ideal`` tag);
-    pooling ``ideal == 'no'`` internal modes into the same accuracy number
-    risks reading intrinsic stretch/bend mixing (the effect this framework is
-    built to detect, B8.3 CoM-softening) as classifier error. So this
-    function computes ``src.calibrate.confusion_matrix_stats`` TWICE, once
-    per tier, via the same ad-hoc ``ideal``-column filter the manuscript
-    prose already uses (no change to calibrate.py):
+    """Build fig:confusion as a SINGLE-TIER figure (restructured 2026-07-05;
+    replaces the earlier two-tier 2x2 layout -- see IMPLEMENTATION_PLAN.md
+    Changelog and this module's header comment above for the full
+    circularity rationale). Only the non-ideal tier is shown: internal rows
+    with ``ideal == 'no'`` -- thresholds fixed on the ideal population
+    (fig:boxplots), then applied WITHOUT retuning to the harder non-ideal
+    cases they were never calibrated on. This is the genuine, non-circular
+    validation; the rigorous tier (external T/R rows + ``ideal == 'yes'``
+    internal rows) is exact by construction and is reported separately, as a
+    self-consistency check rather than an accuracy claim, by
+    ``plot_rigorous_tier_check`` below (SI-bound, not main text).
 
-      * Rigorous tier: every external (T/R) row + internal rows with
-        ``ideal == 'yes'`` -- true accuracy claim.
-      * Non-ideal tier: internal rows with ``ideal == 'no'`` only --
-        reframed as validation-by-characterization (label retention /
-        migration-to-mixed), not an accuracy claim.
-
-    Layout (2x2): (a) rigorous confusion matrix [top-left], (b) rigorous
-    per-category precision/recall bars, all == 1.000 [top-right],
-    (c) non-ideal confusion matrix, bend/stretch reference x
-    bend/mixed/stretch predicted bucket [bottom-left], (d) non-ideal
-    label-retention vs. migration-to-mixed bars, annotated with the 0%
-    opposite-clean-category-crossing finding [bottom-right].
+    Layout (1x2): (a) non-ideal confusion matrix, bend/stretch reference x
+    bend/mixed/stretch predicted bucket; (b) non-ideal label-retention vs.
+    migration-to-mixed bars, annotated with the 0% opposite-clean-category-
+    crossing finding.
 
     Never recomputes scores -- only ``confusion_matrix_stats`` (already
-    computed from calibrated thresholds) is called, on two filtered slices
-    of the same ``library_scores.csv`` this module always reads.
-    ``confusion_matrix_stats`` itself additionally restricts both slices to
+    computed from calibrated thresholds) is called, on one filtered slice of
+    the same ``library_scores.csv`` this module always reads.
+    ``confusion_matrix_stats`` itself additionally restricts that slice to
     the single-centre AB_n hydride-library scope (2026-07-05 author
     decision, ``src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE`` -- excludes
     C2H2/C2H4/C2H6/H2O2/C6H6/iso-C4H10/n-C4H10) before computing anything,
@@ -763,11 +791,12 @@ def plot_confusion_matrix(
 
     # Local-only override, THIS FIGURE ONLY (author flagged 2026-07-02: the
     # spelled-out "clean translation"/"clean rotation" tick text was too
-    # long, forcing rotated labels and a generally cramped 2x2 layout).
-    # Mirrors `plot_benzene_normal_modes`'s `_LEGEND_MERGE_TEXT` local-dict
-    # precedent above -- `CATEGORY_LABEL` itself is untouched (other
-    # figures/legends still want the fuller form, or a different merge, for
-    # translation/rotation).
+    # long). Mirrors `plot_benzene_normal_modes`'s `_LEGEND_MERGE_TEXT`
+    # local-dict precedent above -- `CATEGORY_LABEL` itself is untouched
+    # (other figures/legends still want the fuller form, or a different
+    # merge, for translation/rotation). Kept even though this single-tier
+    # figure no longer has a translation/rotation panel of its own, for
+    # consistency with `_confusion_heatmap`'s shared label_map signature.
     _CONFUSION_LABEL = dict(CATEGORY_LABEL)
     _CONFUSION_LABEL["translation"] = "T"
     _CONFUSION_LABEL["rotation"] = "R"
@@ -775,71 +804,13 @@ def plot_confusion_matrix(
     lib_df = pd.read_csv(library_csv)
     thresholds = Thresholds.calibrated()
 
-    rigorous_df = lib_df[(lib_df["kind"] == "external") | (lib_df["ideal"] == "yes")]
     nonideal_df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ideal"] == "no")]
-
-    stats_r = confusion_matrix_stats(rigorous_df, thresholds)
     stats_n = confusion_matrix_stats(nonideal_df, thresholds)
 
-    fig, ((ax_ha, ax_pa), (ax_hb, ax_pb)) = plt.subplots(
-        2, 2, figsize=(7.4, 6.6), gridspec_kw={"width_ratios": [1.15, 1.0]})
+    fig, (ax_hb, ax_pb) = plt.subplots(
+        1, 2, figsize=(7.4, 3.4), gridspec_kw={"width_ratios": [1.15, 1.0]})
 
-    # ================= Tier 1: rigorous (n=231) =================
-    # (was n=237 before the 2026-07-05 single-centre-only scope filter --
-    # confusion_matrix_stats() now drops benzene's 6 geometry-backed
-    # external T/R rows via src.calibrate.filter_single_centre_library,
-    # since C6H6 is a six-centre molecule outside the hydride library's
-    # AB_n scope and has its own dedicated confusion matrix elsewhere,
-    # fig:benzeneconfusion; 237-6=231, computed not assumed.)
-    ref_order_r = ["translation", "rotation", "stretch", "bend"]
-    table_r = stats_r["confusion_table"]
-    pred_order_r = ["translation", "rotation", "stretch", "bend"]
-    pred_cols_r = [c for c in pred_order_r if c in table_r.columns] + \
-                  [c for c in table_r.columns if c not in pred_order_r]
-    tbl_r = table_r.reindex(index=ref_order_r, columns=pred_cols_r, fill_value=0)
-    n_rigorous = int(tbl_r.values.sum())
-    _confusion_heatmap(ax_ha, fig, tbl_r, ref_order_r,
-                        f"(a) Rigorous ground truth (n={n_rigorous})",
-                        label_map=_CONFUSION_LABEL)
-
-    cats_r = ["translation", "rotation", "stretch", "bend"]
-    x_r = np.arange(len(cats_r))
-    width = 0.35
-    precisions_r = [stats_r["per_category"][c]["precision"] for c in cats_r]
-    recalls_r = [stats_r["per_category"][c]["recall"] for c in cats_r]
-    bar_colors_r = [CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[c]] for c in cats_r]
-    bars_p = ax_pa.bar(x_r - width / 2, precisions_r, width, color=bar_colors_r,
-                        edgecolor="black", linewidth=0.5, label="precision")
-    bars_r = ax_pa.bar(x_r + width / 2, recalls_r, width, color=bar_colors_r,
-                        edgecolor="black", linewidth=0.5, hatch="///", label="recall")
-    # Per-category "1.000" value labels were dropped (2026-07-02 consistency
-    # pass): every category's precision AND recall is exactly 1.000 here --
-    # that number is already stated once in the panel title ("all = 1.000"),
-    # so 4 identical repeated labels directly above the bars were pure
-    # redundant clutter, and their claimed vertical space is exactly what the
-    # legend needs (see below) -- removing them fixes both problems at once.
-    ax_pa.axhline(stats_r["acceptance_floor"], color=COLORS["threshold"], ls="--", lw=0.8)
-    ax_pa.text(len(cats_r) - 0.5, stats_r["acceptance_floor"], "  floor",
-               va="bottom", ha="right", fontsize=7, color=COLORS["threshold"])
-    ax_pa.set_xticks(x_r)
-    # Rotation/right-alignment removed (2026-07-02 follow-up, same fix as
-    # `_confusion_heatmap` above): now that `_CONFUSION_LABEL` shortens
-    # translation/rotation to "T"/"R" (matching the already-short "S"/"B"),
-    # these 4 tick labels fit flat with no collision risk, verified by
-    # rendering.
-    ax_pa.set_xticklabels([_CONFUSION_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_r],
-                          rotation=0, ha="center", fontsize=9)
-    ax_pa.set_ylim(0, 1.18)
-    ax_pa.set_ylabel("Precision / recall")
-    ax_pa.set_title("(b) Rigorous precision/recall (all = 1.000)", loc="left",
-                    fontweight="bold", fontsize=9)
-    # loc="lower left" (older) sat directly above the previously-rotated
-    # x-tick labels ("clean translation" etc.), visually crowding/
-    # overlapping them. "upper left" stays clear of the (now flat, short)
-    # tick labels and any bar annotation -- verified by rendering.
-    ax_pa.legend(loc="upper left", frameon=False, fontsize=8)
-
-    # ================= Tier 2: non-ideal (n=277) =================
+    # ================= Non-ideal tier (n=277) =================
     # (was n=422 before the 2026-07-05 single-centre-only scope filter --
     # confusion_matrix_stats() now drops the 145 non-ideal internal modes
     # belonging to the 7 non-single-centre molecules (C2H2, C2H4, C2H6,
@@ -854,7 +825,7 @@ def plot_confusion_matrix(
     tbl_n = table_n.reindex(index=ref_order_n, columns=pred_cols_n, fill_value=0)
     n_nonideal = int(tbl_n.values.sum())
     _confusion_heatmap(ax_hb, fig, tbl_n, ref_order_n,
-                        f"(c) Non-ideal characterization (n={n_nonideal})",
+                        f"(a) Non-ideal characterization (n={n_nonideal})",
                         label_map=_CONFUSION_LABEL)
 
     cats_n = ["bend", "stretch"]
@@ -869,11 +840,11 @@ def plot_confusion_matrix(
 
     # Segment labels are numeric-only (no in-panel legend): the "retained"
     # (bend/stretch-colored) vs. "migrated to mixed" (teal) color coding
-    # reuses the SAME CATEGORY_COLOR swatches panel (c)'s tick labels just
+    # reuses the SAME CATEGORY_COLOR swatches panel (a)'s tick labels just
     # showed two columns over, so a redundant legend here would only add
-    # clutter. Thin segments (e.g. bend's 0.043 migrated slice) get their
-    # label placed just ABOVE the bar instead of centered inside it, so text
-    # never overflows a segment shorter than the label's own height.
+    # clutter. Thin segments (e.g. bend's migrated slice) get their label
+    # placed just ABOVE the bar instead of centered inside it, so text never
+    # overflows a segment shorter than the label's own height.
     x_n = np.arange(len(cats_n))
     bar_colors_n = [CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[c]] for c in cats_n]
     ax_pb.bar(x_n, retention_n, 0.5, color=bar_colors_n,
@@ -894,26 +865,23 @@ def plot_confusion_matrix(
     ax_pb.set_xticks(x_n)
     # cats_n is stretch/bend only (already short "S"/"B"; unaffected by the
     # translation/rotation shortening above) -- `_CONFUSION_LABEL` used here
-    # too only for consistency with panels (a)/(b)'s tick-label font size.
+    # too only for consistency with panel (a)'s tick-label font size.
     ax_pb.set_xticklabels([_CONFUSION_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_n],
                           fontsize=9)
     ax_pb.set_xlim(-0.55, 1.55)
     ax_pb.set_ylim(0, 1.12)
     ax_pb.set_ylabel("Fraction of reference-labeled modes")
-    ax_pb.set_title("(d) Non-ideal retention vs. migration", loc="left",
+    ax_pb.set_title("(b) Non-ideal retention vs. migration", loc="left",
                     fontweight="bold", fontsize=9)
 
     # Whole-figure footer sentence: the 0%-opposite-crossing finding applies
-    # to BOTH non-ideal categories and is the point of tier 2. FIXED
-    # 2026-07-02 (readability): this used to be drawn in-image via
-    # `fig.text()` at 6.8pt on this 7.4x6.6in canvas; LaTeX's
-    # `\includegraphics[width=0.95\columnwidth]` rescales that canvas to
-    # ~6.2in, shrinking the effective size to ~5.7pt -- below a readable
-    # floor once printed. Removed from the raster entirely; the exact
-    # sentence is computed here and returned in `summary["nonideal_footer_text"]`
-    # instead, for lead-author to place in the actual LaTeX
-    # `\captionof{figure}{...}` text (typeset at normal caption font size,
-    # not shrunk with the image).
+    # to BOTH non-ideal categories and is the point of this figure. FIXED
+    # 2026-07-02 (readability, carried over from the earlier 2x2 layout):
+    # not drawn in-image (would shrink below a readable floor once LaTeX
+    # rescales this to column width) -- the exact sentence is computed here
+    # and returned in `summary["nonideal_footer_text"]` for lead-author to
+    # place in the actual LaTeX `\captionof{figure}{...}` text (typeset at
+    # normal caption font size, not shrunk with the image).
     # ASCII "->" (not a unicode arrow) deliberately: this string is meant to
     # be easy to print/copy on any console (a literal U+2192 arrow crashes
     # `print()` under Windows' default cp1252 stdout encoding), and reads
@@ -922,7 +890,9 @@ def plot_confusion_matrix(
         f"Non-ideal tier (n={n_nonideal}): 0% of bend or stretch reference-labeled "
         f"modes crossed to the OPPOSITE clean category "
         f"(bend->stretch={opposite_n[0]:.1%}, stretch->bend={opposite_n[1]:.1%}); "
-        "100% of the non-retained remainder lands in the mixed bucket."
+        "100% of the non-retained remainder lands in the mixed bucket. "
+        "Thresholds were fixed on the ideal-molecule population (fig:boxplots) "
+        "and applied here without retuning."
     )
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -931,32 +901,154 @@ def plot_confusion_matrix(
     summary = {
         "pdf": pdf_path, "png": png_path,
         "nonideal_footer_text": footer_text,
-        "layout": ("2x2: (a) rigorous confusion matrix, (b) rigorous "
-                   "precision/recall bars, (c) non-ideal confusion matrix, "
-                   "(d) non-ideal retention/migration bars -- REPLACES the "
-                   "earlier single pooled-matrix fig:confusion."),
+        "layout": ("1x2: (a) non-ideal confusion matrix, (b) non-ideal "
+                   "retention/migration bars -- REPLACES the earlier 2x2 "
+                   "layout (rigorous heatmap + precision/recall bars, THEN "
+                   "non-ideal heatmap + retention/migration bars). The "
+                   "rigorous-tier panels were removed as circular (see this "
+                   "module's header comment above the fig:confusion section) "
+                   "and moved to plot_rigorous_tier_check (SI, not main "
+                   "text)."),
         "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL for "
-                               "CLEAN_TRANSLATION/CLEAN_ROTATION/STRETCHING/"
-                               "BENDING/MIXED_STRETCH_BEND -- same mapping "
-                               "as fig:benzene. FIXED 2026-07-02 (author "
-                               "follow-up): translation/rotation tick text "
-                               "is shortened to 'T'/'R' via a figure-local "
-                               "`_CONFUSION_LABEL` override (CATEGORY_LABEL "
-                               "itself unchanged); tick-label rotation "
-                               "(no longer needed once labels are short) "
-                               "and several font sizes were also restored "
-                               "to normal, readable values."),
-        "rigorous_n": n_rigorous,
-        "rigorous_confusion_table": tbl_r.to_dict(),
-        "rigorous_precision": dict(zip(cats_r, precisions_r)),
-        "rigorous_recall": dict(zip(cats_r, recalls_r)),
-        "acceptance_floor": stats_r["acceptance_floor"],
-        "rigorous_floor_met": stats_r["floor_met"],
+                               "STRETCHING/BENDING/MIXED_STRETCH_BEND -- "
+                               "same mapping as fig:benzene. Translation/"
+                               "rotation tick text ('T'/'R', via the figure-"
+                               "local `_CONFUSION_LABEL` override) is kept "
+                               "defined for `_confusion_heatmap`'s shared "
+                               "signature even though this single-tier "
+                               "figure has no translation/rotation panel of "
+                               "its own."),
         "nonideal_n": n_nonideal,
         "nonideal_confusion_table": tbl_n.to_dict(),
         "nonideal_retention": dict(zip(cats_n, retention_n)),
         "nonideal_migration_to_mixed": dict(zip(cats_n, migration_n)),
         "nonideal_opposite_category_crossing": dict(zip(cats_n, opposite_n)),
+    }
+    return summary
+
+
+def plot_rigorous_tier_check(
+    library_csv="data/results/library_scores.csv",
+    out_dir="data/figures",
+    label="fig_rigorous_tier_check",
+):
+    """Build the SI rigorous-tier consistency check (companion to the
+    restructured, single-tier ``fig:confusion`` above): a small reference/
+    predicted-count TABLE (not a heatmap+bars figure like fig:confusion --
+    deliberately minimal, per the author's 2026-07-05 restructuring
+    decision) covering every external (T/R) row plus internal rows with
+    ``ideal == 'yes'`` (n=231: 140 T/R + 91 ideal-internal).
+
+    Framing (explicit, both in this docstring and in the rendered table's
+    own caption row): this is a SANITY CHECK confirming the construction is
+    self-consistent -- T/R references are built via the same Eckart-Sayvetz
+    projection the mode is then scored against, and tau_S/tau_B are
+    literally the min/max of this exact population (see
+    src.calibrate.derive_stretch_bend_thresholds) -- NOT an independent
+    accuracy claim clearing a floor. Precision/recall are 1.000 for all 4
+    categories by construction; this table exists to show that
+    computationally rather than merely asserting it, not to argue it proves
+    anything about the harder non-ideal cases (that is fig:confusion's job).
+
+    Renders BOTH a compact table-style PDF/PNG (drop-in
+    ``\\includegraphics``, matching this module's existing figure-asset
+    convention) AND writes the same numbers to
+    ``data/results/rigorous_tier_consistency_table.csv`` so lead-author/
+    tex-data-sync can instead typeset a native LaTeX ``booktabs`` table (the
+    convention already used by ``JCC_SI_computational_cost.tex``) if
+    preferred -- this function does not choose that for them, only supplies
+    both forms of the same numbers. Not one of the 6 originally-scoped
+    fig:* labels; SI placement (a new small SI document, or a table inside
+    an existing one) is lead-author's call, not invented here.
+    """
+    _style()
+    from src.calibrate import confusion_matrix_stats
+
+    lib_df = pd.read_csv(library_csv)
+    thresholds = Thresholds.calibrated()
+
+    rigorous_df = lib_df[(lib_df["kind"] == "external") | (lib_df["ideal"] == "yes")]
+    stats_r = confusion_matrix_stats(rigorous_df, thresholds)
+
+    cats_r = ["translation", "rotation", "stretch", "bend"]
+    table_r = stats_r["confusion_table"]
+    pred_cols_r = [c for c in cats_r if c in table_r.columns] + \
+                  [c for c in table_r.columns if c not in cats_r]
+    tbl_r = table_r.reindex(index=cats_r, columns=pred_cols_r, fill_value=0)
+    n_rigorous = int(tbl_r.values.sum())
+
+    rows = []
+    for c in cats_r:
+        n_ref = stats_r["per_category"][c]["n_ref"]
+        n_correct = int(tbl_r.loc[c, c]) if c in tbl_r.columns else 0
+        precision = stats_r["per_category"][c]["precision"]
+        recall = stats_r["per_category"][c]["recall"]
+        rows.append({
+            "category": CATEGORY_LABEL[c], "n_reference": n_ref,
+            "n_predicted_correct": n_correct, "precision": precision,
+            "recall": recall,
+        })
+    table_df = pd.DataFrame(rows)
+
+    csv_path = os.path.join("data", "results", "rigorous_tier_consistency_table.csv")
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    table_df.to_csv(csv_path, index=False)
+
+    # Minimal table rendering (matplotlib Table, not a heatmap+bars figure --
+    # per the author's explicit "doesn't need a full ... figure like the
+    # main-text one did" instruction).
+    #
+    # FIXED (post-render visual check): the first attempt let `ax.table`
+    # auto-size columns with no explicit `colWidths`, which badly overlapped
+    # the "n (reference)" / "n (predicted correctly)" header text into one
+    # illegible smear. Explicit, hand-tuned `colWidths` (summing to 1.0,
+    # proportional to each header's rendered length) plus a wider figure
+    # (4.6in -> 7.0in) fixes this -- verified by rendering the regenerated
+    # PNG below.
+    fig, ax = plt.subplots(figsize=(7.0, 1.9))
+    ax.axis("off")
+    col_labels = ["Category", "n (reference)", "n (predicted\ncorrectly)",
+                  "Precision", "Recall"]
+    col_widths = [0.20, 0.24, 0.26, 0.15, 0.15]
+    cell_text = [[r["category"], f'{r["n_reference"]:d}',
+                  f'{r["n_predicted_correct"]:d}', f'{r["precision"]:.3f}',
+                  f'{r["recall"]:.3f}'] for r in rows]
+    tbl = ax.table(cellText=cell_text, colLabels=col_labels, colWidths=col_widths,
+                   loc="center", cellLoc="center")
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(8)
+    tbl.scale(1.0, 1.8)
+    for (row, col), cell in tbl.get_celld().items():
+        cell.set_edgecolor("#BBBBBB")
+        if row == 0:
+            cell.set_facecolor("#EEEEEE")
+            cell.set_text_props(fontweight="bold")
+    ax.set_title(
+        f"Rigorous-tier self-consistency check (n={n_rigorous})\n"
+        "sanity check, not an independent accuracy claim -- see caption",
+        fontsize=8.5, loc="center", pad=10)
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary = {
+        "pdf": pdf_path, "png": png_path, "csv": csv_path,
+        "framing": ("Self-consistency / construction check, NOT an "
+                     "independent accuracy claim -- T/R references are "
+                     "built from the same Eckart-Sayvetz projection the "
+                     "mode is scored against, and tau_S/tau_B are the "
+                     "min/max of exactly this ideal-molecule population "
+                     "(see fig:boxplots) -- so 1.000 precision/recall here "
+                     "restates the construction, it does not test it "
+                     "against anything new. The genuine non-circular "
+                     "validation is fig:confusion's non-ideal tier."),
+        "n_rigorous": n_rigorous,
+        "confusion_table": tbl_r.to_dict(),
+        "precision": {c: stats_r["per_category"][c]["precision"] for c in cats_r},
+        "recall": {c: stats_r["per_category"][c]["recall"] for c in cats_r},
+        "acceptance_floor": stats_r["acceptance_floor"],
+        "floor_met": stats_r["floor_met"],
     }
     return summary
 
@@ -1514,15 +1606,17 @@ def regenerate_all(verbose=True):
     already-computed ``data/results/*.csv`` inputs with their own defaults;
     this function takes no molecule-specific arguments.
 
-    Returns a dict {tex_label: result_dict} for all 7 figures (6 labeled
-    fig:* + the standalone benzene-normal-modes gallery), in the same order
-    they are built. Raises whatever the underlying plot_* function raises
-    (e.g. a missing input CSV) -- fail loud, no silent partial regeneration.
+    Returns a dict {tex_label: result_dict} for all 8 figures (6 labeled
+    fig:* + the standalone benzene-normal-modes gallery + the SI rigorous-
+    tier consistency check), in the same order they are built. Raises
+    whatever the underlying plot_* function raises (e.g. a missing input
+    CSV) -- fail loud, no silent partial regeneration.
     """
     fns = [
         ("fig:benzene", plot_benzene_stress_test),
         ("benzene-normal-modes gallery (no fig: label yet)", plot_benzene_normal_modes),
         ("fig:confusion", plot_confusion_matrix),
+        ("SI rigorous-tier consistency check (no fig: label yet)", plot_rigorous_tier_check),
         ("fig:benzeneconfusion", plot_benzene_internal_confusion),
         ("fig:bondscores", plot_bond_scores),
         ("fig:boxplots", plot_boxplots),

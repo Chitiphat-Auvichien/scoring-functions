@@ -10,10 +10,55 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-05 (single-centre-only hydride-library scope fix — non-ideal population 58→51
-> molecules / 422→277 modes, rigorous tier 237→231; see RESUME HERE below for the full writeup.)
+> Last updated: 2026-07-05 (`fig:confusion` restructured to a single non-ideal-tier figure; rigorous
+> tier moved to a new SI self-consistency check, `plot_rigorous_tier_check`; see RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-05 (author decision, figure-builder, `fig:confusion` restructure — drops the rigorous-tier
+> "precision/recall = 1.000, clears the 0.95 floor" framing as circular, not independent validation):**
+> Two arguments made this restructure necessary, not just cosmetic: (1) rigorous-tier T/R recovery is
+> guaranteed by construction — the reference T/R basis is built via the same Eckart-Sayvetz projection
+> the mode is then scored against, so agreement there is close to definitional; (2) `tau_S`/`tau_B` are
+> literally the min/max of the ideal-molecule `s[V_S]` population (`derive_stretch_bend_thresholds`,
+> `src/calibrate.py`) — the SAME population `fig:boxplots` already shows has a clean, non-overlapping
+> gap — so re-citing "1.000 accuracy" on that population again in `fig:confusion` restates the
+> threshold-placement decision rather than testing anything new against it. The genuinely non-circular
+> validation is the non-ideal tier: thresholds fixed on the ideal population, then applied WITHOUT
+> retuning to the harder non-ideal cases they were never calibrated on.
+> **Changes (`src/figures.py` only; no scoring/classifier/threshold code touched):**
+> 1. `plot_confusion_matrix` (`fig:confusion`) is now a SINGLE-TIER, 1x2 layout: (a) non-ideal confusion
+>    matrix, (b) non-ideal retention-vs-migration bars — exactly what used to be panels (c)/(d). The
+>    rigorous-tier heatmap + precision/recall bars (old panels (a)/(b)) were removed from this figure
+>    entirely, not just re-labeled.
+> 2. New function `plot_rigorous_tier_check` (9th figure, no `fig:` label yet — SI-bound): a small
+>    reference/predicted-count TABLE (matplotlib `ax.table`, not a full heatmap+bars figure — the
+>    author was explicit this "doesn't need" that treatment) for the rigorous tier (n=231: 140 T/R + 91
+>    ideal-internal), framed explicitly in its own docstring/title/summary as a self-consistency /
+>    construction check, NOT an accuracy claim. Also writes the same 4 rows (category, n_reference,
+>    n_predicted_correct, precision, recall) to `data/results/rigorous_tier_consistency_table.csv` so
+>    lead-author/tex-data-sync can typeset a native LaTeX `booktabs` table (the convention already used
+>    by `JCC_SI_computational_cost.tex`) instead of embedding the raster, if preferred — both forms are
+>    supplied, neither choice is made here. Placement (a new small SI doc vs. a table inside an existing
+>    SI doc) is left to lead-author, per this session's scope (figure-builder does not touch `.tex`).
+> 3. `regenerate_all()` updated to include `plot_rigorous_tier_check`; module docstring updated to
+>    describe the restructure. `fig:boxplots` (the ideal-population score-vs-bond-change panels showing
+>    the clean separation gap) is UNCHANGED structurally, only re-saved with the corrected (2026-07-05
+>    single-centre-only-scope) population from the prior session's commit `04fcefb`.
+> **Verification (independently re-derived, not just re-run):** confirmed via direct
+> `confusion_matrix_stats` calls that the pooled recall numbers `04fcefb`'s commit message quoted
+> (stretch 0.66667/mixed 0.33333, bend 0.98378/mixed 0.01622) are the WHOLE-LIBRARY pooled recall
+> (ideal+non-ideal combined via `confusion_matrix_stats(lib_df)` with no tier filter) — a DIFFERENT
+> statistic from what `fig:confusion`'s non-ideal-only tier (`ideal=='no'` rows only, what the figure
+> actually plots) shows: stretch recall 0.57042/mixed 0.42958, bend recall 0.97778/mixed 0.02222 (these
+> match `confusion_matrix_stats`'s own `recall_nonideal`/`test_confusion_matrix_ideal_nonideal_recall_
+> split` values exactly). Both are internally consistent (41 ideal-stretch @ 1.0 + 142 non-ideal-stretch
+> @ 0.57042 = 122/183 = 0.66667 pooled; 50+132=182/185=0.98378 pooled for bend) — no bug, just two
+> different aggregates that should not be conflated. Rigorous tier n=231 (140 T/R + 91 ideal-internal,
+> 50 bend + 41 stretch), non-ideal tier 51 molecules/277 modes (142 stretch + 135 bend) both confirmed
+> exactly matching the prior session's commit message. `py -m pytest tests/` 80/80 green (unchanged —
+> no test imports `src/figures.py`'s plotting functions directly, so the restructure needed no test
+> updates; the two `test_calibrate.py` tests referencing `plot_confusion_matrix`'s tiers in their
+> docstrings are comments only, not assertions on figure structure).
 > **2026-07-05 (author decision + lead-engineer, single-centre-only hydride-library scope fix):** The
 > manuscript's "hydride library" validation (tau_S/tau_B derivation + the ideal/non-ideal confusion-matrix
 > statistics in the "Stretching/bending classification" section) is explicitly scoped to single-centre

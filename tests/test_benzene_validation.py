@@ -27,6 +27,7 @@ import pandas as pd                                                # noqa: E402
 from src.benzene_validation import (                               # noqa: E402
     benzene_normal_reference_detail, benzene_normal_reference_summary,
     benzene_mixed_bond_diagnostic, benzene_worked_examples, MOLECULE,
+    benzene_internal_confusion_matrix, benzene_sb_vs_stretch_bond_diagnostic,
 )
 from src.classifier import MIXED_STRETCH_BEND, BENDING               # noqa: E402
 
@@ -40,15 +41,26 @@ def _lib():
 def test_benzene_normal_detail_covers_all_36_modes():
     detail = benzene_normal_reference_detail(_lib())
     assert len(detail) == 36  # 6 external + 30 internal, all literature-labeled
-    assert set(detail["ref_label"].unique()) == {"translation", "rotation", "stretch", "bend"}
+    # "SB" (2026-07-05 literature relabeling of modes 21/22 -- a genuine
+    # literature-sourced 3rd class, see src/csv_label_ingest.py) joins the
+    # original 4 categories.
+    assert set(detail["ref_label"].unique()) == {"translation", "rotation", "stretch", "bend", "SB"}
     assert detail["predicted_label"].notna().all()
 
 
 def test_benzene_normal_summary_matches_ad_hoc_session_numbers():
-    """Pins the exact headline numbers reported this session (Task A):
-    6/6 external correct; 7/7 literature stretch modes recalled; 18/23
-    literature bend modes recalled; ZERO crossings into the opposite clean
-    category in either direction."""
+    """Pins the exact headline numbers (Task A), **updated 2026-07-05** for
+    the literature relabeling (mode_index 19/23/24 bend->stretch, 21/22
+    bend->SB -- see src/csv_label_ingest.py): 6/6 external correct; 7/10
+    literature stretch modes recalled (the 3 newly-stretch modes 19/23/24
+    still migrate to the predicted MIXED bucket, unchanged from before);
+    16/18 literature bend modes recalled (the 5 original bend "misses"
+    minus the 3 that moved to stretch = 2 remaining migrated-to-mixed,
+    modes 13/14); 0/2 literature SB modes recalled (modes 21/22 are BOTH
+    predicted a clean BENDING, not MIXED -- the tau_B purity-gate "bending
+    blind spot"; see benzene_internal_confusion_matrix for the full 3-class
+    table). ZERO crossings into the opposite clean category in either
+    direction (bend<->stretch), unaffected by the relabeling."""
     detail = benzene_normal_reference_detail(_lib())
     summary = benzene_normal_reference_summary(detail)
     by_ref = summary.set_index("ref_label")
@@ -61,18 +73,93 @@ def test_benzene_normal_summary_matches_ad_hoc_session_numbers():
     assert int(by_ref.loc["rotation", "n_correct"]) == 3
     assert by_ref.loc["rotation", "recall"] == 1.0
 
-    assert int(by_ref.loc["stretch", "n"]) == 7
+    assert int(by_ref.loc["stretch", "n"]) == 10
     assert int(by_ref.loc["stretch", "n_correct"]) == 7
-    assert by_ref.loc["stretch", "recall"] == 1.0
+    assert abs(by_ref.loc["stretch", "recall"] - 0.7) < 1e-9
+    assert int(by_ref.loc["stretch", "n_migrated_to_mixed"]) == 3
 
-    assert int(by_ref.loc["bend", "n"]) == 23
-    assert int(by_ref.loc["bend", "n_correct"]) == 18
-    assert abs(by_ref.loc["bend", "recall"] - 18 / 23) < 1e-9
-    assert int(by_ref.loc["bend", "n_migrated_to_mixed"]) == 5
+    assert int(by_ref.loc["bend", "n"]) == 18
+    assert int(by_ref.loc["bend", "n_correct"]) == 16
+    assert abs(by_ref.loc["bend", "recall"] - 16 / 18) < 1e-9
+    assert int(by_ref.loc["bend", "n_migrated_to_mixed"]) == 2
+
+    assert int(by_ref.loc["SB", "n"]) == 2
+    assert int(by_ref.loc["SB", "n_correct"]) == 0
+    assert by_ref.loc["SB", "recall"] == 0.0
+    # Both 21/22 predicted BENDING, not MIXED -- not a "migration to mixed"
+    # by this stat's definition (that flag means "incorrect AND predicted
+    # mixed"; here it's "incorrect AND predicted bend").
+    assert int(by_ref.loc["SB", "n_migrated_to_mixed"]) == 0
 
     # The zero-crossings claim, computed, not eyeballed.
     assert int(by_ref.loc["stretch", "n_crossed_opposite"]) == 0
     assert int(by_ref.loc["bend", "n_crossed_opposite"]) == 0
+    assert int(by_ref.loc["SB", "n_crossed_opposite"]) == 0
+
+
+def test_benzene_internal_confusion_matrix_3x3_matches_hand_derived_table():
+    """Pins the exact 3x3 (bend/stretch/SB x bend/stretch/mixed) confusion
+    table and per-category recall for benzene's 30 internal normal modes,
+    author-hand-derived and independently re-verified this session:
+      ref bend    (n=18): 16 correct (bend), 2 -> mixed (13,14)      recall 0.889
+      ref stretch (n=10):  7 correct (stretch), 3 -> mixed (19,23,24) recall 0.700
+      ref SB      (n=2):   0 correct, BOTH -> bend (21,22)            recall 0.000
+    Zero bend<->stretch crossings (n_crossed_opposite==0 for both)."""
+    confusion_table, per_category = benzene_internal_confusion_matrix(_lib())
+
+    assert list(confusion_table.index) == ["bend", "stretch", "SB"]
+    assert list(confusion_table.columns) == ["bend", "stretch", "mixed"]
+    assert confusion_table.loc["bend"].tolist() == [16, 0, 2]
+    assert confusion_table.loc["stretch"].tolist() == [0, 7, 3]
+    assert confusion_table.loc["SB"].tolist() == [2, 0, 0]
+
+    by_ref = per_category.set_index("ref_label")
+    assert int(by_ref.loc["bend", "n"]) == 18
+    assert int(by_ref.loc["bend", "n_correct"]) == 16
+    assert abs(by_ref.loc["bend", "recall"] - 16 / 18) < 1e-9
+    assert int(by_ref.loc["bend", "n_crossed_opposite"]) == 0
+
+    assert int(by_ref.loc["stretch", "n"]) == 10
+    assert int(by_ref.loc["stretch", "n_correct"]) == 7
+    assert abs(by_ref.loc["stretch", "recall"] - 0.7) < 1e-9
+    assert int(by_ref.loc["stretch", "n_crossed_opposite"]) == 0
+
+    assert int(by_ref.loc["SB", "n"]) == 2
+    assert int(by_ref.loc["SB", "n_correct"]) == 0
+    assert by_ref.loc["SB", "recall"] == 0.0
+    assert int(by_ref.loc["SB", "n_crossed_opposite"]) == 0
+
+
+def test_benzene_sb_vs_stretch_bond_diagnostic_finds_exactly_21_22_23_24():
+    """The SB-vs-stretch contrast diagnostic (Task B') is keyed off
+    ref_label, not predicted_bucket -- modes 21/22 (ref SB, predicted clean
+    bend) must be found even though they are NOT in the predicted-mixed
+    bucket. The contrast pair is specifically 23/24 (the near-degenerate
+    literature-stretch/predicted-mixed pair), not mode 19 (a lone
+    literature-stretch/predicted-mixed mode, already the dedicated SB
+    worked example elsewhere)."""
+    result = benzene_sb_vs_stretch_bond_diagnostic(_lib())
+    assert sorted(result["mode_index"].tolist()) == [21, 22, 23, 24]
+    by_mode = result.set_index("mode_index")
+    assert by_mode.loc[21, "case"] == "blind_spot_bend"
+    assert by_mode.loc[22, "case"] == "blind_spot_bend"
+    assert by_mode.loc[23, "case"] == "overflagged_mixed"
+    assert by_mode.loc[24, "case"] == "overflagged_mixed"
+    assert by_mode.loc[21, "ref_label"] == "SB"
+    assert by_mode.loc[21, "predicted_bucket"] == "bend"
+    assert by_mode.loc[23, "ref_label"] == "stretch"
+    assert by_mode.loc[23, "predicted_bucket"] == "mixed"
+
+
+def test_benzene_sb_vs_stretch_bond_diagnostic_raises_if_no_sb_modes():
+    lib_df = _lib().copy()
+    mask = (lib_df["molecule"] == MOLECULE) & (lib_df["ref_label"] == "SB")
+    lib_df.loc[mask, "ref_label"] = "bend"
+    try:
+        benzene_sb_vs_stretch_bond_diagnostic(lib_df)
+        assert False, "expected ValueError when no ref_label=='SB' modes exist"
+    except ValueError:
+        pass
 
 
 def test_benzene_normal_detail_raises_on_incomplete_merge():

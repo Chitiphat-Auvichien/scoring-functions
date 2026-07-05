@@ -1,0 +1,5 @@
+mode_index,freq,V_Stretch,ref_label,predicted_label,predicted_bucket,case,cc_total,ch_total,cc_fraction_of_V,s_AB[C1-C2],s_AB[C2-C3],s_AB[C3-C4],s_AB[C4-C5],s_AB[C5-C6],s_AB[C1-C6]
+21,1532.8465,0.09072,SB,B,bend,blind_spot_bend,0.0772,0.0136,0.8509700176366845,0.0099,0.0094,0.0194,0.0099,0.0094,0.0192
+22,1532.8465,0.08119,SB,B,bend,blind_spot_bend,0.0674,0.0138,0.8301514964897155,0.0166,0.0168,0.0003,0.0165,0.0169,0.0003
+23,1598.8987,0.31395,stretch,SB,mixed,overflagged_mixed,0.305,0.0088,0.9714922758401019,0.0416,0.026,0.0847,0.0416,0.026,0.0851
+24,1598.8987,0.29793,stretch,SB,mixed,overflagged_mixed,0.2889,0.0088,0.9696908669821771,0.0624,0.0754,0.0067,0.0626,0.0751,0.0067

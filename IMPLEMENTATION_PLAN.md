@@ -1329,6 +1329,48 @@ library scores from the Excel file.
 ---
 
 ## Changelog
+- **2026-07-05 — New `fig:benzeneconfusion` figure + `confusion_matrix_stats()` fixed for the literal
+  "SB" reference label.** Follow-up to commit `69d549e` (lead-engineer), which gave benzene modes 21/22
+  a genuine literature 3-class ground truth (`ref_label=="SB"`, an E1u degenerate pair at 1532.85 cm⁻¹),
+  built from `src/benzene_validation.py`'s new `benzene_internal_confusion_matrix`/`_sb_vs_stretch_bond_
+  diagnostic` (Task A'/B', already landed in the same commit — no scoring/classifier code touched here).
+  1. **`plot_benzene_internal_confusion` (`fig:benzeneconfusion`, `src/figures.py`), an 8th figure:**
+     benzene's own 3x3 (ref bend/stretch/SB x predicted bend/stretch/mixed) internal-mode confusion
+     matrix + per-category precision/recall, reusing the shared `_confusion_heatmap`/`CATEGORY_COLOR`/
+     `CATEGORY_LABEL` machinery via a new `REF_LABEL_TO_CATEGORY["SB"] = "mixed"` entry (routes the
+     literal "SB" reference row to the same color/label already used for the classifier's own
+     MIXED_STRETCH_BEND bucket). Wired into `regenerate_all()`. Numbers match the raw CSVs exactly:
+     bend 16/0/2, stretch 0/7/3, SB 2/0/0; precision B=0.889/S=1.000/mixed=0.000, recall
+     B=0.889/S=0.700/SB=0.000 (both blind-spot modes 21/22 predicted a clean "B", never "mixed" — the
+     tau_B two-gate purity blind spot already on record). Per-bond evidence for the 21/22-vs-23/24
+     contrast stays in `benzene_sb_vs_stretch_bond_diagnostic.csv` for a companion LaTeX table, not
+     re-plotted inside this heatmap.
+  2. **`confusion_matrix_stats()` bug fix (`src/calibrate.py`):** the function's 4-category
+     (translation/rotation/stretch/bend) precision/recall accounting had no way to hold a foreign 3rd
+     reference label — the 2 "SB" rows (predicted bucket "bend" both times) were silently inflating
+     "bend"'s `n_pred` (precision's denominator) without ever counting as a true positive, corrupting
+     bend precision from 1.000 to 0.99267/0.9910 (whole-pooled-library / non-ideal-tier calls
+     respectively) for a reason unrelated to classifier error. Diagnosed both `fig:confusion` tiers
+     first, confirming the fix's actual scope: **rigorous tier (n=237) was never affected at all**
+     (benzene is `ideal=='no'` throughout, excluded from that tier by construction) — still exactly
+     1.000/1.000 for all 4 categories. **Non-ideal tier (n=420 after excluding SB, was 422 raw)**: bend/
+     stretch *retention* (recall) was actually never corrupted either (0.9693/0.6458 before and after —
+     `ref_mask` only ever matches the literal string "bend"/"stretch", never "SB"); only *precision* was
+     wrong, and only inside `confusion_matrix_stats()`'s own return value (fig:confusion's panel (d)
+     never plots non-ideal-tier precision, only recall/migration, so the rendered figure was unaffected
+     either way). **Fix:** `confusion_matrix_stats()` now drops any row whose `ref_label` is outside the
+     4 recognized categories before building the crosstab/per-category stats (one-line guard + comment;
+     general, not benzene-specific — any other future unrecognized label would hit the same silent
+     miscount). Restores bend precision to exactly 1.000 in both the pooled-library and non-ideal-tier
+     calls; rigorous tier, recall, mixed_fraction, floor_met all unchanged. Updated the one pinned test
+     that had (correctly, at the time) documented the 0.99267 number as "expected, not a regression"
+     (`test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket`,
+     `tests/test_calibrate.py`) to assert exactly 1.000 for all 4 categories, with a comment explaining
+     the reconsidered reasoning (a literal literature "SB" row answers a different question than the
+     nominal-stretch/bend migration-under-mass-effects question this statistic is for; see
+     `src/benzene_validation.py::benzene_internal_confusion_matrix` for that 3-class question's own
+     dedicated table). 77/77 tests green after the fix (was 77/77 green before, including the
+     since-corrected pinned number).
 - **2026-07-02 — Visual-consistency pass across 5 figures (author feedback: "not high-quality,"
   inconsistent labels, legend/tick-label overlap, redundant marker-shape encoding).** `src/figures.py`
   only; no scoring/data changes. Four fixes, each visually verified by reading the regenerated PNG (not

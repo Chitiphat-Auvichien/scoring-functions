@@ -208,29 +208,35 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     literature relabeling flips mode_index 19/23/24 bend->stretch and
     21/22 bend->SB (a literal literature 3rd class -- see
     `src/benzene_validation.py`'s 3-class confusion table for the benzene-
-    specific numbers). Since this pooled hydride-library confusion table
-    still only recognizes stretch/bend/translation/rotation reference
-    categories (SB rows are excluded from the per-category ref_mask, exactly
-    like any other non-recognized ref_label), removing modes 21/22 from
-    "bend"'s reference population WHILE they keep predicting "bend"
-    (predicted_label/thresholds untouched by this session) means bend's
-    PRECISION is no longer exactly 1.0 -- 271/273 (0.99267): those same 2
-    modes are now "false positives" for bend from the library's point of
-    view (their true reference is the 3rd class "SB", not "bend"). This is
-    the correct, honest consequence of introducing genuine 3-class ground
-    truth for those 2 modes, not a regression -- see
-    `src/benzene_validation.py::benzene_internal_confusion_matrix` for the
-    benzene-scoped mechanistic explanation (the tau_B "bending blind spot").
-    Stretch/translation/rotation precision remain exactly 1.0 (unaffected --
-    no SB mode is ever predicted "stretch").
+    specific numbers).
+
+    **Precision number corrected 2026-07-05 (same day, follow-up fix):** this
+    assertion briefly pinned bend precision at 0.99267 under the reasoning
+    that modes 21/22 (ref_label=="SB", predicted bucket "bend") were "false
+    positives" for bend now that the library has finer-grained ground truth.
+    That reasoning was reconsidered: `confusion_matrix_stats()`'s 4-category
+    (translation/rotation/stretch/bend) precision/recall accounting is
+    specifically about whether a NOMINAL stretch/bend reference mode keeps
+    its label or is mispredicted -- a literal literature "SB" reference is a
+    different, 3rd-class question entirely (already answered by
+    `src/benzene_validation.py::benzene_internal_confusion_matrix`'s
+    dedicated 3x3 table), not a stretch/bend miss. `confusion_matrix_stats()`
+    now excludes any ref_label outside the 4 recognized categories before
+    computing the confusion table/per-category stats (see its docstring/
+    inline comment), so modes 21/22 no longer inflate bend's n_pred
+    denominator -- bend precision is exactly 1.0 again, matching
+    stretch/translation/rotation (unaffected either way -- no SB mode is
+    ever predicted "stretch", and translation/rotation have no SB rows at
+    all). See `src/benzene_validation.py::benzene_internal_confusion_matrix`
+    for the benzene-scoped mechanistic explanation (the tau_B "bending
+    blind spot") of why 21/22 land on "bend".
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
     res = confusion_matrix_stats(lib_df, calibrated, acceptance_floor=0.95)
 
-    for cat in ("stretch", "translation", "rotation"):
+    for cat in ("stretch", "bend", "translation", "rotation"):
         assert res["per_category"][cat]["precision"] == 1.0, cat
-    assert abs(res["per_category"]["bend"]["precision"] - 0.99267) < 1e-3
 
     assert res["per_category"]["translation"]["recall"] == 1.0
     assert res["per_category"]["rotation"]["recall"] == 1.0

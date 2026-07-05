@@ -11,11 +11,11 @@ Phase-5 ``reproduce.py`` can call each in turn. Each function:
   * returns a small summary dict (paths + a few sanity numbers) so the
     caller can confirm the plot's content without opening the file.
 
-All 6 manuscript figures are implemented: ``plot_benzene_stress_test``
-(``fig:benzene``), ``plot_confusion_matrix`` (``fig:confusion``),
-``plot_bond_scores`` (``fig:bondscores``), ``plot_boxplots``
-(``fig:boxplots``), ``plot_mode_mixing`` (``fig:modemixing``), and
-``plot_sensitivity`` (``fig:sensitivity``).
+All 6 originally-scoped manuscript figures are implemented:
+``plot_benzene_stress_test`` (``fig:benzene``), ``plot_confusion_matrix``
+(``fig:confusion``), ``plot_bond_scores`` (``fig:bondscores``),
+``plot_boxplots`` (``fig:boxplots``), ``plot_mode_mixing``
+(``fig:modemixing``), and ``plot_sensitivity`` (``fig:sensitivity``).
 
 ``plot_benzene_normal_modes`` is a 7th, standalone figure (no ``fig:`` label
 of its own yet -- pending lead-author's rewrite of the "Benzene normal
@@ -23,6 +23,13 @@ modes" section): the descriptive worked-example companion to fig:benzene's
 EMIT stress test, showing all 36 real normal modes with the ring-breathing
 (mode 12) / mixed S-B (mode 19) / C-H stretch (mode 30) worked examples
 called out. It does not modify or replace ``plot_benzene_stress_test``.
+
+``plot_benzene_internal_confusion`` (``fig:benzeneconfusion``, added
+2026-07-05) is an 8th figure, enabled by the literature relabeling of
+benzene modes 21/22 as a literal 3-class "SB" (mixed) ground truth (commit
+69d549e): benzene's own 3x3 (bend/stretch/SB reference x bend/stretch/mixed
+predicted) internal-mode confusion matrix + precision/recall, distinct from
+the whole-hydride-library ``fig:confusion``.
 
 Cross-figure visual consistency (one meaning per color/marker, paper-wide)
 --------------------------------------------------------------------------
@@ -109,6 +116,21 @@ REF_LABEL_TO_CATEGORY = {
     "rotation": "rotation",
     "stretch": "stretch",
     "bend": "bend",
+    # "SB" (2026-07-05): benzene modes 21/22's genuine literal literature
+    # mixed-stretch/bend reference label (see commit 69d549e / tab:benzenemixed
+    # / src.benzene_validation.benzene_internal_confusion_matrix) -- routed to
+    # the same "mixed" category already used for the classifier's OWN
+    # MIXED_STRETCH_BEND predicted bucket, so CATEGORY_COLOR/CATEGORY_LABEL
+    # (teal, "SB") and `_confusion_heatmap` can be reused as-is for
+    # `plot_benzene_internal_confusion` (fig:benzeneconfusion) without adding
+    # a new color/marker/label vocabulary entry. This is the only place "SB"
+    # is ever a valid dict key here; the whole-library `fig:confusion`
+    # (plot_confusion_matrix) never iterates an unbounded category list --
+    # its `cats_r`/`cats_n` are hardcoded to the 4 known categories -- so
+    # this addition has no effect there, and `confusion_matrix_stats()`
+    # (src/calibrate.py) already excludes ref_label=="SB" rows from its own
+    # 4-category accounting entirely (see that function's 2026-07-05 fix).
+    "SB": "mixed",
 }
 PRED_BUCKET_TO_CATEGORY = dict(REF_LABEL_TO_CATEGORY)
 PRED_BUCKET_TO_CATEGORY.update({
@@ -923,6 +945,124 @@ def plot_confusion_matrix(
 
 
 # --------------------------------------------------------------------------
+# fig:benzeneconfusion -- benzene's genuine 3-class (bend/stretch/SB)
+# internal-mode confusion matrix, enabled by the 2026-07-05 literature
+# relabeling of modes 21/22 as a literal "SB" (mixed) ground truth (commit
+# 69d549e). NEW figure (2026-07-05) -- does not modify plot_confusion_matrix
+# (fig:confusion, the whole-hydride-library validation) or any of its inputs.
+# --------------------------------------------------------------------------
+
+def plot_benzene_internal_confusion(
+    matrix_csv="data/results/benzene_internal_confusion_matrix.csv",
+    summary_csv="data/results/benzene_internal_confusion_summary.csv",
+    out_dir="data/figures",
+    label="fig_benzene_confusion",
+):
+    """Build fig:benzeneconfusion: benzene's (C6H6) 3x3 internal-mode
+    confusion matrix -- reference bend/stretch/SB (literal literature label,
+    modes 21/22, an E1u degenerate pair at 1532.85 cm-1) x predicted
+    bend/stretch/mixed bucket -- plus a per-category precision/recall bar
+    panel. Data comes from
+    ``src.benzene_validation.run_benzene_internal_confusion``'s two output
+    CSVs (never recomputed here); this figure is presentation-only, exactly
+    like every other function in this module.
+
+    Layout (1x2, mirrors ``plot_confusion_matrix``'s top row): (a) the 3x3
+    heatmap via the shared ``_confusion_heatmap`` renderer (reusing
+    ``CATEGORY_COLOR``/``CATEGORY_LABEL`` -- the literal "SB" reference row
+    is routed to the "mixed" category color/label via the
+    ``REF_LABEL_TO_CATEGORY["SB"] = "mixed"`` addition, see that dict's
+    comment); (b) grouped precision/recall bars for 3 categories (bend,
+    stretch, and "mixed" -- the predicted-bucket name for what is a literal
+    "SB" reference row). Precision is computed here directly from the
+    confusion table (correctly-predicted / total-predicted-that-bucket);
+    recall comes straight from ``summary_csv``'s own ``recall`` column (same
+    numbers ``src.benzene_validation.benzene_internal_confusion_matrix``
+    already computes, not re-derived).
+
+    Distinct from ``fig:confusion`` (``plot_confusion_matrix``): that figure
+    is the whole-hydride-library (69-molecule) ideal/non-ideal validation;
+    this one is benzene's own internal 30 modes only, using benzene's
+    genuine literature 3-class ground truth (bend/stretch/SB) rather than
+    the library-wide binary stretch/bend reference. Companion per-bond
+    numerical detail for the two flagged contrast cases (modes 21/22 --
+    literature SB, predicted clean "B", both below tau_B; modes 23/24 --
+    literature stretch, predicted "SB"/mixed) lives in
+    ``data/results/benzene_sb_vs_stretch_bond_diagnostic.csv`` for a
+    companion LaTeX table -- not re-plotted inside this heatmap figure.
+    """
+    _style()
+    tbl = pd.read_csv(matrix_csv, index_col=0)
+    summary = pd.read_csv(summary_csv).set_index("ref_label")
+
+    ref_order = ["bend", "stretch", "SB"]
+    pred_order = ["bend", "stretch", "mixed"]
+    tbl = tbl.reindex(index=ref_order, columns=pred_order, fill_value=0)
+    n_total = int(tbl.values.sum())
+
+    fig, (ax_h, ax_p) = plt.subplots(1, 2, figsize=(7.4, 3.4),
+                                      gridspec_kw={"width_ratios": [1.15, 1.0]})
+
+    _confusion_heatmap(ax_h, fig, tbl, ref_order,
+                        f"(a) Benzene internal modes (n={n_total})")
+
+    # Each bar-panel category pairs one reference ROW with one predicted
+    # COLUMN of the SAME conceptual category: bend<->bend, stretch<->stretch,
+    # and SB(reference)<->mixed(predicted) -- the classifier has no predicted
+    # bucket literally named "SB", so "mixed" is its structural equivalent
+    # (matches src.benzene_validation._expected_pred_bucket's own convention).
+    cats = ["bend", "stretch", "mixed"]
+    row_for_cat = {"bend": "bend", "stretch": "stretch", "mixed": "SB"}
+    precisions, recalls = [], []
+    for cat in cats:
+        row, col = row_for_cat[cat], cat
+        tp = int(tbl.loc[row, col])
+        n_pred = int(tbl[col].sum())
+        precisions.append(tp / n_pred if n_pred else float("nan"))
+        recalls.append(float(summary.loc[row, "recall"]))
+
+    x = np.arange(len(cats))
+    width = 0.35
+    bar_colors = [CATEGORY_COLOR[c] for c in cats]
+    ax_p.bar(x - width / 2, precisions, width, color=bar_colors,
+             edgecolor="black", linewidth=0.5, label="precision")
+    ax_p.bar(x + width / 2, recalls, width, color=bar_colors,
+             edgecolor="black", linewidth=0.5, hatch="///", label="recall")
+    ax_p.set_xticks(x)
+    ax_p.set_xticklabels([CATEGORY_LABEL[c] for c in cats], fontsize=9)
+    ax_p.set_ylim(0, 1.18)
+    ax_p.set_ylabel("Precision / recall")
+    ax_p.set_title("(b) Benzene precision/recall", loc="left",
+                    fontweight="bold", fontsize=9)
+    ax_p.legend(loc="upper left", frameon=False, fontsize=8)
+    for xi, p, r in zip(x, precisions, recalls):
+        ax_p.text(xi - width / 2, p + 0.02, f"{p:.3f}", ha="center", va="bottom", fontsize=6.5)
+        ax_p.text(xi + width / 2, r + 0.02, f"{r:.3f}", ha="center", va="bottom", fontsize=6.5)
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary_dict = {
+        "pdf": pdf_path, "png": png_path,
+        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL/"
+                               "_confusion_heatmap from plot_confusion_matrix "
+                               "(fig:confusion) via the new "
+                               "REF_LABEL_TO_CATEGORY['SB']='mixed' routing -- "
+                               "does not modify fig:confusion itself."),
+        "n_total": n_total,
+        "confusion_table": tbl.to_dict(),
+        "precision": dict(zip(cats, precisions)),
+        "recall": dict(zip(cats, recalls)),
+        "note": ("Companion per-bond evidence for the 21/22 (SB->bend blind "
+                 "spot) vs. 23/24 (stretch->mixed) contrast lives in "
+                 "data/results/benzene_sb_vs_stretch_bond_diagnostic.csv "
+                 "for a separate LaTeX table -- not plotted here."),
+    }
+    return summary_dict
+
+
+# --------------------------------------------------------------------------
 # fig:bondscores -- bond score vs relative Delta-bond-length
 # --------------------------------------------------------------------------
 
@@ -1339,6 +1479,7 @@ def regenerate_all(verbose=True):
         ("fig:benzene", plot_benzene_stress_test),
         ("benzene-normal-modes gallery (no fig: label yet)", plot_benzene_normal_modes),
         ("fig:confusion", plot_confusion_matrix),
+        ("fig:benzeneconfusion", plot_benzene_internal_confusion),
         ("fig:bondscores", plot_bond_scores),
         ("fig:boxplots", plot_boxplots),
         ("fig:modemixing", plot_mode_mixing),

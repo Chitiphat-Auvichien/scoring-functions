@@ -297,6 +297,30 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
     df = df[df["ref_label"].notna()]  # every row here has a stretch/bend/
                                        # translation/rotation reference label
 
+    # EXCLUDE any reference label outside the 4 recognized categories
+    # (2026-07-05 fix, flagged after commit 69d549e gave benzene modes 21/22
+    # a genuine literal literature "SB" (mixed) ground-truth label for the
+    # first time). This function's confusion table and per-category
+    # precision/recall/retention accounting is specifically a 4-category
+    # (translation/rotation/stretch/bend) contingency check. Left in `df`, a
+    # foreign ref_label whose predicted bucket happens to land on one of
+    # those 4 (both mode 21 and 22 predict bucket "bend") would silently
+    # inflate that category's n_pred -- precision's denominator -- without
+    # ever being able to contribute a true positive, corrupting bend
+    # precision from 1.000 to 0.99267 for a reason that has nothing to do
+    # with classifier error. A literal literature "SB" row answers a
+    # different question ("does the literature call this mode genuinely
+    # mixed?" -- see src/benzene_validation.py::benzene_internal_confusion_matrix
+    # for that benzene-scoped 3-class table) than "did a nominal
+    # stretch/bend keep its label or migrate to mixed under non-ideal mass
+    # effects?", which is what this function's retention/precision
+    # accounting measures. Any other currently-unrecognized ref_label would
+    # hit the same silent miscount, so this is a general guard (not a
+    # benzene-only special case) and does not redesign the function or add a
+    # 3rd category to its own bucket vocabulary.
+    _KNOWN_REF_LABELS = ("stretch", "bend", "translation", "rotation")
+    df = df[df["ref_label"].isin(_KNOWN_REF_LABELS)]
+
     def _predict(row):
         if row["kind"] == "internal" and not row["has_geometry"]:
             return classification_bucket(vib_label(row["V_Stretch"], thresholds))

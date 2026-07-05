@@ -10,13 +10,69 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-05 (benzene reference-label revision + new S/B/SB confusion matrix promoted to
-> main text — see RESUME HERE below for the full writeup: new `csv_label_ingest.py` source, benzene's
-> genuine 3-class ground truth (18 bend/10 stretch/2 SB), new `fig:benzeneconfusion`, `confusion_matrix_
-> stats()` SB-precision fix, and the "Benzene normal modes"/"Stretching/bending classification"
-> subsections' numbers updated and recompiled clean, 33 pages, 0 undefined refs/citations.)
+> Last updated: 2026-07-05 (single-centre-only hydride-library scope fix — non-ideal population 58→51
+> molecules / 422→277 modes, rigorous tier 237→231; see RESUME HERE below for the full writeup.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-05 (author decision + lead-engineer, single-centre-only hydride-library scope fix):** The
+> manuscript's "hydride library" validation (tau_S/tau_B derivation + the ideal/non-ideal confusion-matrix
+> statistics in the "Stretching/bending classification" section) is explicitly scoped to single-centre
+> AB_n topologies only ("one distinguishable atom anchors all bonds symmetrically" — JCC .tex, that
+> subsection; `tab:ideal` lists exactly 11 single-centre AB_n molecules). The non-ideal side of the
+> library was violating this same scope: 7 of the 58 non-ideal molecules in `library_scores.csv` are NOT
+> single-centre — `C2H2`/`C2H4`/`C2H6` (two-centre), `H2O2` (two-centre), `C6H6` (six-centre, benzene),
+> `iso-C4H10`/`n-C4H10` (four-centre) — contributing 145 of 422 non-ideal internal modes (~34%) to
+> statistics that were supposed to be single-centre-only. Removing them brings the non-ideal population to
+> the **51 molecules / 277 modes** an independent hand-count of `tab:nonideal`'s own AB_n grid already
+> implied. `H2O` (single-centre) stays, as a familiar illustrative molecule.
+> **Mechanism chosen:** NOT an extension of `src/excel_ingest.py`'s `EXCLUDED_MOLECULES` (that constant is
+> `{"Gly5"}`, an ingest-time exclusion for a molecule with zero rows in the library at all — a different
+> kind of exclusion). Instead, a new analysis-time filter lives in `src/calibrate.py`:
+> `SINGLE_CENTRE_ONLY_EXCLUDE = {"C2H2","C2H4","C2H6","H2O2","C6H6","iso-C4H10","n-C4H10"}` +
+> `filter_single_centre_library(lib_df)` (drops rows by `molecule.isin(...)`, any `kind`). Deliberately
+> does NOT touch `library_scores.csv` itself or `excel_ingest.py` — every one of these 7 molecules' rows
+> stays in the CSV (benzene needs its rows there for its own dedicated confusion matrix). Applied
+> unconditionally as the first line of `confusion_matrix_stats()` (so every caller — `plot_confusion_
+> matrix`'s rigorous/non-ideal tiers, and the direct-call regression tests in `tests/test_calibrate.py` —
+> gets the correct scope automatically, without each needing its own copy of the filter) and directly by
+> `src/figures.py`'s `plot_bond_scores`/`plot_boxplots`/`plot_mode_mixing` (which build their populations
+> straight from `library_scores.csv`, not through `confusion_matrix_stats`). `derive_stretch_bend_
+> thresholds()` was confirmed (not assumed) unaffected: none of the 7 excluded molecules has an
+> `ideal=='yes'` row, so `tau_S=0.90368`/`tau_B=0.17327`/`tau_TR=0.95` are bit-identical to before.
+> **Rigorous tier also shrank, computed not assumed:** benzene (`C6H6`) is the only one of the 7 that is
+> geometry-backed (on-disk `.log`+`.gjf`), so besides its 30 non-ideal internal rows, it also contributed 6
+> geometry-backed external T/R rows that were being pooled into the "rigorous" tier (`kind=='external'`
+> regardless of `ideal` tag) — n=237→**231** (146→140 external + 91 ideal-internal, unchanged). The other 6
+> excluded molecules are Excel-only (no on-disk geometry) and contribute only non-ideal internal rows.
+> **Recomputed confusion-matrix numbers (pooled, full filtered library):** stretch recall 0.70815→0.66667
+> (mixed_fraction 0.29185→0.33333), bend recall 0.97482→0.98378 (mixed_fraction 0.02518→0.01622);
+> precision stays 1.0 for all 4 categories, `floor_met` stays False. Ideal-tier recall/n_ref (stretch
+> 1.0/41, bend 1.0/50) are exactly unchanged, as required by construction. Non-ideal-tier: bend
+> `n_ref_nonideal` 228→135 (`recall_nonideal` 0.96930→0.97778), stretch `n_ref_nonideal` 192→142
+> (`recall_nonideal` 0.64583→0.57042).
+> **Benzene's own dedicated confusion matrix (`benzene_internal_confusion_matrix.csv`/`_summary.csv`,
+> `fig:benzeneconfusion`, commits `69d549e`/`d298a21`) is completely untouched** — it reads `library_
+> scores.csv`'s C6H6 rows directly via `src/benzene_validation.py`, which never calls `confusion_matrix_
+> stats()` or the new filter; git diff on those two CSVs is empty.
+> **All 6 affected figures regenerated** (`py main.py --figures`): `fig:confusion` (n=231/277 in the two
+> panel titles), `fig:bondscores` (62 molecules, was 69), `fig:boxplots`/`fig:modemixing` (368 total
+> modes = 91 ideal + 277 non-ideal, was 91+422=513). `fig:benzene`/`fig:benzene_normal`/
+> `fig:benzeneconfusion`/`fig:sensitivity` were also regenerated as part of the same `--figures` run but
+> are pixel-identical (only their PDF metadata/timestamp changed) since none of them read the filtered
+> population.
+> **Tests:** `tests/test_calibrate.py` — 2 existing tests re-pinned to the new numbers above (docstrings
+> explain why, same convention as prior sessions) + 3 new tests (`test_single_centre_only_exclude_matches_
+> scope_decision`, `test_filter_single_centre_library_drops_exactly_the_excluded_molecules` — pins the 151
+> dropped rows (145 internal + benzene's 6 external) and the 51/277 non-ideal result,
+> `test_confusion_matrix_stats_applies_single_centre_filter_internally` — confirms the filter is applied
+> regardless of caller pre-filtering). `py -m pytest tests/` **80/80 green** (up from 77). **score-
+> validator PASS**: every number above independently re-derived from `library_scores.csv` directly
+> (not just re-read from this writeup), benzene's dedicated matrix confirmed byte-identical to HEAD, and
+> `git diff --stat -- src/scoring.py src/classifier.py` confirmed empty (core engine untouched).
+> **Not done / out of scope:** `src/csv_label_ingest.py` and its 6-molecule xlsx-fallback list happen to
+> include the same `C2H2`/`C2H4`/`C2H6`/`H2O2`/`iso-C4H10`/`n-C4H10` set (a coincidence of which molecules
+> the new label CSVs don't cover yet, unrelated to this scope decision) — left untouched, since that list
+> is about label/citation SOURCE, not statistical scope.
 > **2026-07-05 (author decision + lead-engineer, new ref_label/ideal/citation-key source across ALL
 > molecules -- literature relabeling of benzene modes 21/22/19/23/24):** The author replaced the
 > label/citation content that used to live only inside `data/vibrational-scoring-functions.xlsx`'s

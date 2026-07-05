@@ -1663,28 +1663,22 @@ def plot_mode_mixing(
 # same as every other function above).
 # --------------------------------------------------------------------------
 
-def _unique_marker_kwargs(color_key, unique):
+def _hollow_marker_kwargs(color_key, marker):
     """Marker styling for one (type, irrep) category in fig_irrep_coupling:
     color encodes bend/stretch (CATEGORY_COLOR's 'bending'/'stretching' hue,
-    via `color_key`), fill encodes unique-irrep (filled, no same-irrep
-    coupling partner in its point group) vs. shared-irrep (hollow,
-    coupling-capable) -- deliberately reusing the SAME filled/hollow visual
-    grammar as IDEAL_STYLE (filled = clean/protected, hollow = exposed to a
-    perturbation) rather than inventing a new one, even though the semantic
-    axis here (unique vs. shared irrep) is distinct from ideal/non-ideal
-    molecule membership. ONE marker shape (circle) throughout -- color+fill
-    already fully distinguish every category in both panels (at most 2
-    irreps share a color within any one panel), so a third, redundant shape
-    encoding is not added, matching this module's established
-    "don't over-encode a 2-way split" convention (see `_marker_kwargs`'s own
-    docstring).
+    via `color_key`); marker SHAPE encodes irrep identity, with the SAME
+    shape reused for the same irrep symbol across the bend/stretch color
+    split whenever that irrep is shared (coupling-capable) between the two
+    categories -- so shape-matching across a color change is itself the
+    visual signal of a symmetry-permitted coupling pathway. ALL markers are
+    unfilled/hollow (author revision 2026-07-06): fill no longer encodes
+    anything here (its old unique-vs-shared role is now carried entirely by
+    shape), so every category gets `facecolors="none"` with a color-matched
+    edge.
     """
     color = COLORS[color_key]
-    if unique:
-        return dict(marker="o", facecolors=color, edgecolors=color,
-                    linewidths=0.6, alpha=0.9)
-    return dict(marker="o", facecolors="none", edgecolors=color,
-                linewidths=0.9, alpha=0.9)
+    return dict(marker=marker, facecolors="none", edgecolors=color,
+                linewidths=1.15, alpha=0.95)
 
 
 def plot_irrep_coupling(
@@ -1699,11 +1693,18 @@ def plot_irrep_coupling(
     that ``tab:nonideal``'s caption also folds into the pooled non-ideal
     population -- ``tab:nonideal``'s "Bent AB2" row). Both panels plot mode
     score (``vib_scr``) vs. central-atom displacement amplitude (``|d_CA|``),
-    faceted by (type, irrep): filled = unique irrep in that point group (no
-    same-irrep coupling partner, stays clean regardless of |d_CA|), hollow =
-    shared irrep (has a same-irrep partner among the molecule's other modes,
-    so CAN couple with it) -- color is bend (blue)/stretch (vermillion), the
-    same CATEGORY_COLOR hues used everywhere else in this module.
+    faceted by (type, irrep): ALL markers are unfilled/hollow (author
+    revision 2026-07-06); color is bend (blue)/stretch (vermillion), the same
+    CATEGORY_COLOR hues used everywhere else in this module, and marker SHAPE
+    encodes irrep identity, with the SAME shape reused for the same irrep
+    symbol whenever it appears in BOTH a bend and a stretch category (the
+    shared/coupling-capable case) -- e.g. panel (a)'s E' is a triangle in
+    both "bend E'" and "stretch E'"; panel (b)'s A1 is a diamond in both
+    "bend A1" and "stretch A1". Irreps unique to one category each get their
+    own distinct shape (panel (a): A2″ = circle, A1' = square; panel (b):
+    B2 = circle). Shape-matching across the bend/stretch color split is
+    itself the visual cue for a symmetry-permitted coupling pathway between
+    those two categories.
 
     Reproduces the group's earlier project report's Figures 3c/3d with the
     current pipeline's own recomputed scores (see data source note in this
@@ -1722,32 +1723,37 @@ def plot_irrep_coupling(
     ab3 = df[(df["shape"] == "trigonal planar") & (df["ideal"] == "no")].copy()
     ab2 = df[(df["shape"] == "bend") & (df["ideal"] == "no")].copy()
 
-    # (type, irrep) -> (color_key, unique_flag, legend text). Defined
+    # (type, irrep) -> (color_key, marker shape, legend text). Defined
     # per-panel (not a single shared dict) since the two point groups use
-    # different irrep labels and different unique/shared assignments (AB2's
-    # A1 is shared in BOTH branches; AB3's A1'/A2'' are each unique).
+    # different irrep labels and different shared/unique assignments (AB2's
+    # A1 is shared in BOTH branches; AB3's A1'/A2'' are each unique to one
+    # branch while E' is shared). The marker shape is keyed to the irrep
+    # SYMBOL, not to (type, irrep), so the same irrep gets the same shape
+    # in both its bend and stretch appearances -- circle/triangle/square/
+    # diamond chosen for clear distinction even hollow and small; no
+    # plus/x (easily lost against gridlines).
     ab3_categories = [
-        ("bend", "A₂\"", "bending", True, "bend A2″ (unique irrep)"),
-        ("bend", "E'", "bending", False, "bend E' (shared irrep)"),
-        ("stretch", "A₁'", "stretching", True, "stretch A1' (unique irrep)"),
-        ("stretch", "E'", "stretching", False, "stretch E' (shared irrep)"),
+        ("bend", "A₂\"", "bending", "o", "bend A2″ (unique irrep)"),
+        ("bend", "E'", "bending", "^", "bend E′ (shared irrep -- same shape as stretch E′)"),
+        ("stretch", "A₁'", "stretching", "s", "stretch A1′ (unique irrep)"),
+        ("stretch", "E'", "stretching", "^", "stretch E′ (shared irrep -- same shape as bend E′)"),
     ]
     ab2_categories = [
-        ("bend", "A₁", "bending", False, "bend A1 (shared irrep)"),
-        ("stretch", "A₁", "stretching", False, "stretch A1 (shared irrep)"),
-        ("stretch", "B₂", "stretching", True, "stretch B2 (unique irrep)"),
+        ("bend", "A₁", "bending", "D", "bend A1 (shared irrep -- same shape as stretch A1)"),
+        ("stretch", "A₁", "stretching", "D", "stretch A1 (shared irrep -- same shape as bend A1)"),
+        ("stretch", "B₂", "stretching", "o", "stretch B2 (unique irrep)"),
     ]
 
     fig, (ax_3, ax_2) = plt.subplots(1, 2, figsize=(7.2, 3.4))
 
     def _plot_panel(ax, sub_df, categories, title):
         n_plotted = 0
-        for mode_type, irrep, color_key, unique, legend_text in categories:
+        for mode_type, irrep, color_key, marker, legend_text in categories:
             pts = sub_df[(sub_df["type"] == mode_type) & (sub_df["irrep"] == irrep)]
             if pts.empty:
                 continue
-            kw = _unique_marker_kwargs(color_key, unique)
-            ax.scatter(pts["|d_CA|"], pts["vib_scr"], s=26, zorder=3,
+            kw = _hollow_marker_kwargs(color_key, marker)
+            ax.scatter(pts["|d_CA|"], pts["vib_scr"], s=34, zorder=3,
                        label=legend_text, **kw)
             n_plotted += len(pts)
         ax.set_xlabel(r"$|\mathbf{d}_{CA}|$ (central-atom displacement amplitude)")
@@ -1771,12 +1777,16 @@ def plot_irrep_coupling(
     summary = {
         "pdf": pdf_path, "png": png_path,
         "shared_categories": ("reuses CATEGORY_COLOR's bending/stretching "
-                               "hues; fill encodes unique-irrep (filled) vs. "
-                               "shared/coupling-capable-irrep (hollow), the "
-                               "same visual grammar as IDEAL_STYLE but on a "
-                               "different semantic axis (irrep uniqueness, "
-                               "not ideal/non-ideal molecule membership). ONE "
-                               "marker shape (circle) throughout."),
+                               "hues; ALL markers unfilled/hollow (2026-07-06 "
+                               "revision -- fill no longer encodes anything "
+                               "here). Marker SHAPE now encodes irrep identity: "
+                               "panel (a) A2″=circle, E'=triangle (shared "
+                               "between bend/stretch), A1'=square; panel (b) "
+                               "A1=diamond (shared between bend/stretch), "
+                               "B2=circle. Same irrep symbol always gets the "
+                               "same shape across the bend/stretch color "
+                               "split, so shape-matching visually flags a "
+                               "coupling-capable shared irrep."),
         "ab3_molecules": sorted(ab3["molecule"].unique().tolist()),
         "ab2_molecules": sorted(ab2["molecule"].unique().tolist()),
         "n_ab3_points": n_ab3,

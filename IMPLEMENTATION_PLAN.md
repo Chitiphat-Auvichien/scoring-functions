@@ -3,17 +3,18 @@
 > Living checklist. Tick `[x]` as parts are completed; pick up unchecked items in any later session.
 > Companion to the JCC manuscript `JCC/JCC_man_scoring/JCC_temp_LaTeXtemplate.tex`, the content plan
 > `JCC/JCC_manuscript_structure_JCCformat.pdf` (positioning spine — still current), and the plan slides.
-> **Manuscript-structure slides: `JCC/Scoring_Manuscript_Plan_2026-07-02.pdf` is now the CURRENT
-> authoritative Results & Discussion structure/content doc** (supersedes `..._2026-07-01.pdf`, which
-> itself superseded `..._2026-06-29.pdf` — all three are kept on disk for history; always use the
-> newest-dated one unless told otherwise). Any agent working on the manuscript's Results & Discussion
-> section (`lead-author` especially, but also `figure-builder`/`lead-engineer` when their output feeds a
-> specific section) should be pointed at this file, not an older one.
-> Last updated: 2026-07-02 (Results & Discussion structural pass complete: stretching/bending subsection
-> reordered to establish τ_S/τ_B from ideal molecules before applying to non-ideal + confusion matrix;
-> fig:benzene replaced by tab:emitselected; fig:sensitivity moved to new SI doc JCC_SI_sensitivity.tex;
-> benzene depicted-mode figure placeholder added; all three documents recompiled clean — see RESUME HERE
-> for the full writeup. Caption-side S/B/SB gloss text (from the prior update) still outstanding.)
+> **Manuscript-structure slides: `JCC/Scoring_Manuscript_Plan_2026-07-05.pdf` is now the CURRENT
+> authoritative Results & Discussion structure/content doc** (supersedes `..._2026-07-02.pdf`, which
+> superseded `..._2026-07-01.pdf`, which itself superseded `..._2026-06-29.pdf` — all four are kept on
+> disk for history; always use the newest-dated one unless told otherwise). Any agent working on the
+> manuscript's Results & Discussion section (`lead-author` especially, but also
+> `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
+> file, not an older one.
+> Last updated: 2026-07-05 (benzene reference-label revision + new S/B/SB confusion matrix promoted to
+> main text — see RESUME HERE below for the full writeup: new `csv_label_ingest.py` source, benzene's
+> genuine 3-class ground truth (18 bend/10 stretch/2 SB), new `fig:benzeneconfusion`, `confusion_matrix_
+> stats()` SB-precision fix, and the "Benzene normal modes"/"Stretching/bending classification"
+> subsections' numbers updated and recompiled clean, 33 pages, 0 undefined refs/citations.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **2026-07-05 (author decision + lead-engineer, new ref_label/ideal/citation-key source across ALL

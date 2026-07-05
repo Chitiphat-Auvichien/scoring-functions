@@ -28,8 +28,23 @@ called out. It does not modify or replace ``plot_benzene_stress_test``.
 2026-07-05) is an 8th figure, enabled by the literature relabeling of
 benzene modes 21/22 as a literal 3-class "SB" (mixed) ground truth (commit
 69d549e): benzene's own 3x3 (bend/stretch/SB reference x bend/stretch/mixed
-predicted) internal-mode confusion matrix + precision/recall, distinct from
-the whole-hydride-library ``fig:confusion``.
+predicted) internal-mode confusion matrix, distinct from the whole-hydride-
+library ``fig:confusion``.
+
+``plot_benzene_internal_confusion`` was RESTRUCTURED 2026-07-05 (later the
+same day, author decision, tone/framing only -- NOT the same circularity
+argument as the ``fig:confusion``/``plot_rigorous_tier_check`` split above):
+benzene's literature stretch/bend/SB ground truth (Shi 1972) is genuinely
+external, non-circular ground truth, so there is no accuracy-inflation
+concern here. The issue is instead that a precision/recall bar panel reads
+as a formal accuracy-metric claim, which sits awkwardly next to this
+section's own repeated, deliberate hedging language for benzene specifically
+("calling a mode 'mixed' by eye is a convention, not an exact measurement").
+The 3x3 heatmap alone is more honest here: it shows where modes landed
+without asserting a formal metric. The precision/recall bar panel (still the
+exact same, unchanged numbers) now lives in a 10th figure,
+``plot_benzene_confusion_precision_recall`` (``fig_benzene_precision_recall``,
+no ``fig:`` label of its own -- SI-bound, not main text).
 
 ``plot_confusion_matrix`` (``fig:confusion``) was RESTRUCTURED 2026-07-05
 (author decision) from a two-tier 2x2 layout down to a SINGLE-TIER 1x2
@@ -1063,31 +1078,41 @@ def plot_rigorous_tier_check(
 
 def plot_benzene_internal_confusion(
     matrix_csv="data/results/benzene_internal_confusion_matrix.csv",
-    summary_csv="data/results/benzene_internal_confusion_summary.csv",
     out_dir="data/figures",
     label="fig_benzene_confusion",
 ):
     """Build fig:benzeneconfusion: benzene's (C6H6) 3x3 internal-mode
-    confusion matrix -- reference bend/stretch/SB (literal literature label,
-    modes 21/22, an E1u degenerate pair at 1532.85 cm-1) x predicted
-    bend/stretch/mixed bucket -- plus a per-category precision/recall bar
-    panel. Data comes from
-    ``src.benzene_validation.run_benzene_internal_confusion``'s two output
-    CSVs (never recomputed here); this figure is presentation-only, exactly
-    like every other function in this module.
+    confusion matrix ONLY -- reference bend/stretch/SB (literal literature
+    label, modes 21/22, an E1u degenerate pair at 1532.85 cm-1) x predicted
+    bend/stretch/mixed bucket. Data comes from
+    ``src.benzene_validation.benzene_internal_confusion_matrix``'s output CSV
+    (never recomputed here); this figure is presentation-only, exactly like
+    every other function in this module.
 
-    Layout (1x2, mirrors ``plot_confusion_matrix``'s top row): (a) the 3x3
-    heatmap via the shared ``_confusion_heatmap`` renderer (reusing
-    ``CATEGORY_COLOR``/``CATEGORY_LABEL`` -- the literal "SB" reference row
-    is routed to the "mixed" category color/label via the
+    RESTRUCTURED 2026-07-05 (later the same day, author decision -- tone/
+    framing only, see this module's header comment above): this figure used
+    to be a 1x2 layout with a companion precision/recall bar panel. That
+    panel is NOT dropped for the circularity reason that motivated the
+    fig:confusion/plot_rigorous_tier_check split above -- benzene's
+    literature stretch/bend/SB ground truth (Shi 1972) is genuine, external,
+    non-circular ground truth. It is moved to the Supporting Information
+    (``plot_benzene_confusion_precision_recall`` below) purely because a
+    formal precision/recall bar chart reads as an accuracy-metric claim that
+    sits awkwardly next to this section's own deliberate hedging language
+    ("calling a mode 'mixed' by eye is a convention, not an exact
+    measurement" -- see the prose immediately following this figure in the
+    main text). The heatmap alone is the more honest main-text figure: it
+    shows where modes landed without asserting a formal metric. The
+    underlying numbers are UNCHANGED and still reported -- in prose in the
+    main text, and in full via the SI figure -- only the bar-chart
+    visualization moved.
+
+    Layout (1x1, was 1x2): the 3x3 heatmap via the shared
+    ``_confusion_heatmap`` renderer (reusing ``CATEGORY_COLOR``/
+    ``CATEGORY_LABEL`` -- the literal "SB" reference row is routed to the
+    "mixed" category color/label via the
     ``REF_LABEL_TO_CATEGORY["SB"] = "mixed"`` addition, see that dict's
-    comment); (b) grouped precision/recall bars for 3 categories (bend,
-    stretch, and "mixed" -- the predicted-bucket name for what is a literal
-    "SB" reference row). Precision is computed here directly from the
-    confusion table (correctly-predicted / total-predicted-that-bucket);
-    recall comes straight from ``summary_csv``'s own ``recall`` column (same
-    numbers ``src.benzene_validation.benzene_internal_confusion_matrix``
-    already computes, not re-derived).
+    comment).
 
     Distinct from ``fig:confusion`` (``plot_confusion_matrix``): that figure
     is the whole-hydride-library (69-molecule) ideal/non-ideal validation;
@@ -1102,18 +1127,80 @@ def plot_benzene_internal_confusion(
     """
     _style()
     tbl = pd.read_csv(matrix_csv, index_col=0)
-    summary = pd.read_csv(summary_csv).set_index("ref_label")
 
     ref_order = ["bend", "stretch", "SB"]
     pred_order = ["bend", "stretch", "mixed"]
     tbl = tbl.reindex(index=ref_order, columns=pred_order, fill_value=0)
     n_total = int(tbl.values.sum())
 
-    fig, (ax_h, ax_p) = plt.subplots(1, 2, figsize=(7.4, 3.4),
-                                      gridspec_kw={"width_ratios": [1.15, 1.0]})
+    fig, ax_h = plt.subplots(figsize=(3.9, 3.4))
 
+    # No "(a)" panel-letter prefix any more -- single-panel figure now that
+    # the precision/recall bar panel has moved to its own SI figure below.
     _confusion_heatmap(ax_h, fig, tbl, ref_order,
-                        f"(a) Benzene internal modes (n={n_total})")
+                        f"Benzene internal modes (n={n_total})")
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary_dict = {
+        "pdf": pdf_path, "png": png_path,
+        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL/"
+                               "_confusion_heatmap from plot_confusion_matrix "
+                               "(fig:confusion) via the new "
+                               "REF_LABEL_TO_CATEGORY['SB']='mixed' routing -- "
+                               "does not modify fig:confusion itself."),
+        "n_total": n_total,
+        "confusion_table": tbl.to_dict(),
+        "note": ("Precision/recall bar panel RESTRUCTURED OUT 2026-07-05 to "
+                 "plot_benzene_confusion_precision_recall (SI, not main "
+                 "text) -- tone/framing decision, not a circularity concern "
+                 "(this ground truth is genuinely external). Companion "
+                 "per-bond evidence for the 21/22 (SB->bend blind spot) vs. "
+                 "23/24 (stretch->mixed) contrast lives in "
+                 "data/results/benzene_sb_vs_stretch_bond_diagnostic.csv "
+                 "for a separate LaTeX table -- not plotted here."),
+    }
+    return summary_dict
+
+
+def plot_benzene_confusion_precision_recall(
+    matrix_csv="data/results/benzene_internal_confusion_matrix.csv",
+    summary_csv="data/results/benzene_internal_confusion_summary.csv",
+    out_dir="data/figures",
+    label="fig_benzene_precision_recall",
+):
+    """Build the SI companion to fig:benzeneconfusion (10th figure, no
+    ``fig:`` label of its own -- SI-bound, not main text): benzene's own
+    internal-mode per-category precision/recall bar panel, SPLIT OUT of
+    ``plot_benzene_internal_confusion`` 2026-07-05 (author decision, tone/
+    framing only -- see that function's docstring and this module's header
+    comment for the full rationale). Same numbers, unchanged, just moved out
+    of the main-text figure and into the Supporting Information: benzene's
+    literature stretch/bend/SB ground truth (Shi 1972) is genuinely external,
+    non-circular ground truth (unlike the ideal-population rigorous tier
+    ``plot_rigorous_tier_check`` guards against), so this move is NOT the
+    same circularity argument -- it is purely that a formal precision/recall
+    bar chart reads as an accuracy-metric claim sitting awkwardly beside this
+    section's own deliberate "calling a mode 'mixed' by eye is a convention,
+    not an exact measurement" hedge.
+
+    Layout (1x1): grouped precision/recall bars for 3 categories (bend,
+    stretch, and "mixed" -- the predicted-bucket name for what is a literal
+    "SB" reference row). Precision is computed here directly from the
+    confusion table (correctly-predicted / total-predicted-that-bucket);
+    recall comes straight from ``summary_csv``'s own ``recall`` column (same
+    numbers ``src.benzene_validation.benzene_internal_confusion_matrix``
+    already computes, not re-derived).
+    """
+    _style()
+    tbl = pd.read_csv(matrix_csv, index_col=0)
+    summary = pd.read_csv(summary_csv).set_index("ref_label")
+
+    ref_order = ["bend", "stretch", "SB"]
+    pred_order = ["bend", "stretch", "mixed"]
+    tbl = tbl.reindex(index=ref_order, columns=pred_order, fill_value=0)
 
     # Each bar-panel category pairs one reference ROW with one predicted
     # COLUMN of the SAME conceptual category: bend<->bend, stretch<->stretch,
@@ -1130,6 +1217,7 @@ def plot_benzene_internal_confusion(
         precisions.append(tp / n_pred if n_pred else float("nan"))
         recalls.append(float(summary.loc[row, "recall"]))
 
+    fig, ax_p = plt.subplots(figsize=(3.9, 3.4))
     x = np.arange(len(cats))
     width = 0.35
     bar_colors = [CATEGORY_COLOR[c] for c in cats]
@@ -1141,8 +1229,9 @@ def plot_benzene_internal_confusion(
     ax_p.set_xticklabels([CATEGORY_LABEL[c] for c in cats], fontsize=9)
     ax_p.set_ylim(0, 1.18)
     ax_p.set_ylabel("Precision / recall")
-    ax_p.set_title("(b) Benzene precision/recall", loc="left",
-                    fontweight="bold", fontsize=9)
+    ax_p.set_title("Benzene internal-mode precision/recall\n"
+                    "(companion to the main-text confusion matrix -- "
+                    "see caption)", fontsize=8.5, loc="center")
     ax_p.legend(loc="upper left", frameon=False, fontsize=8)
     for xi, p, r in zip(x, precisions, recalls):
         ax_p.text(xi - width / 2, p + 0.02, f"{p:.3f}", ha="center", va="bottom", fontsize=6.5)
@@ -1154,19 +1243,19 @@ def plot_benzene_internal_confusion(
 
     summary_dict = {
         "pdf": pdf_path, "png": png_path,
-        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL/"
-                               "_confusion_heatmap from plot_confusion_matrix "
-                               "(fig:confusion) via the new "
-                               "REF_LABEL_TO_CATEGORY['SB']='mixed' routing -- "
+        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL from "
+                               "plot_confusion_matrix (fig:confusion) -- "
                                "does not modify fig:confusion itself."),
-        "n_total": n_total,
-        "confusion_table": tbl.to_dict(),
         "precision": dict(zip(cats, precisions)),
         "recall": dict(zip(cats, recalls)),
-        "note": ("Companion per-bond evidence for the 21/22 (SB->bend blind "
-                 "spot) vs. 23/24 (stretch->mixed) contrast lives in "
-                 "data/results/benzene_sb_vs_stretch_bond_diagnostic.csv "
-                 "for a separate LaTeX table -- not plotted here."),
+        "framing": ("SI companion, not an independent accuracy claim beyond "
+                     "what fig:benzeneconfusion's heatmap already shows -- "
+                     "benzene's literature ground truth (Shi 1972) is "
+                     "genuinely external and non-circular, so this bar panel "
+                     "is a legitimate precision/recall report; it was moved "
+                     "out of the main text purely for tone/framing "
+                     "consistency with the surrounding hedging prose, not "
+                     "because the numbers are suspect."),
     }
     return summary_dict
 
@@ -1606,11 +1695,12 @@ def regenerate_all(verbose=True):
     already-computed ``data/results/*.csv`` inputs with their own defaults;
     this function takes no molecule-specific arguments.
 
-    Returns a dict {tex_label: result_dict} for all 8 figures (6 labeled
+    Returns a dict {tex_label: result_dict} for all 10 figures (6 labeled
     fig:* + the standalone benzene-normal-modes gallery + the SI rigorous-
-    tier consistency check), in the same order they are built. Raises
-    whatever the underlying plot_* function raises (e.g. a missing input
-    CSV) -- fail loud, no silent partial regeneration.
+    tier consistency check + fig:benzeneconfusion + its SI precision/recall
+    companion), in the same order they are built. Raises whatever the
+    underlying plot_* function raises (e.g. a missing input CSV) -- fail
+    loud, no silent partial regeneration.
     """
     fns = [
         ("fig:benzene", plot_benzene_stress_test),
@@ -1618,6 +1708,7 @@ def regenerate_all(verbose=True):
         ("fig:confusion", plot_confusion_matrix),
         ("SI rigorous-tier consistency check (no fig: label yet)", plot_rigorous_tier_check),
         ("fig:benzeneconfusion", plot_benzene_internal_confusion),
+        ("SI benzene precision/recall (no fig: label yet)", plot_benzene_confusion_precision_recall),
         ("fig:bondscores", plot_bond_scores),
         ("fig:boxplots", plot_boxplots),
         ("fig:modemixing", plot_mode_mixing),

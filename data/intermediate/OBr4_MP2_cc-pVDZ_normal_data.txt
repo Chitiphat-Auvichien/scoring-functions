@@ -8,7 +8,10 @@ COORDINATES (Angstrom)
 1.749154 -0.000000 1.236676
 -1.749154 0.000000 1.236676
 BONDS (AtomIndex1 AtomIndex2) [1-based]
-# No bonds detected. Please add them below.
+1 2
+1 3
+1 4
+1 5
 NUM_MODES 9
 MODE 1
 FREQ 69.285600

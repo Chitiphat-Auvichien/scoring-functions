@@ -6,11 +6,12 @@ Run from ``Github/scoring-functions/``:
     py -m pytest tests/test_intermediate_cache.py
     py tests/test_intermediate_cache.py       (standalone; no pytest needed)
 
-Exercises against the real 'water' normal-mode data already in this repo
-(data/logs/water.log + data/gjf/water.gjf), matching the convention the rest
-of tests/ already uses (real molecules, not synthetic fixtures). Each test
-snapshots and restores the intermediate file's bytes/mtime and the log's
-mtime, so running this file has no lasting effect on repo state.
+Exercises against the real water normal-mode data already in this repo
+(data/logs/H2O-MP2-321G.log + data/gjf/H2O-MP2-321G.com -- the finalized
+mol_list_method.csv roster basename, 2026-07-07), matching the convention
+the rest of tests/ already uses (real molecules, not synthetic fixtures).
+Each test snapshots and restores the intermediate file's bytes/mtime and the
+log's mtime, so running this file has no lasting effect on repo state.
 """
 import os
 import sys
@@ -23,7 +24,7 @@ DATA_DIR = os.path.join(ROOT, "data")
 import main                                                          # noqa: E402
 from src.parser import GaussianParser                                # noqa: E402
 
-MOL, MODE = "water", "normal"
+MOL, MODE = "H2O-MP2-321G", "normal"
 
 
 def _inter_path():

@@ -21,8 +21,16 @@ library) changes thresholds.json's numbers. The calibrated-threshold behavior
 is independently re-verified against the SAME targets in
 tests/test_calibrate.py, which loads Thresholds.calibrated() explicitly --
 see that file for the confirmation that calibration did not change any of
-these labels (tau_S 0.9->0.90368, tau_B 0.2->0.17327, tau_TR unchanged at
+these labels (tau_S 0.9->0.9037, tau_B 0.2->0.1733, tau_TR unchanged at
 0.95; every target below is robust to that shift).
+
+**2026-07-07 basename update:** "water"/"benzene" -> the finalized roster
+basenames `H2O-MP2-321G`/`C6H6_MP2_3-21G_D6h` (data/mol_list_method.csv).
+Every assertion in this file is CLASSIFICATION-LEVEL (bucket labels like
+BENDING/STRETCHING/"Tx", bond counts), not a pinned V_Stretch/T/R number, so
+none needed updating -- water's new file's V_Stretch values differ from the
+old file's (see tests/test_scores.py's module docstring) but land on the
+same side of tau_S/tau_B either way.
 """
 import os
 import sys
@@ -55,14 +63,14 @@ def test_water_normal_externals_clean():
     """The 6 ideal T/R reference modes classify clean (score>=tau_TR, V<=tau_B) --
     i.e. the bare slot name itself ("Tx".."Rz"), per the 2026-07-02 axis-specific
     label rename (no more generic CLEAN_TRANSLATION/CLEAN_ROTATION constants)."""
-    t = _classify("water", "normal")
+    t = _classify("H2O-MP2-321G", "normal")
     for lbl in ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz"):
         assert t[lbl]["classification"] == lbl, t[lbl]["classification"]
 
 
 def test_water_normal_vibrations():
     """Vib1 = bend -> BENDING; Vib2/Vib3 = stretches -> STRETCHING, with s_AB summing to V."""
-    t = _classify("water", "normal")
+    t = _classify("H2O-MP2-321G", "normal")
     assert t["Vib 1"]["classification"] == BENDING
     assert t["Vib 1"]["bonds"] == []  # bonds only attached for STRETCHING/MIXED_STRETCH_BEND
 
@@ -78,7 +86,7 @@ def test_benzene_emit_34_35_mixed_external():
     with the axis-specific mixed-external label ("Tx*"/"Ty*", 2026-07-02 rename); the axis
     is now IN the classification itself, so the annotation only carries the vibration
     sub-label (no more redundant "dominant_external=..." text)."""
-    t = _classify("benzene", "emit")
+    t = _classify("C6H6_MP2_3-21G_D6h", "emit")
     assert t["EMIT 34"]["classification"] == "Tx*"
     assert is_mixed_external(t["EMIT 34"]["classification"])
     assert t["EMIT 34"]["annotation"] == f"vibration={MIXED_STRETCH_BEND}"
@@ -94,7 +102,7 @@ def test_benzene_emit_36_clean_translation_blind_spot():
     s[V_S]=0 for it too (bending, not stretching). Reproducing clean "Tz" here is
     correct -- do not "fix" this.
     """
-    t = _classify("benzene", "emit")
+    t = _classify("C6H6_MP2_3-21G_D6h", "emit")
     assert t["EMIT 36"]["classification"] == "Tz"
     assert abs(t["EMIT 36"]["V"]) < TOL
 
@@ -126,8 +134,8 @@ def test_classify_to_rows_shape():
     """classify_to_rows() produces the documented CSV columns for both mol/mode_type combos."""
     expected_cols = {"Mode", "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_Stretch",
                      "label", "annotation", "s_AB"}
-    for mol, mode_type, freq_col in [("water", "normal", "Freq"),
-                                      ("benzene", "emit", "Eigenvalue")]:
+    for mol, mode_type, freq_col in [("H2O-MP2-321G", "normal", "Freq"),
+                                      ("C6H6_MP2_3-21G_D6h", "emit", "Eigenvalue")]:
         raw, _ = load_inputs(mol, mode_type, os.path.join(ROOT, "data"))
         scorer, final = build_scorer_and_final(raw, mode_type)
         scored = classify_all_modes(scorer, final)

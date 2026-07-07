@@ -7,6 +7,23 @@ Run from ``Github/scoring-functions/``:
 Golden values: the published water table (tab:water, consensus s[R]) and the
 benzene-EMIT score-level targets. Invariants: Sum s_AB == s[V_S] and score ranges.
 These freeze the engine's numerical behaviour so regressions are caught immediately.
+
+**2026-07-07 basename update:** the old `data/logs/water.log`/`data/gjf/water.gjf`
+and `data/logs/benzene.log`/`data/gjf/benzene.com` were replaced (not just
+renamed) by the author when `data/mol_list_method.csv`'s 72-molecule roster
+was finalized -- `H2O-MP2-321G` and `C6H6_MP2_3-21G_D6h` are the new,
+finalized on-disk basenames (`data/EMIT/*_EMIT.txt` renamed to match, same
+session). Benzene's EMIT-derived numbers below are numerically UNCHANGED
+(re-verified against a live run) -- the rename there was content-preserving.
+Water's numbers DID change: `H2O-MP2-321G.log` is a genuinely different
+(corrected) calculation from the old `water.log`, not the same water calc
+under a new name (confirmed: old `water.log`'s engine-parsed frequencies
+were 1628.029/3887.192/4005.506 cm-1, mismatching even the literature/
+data_score.csv values; the new file's 1722.457/3501.507/3660.797 cm-1 match
+data_score.csv). `test_water_tab_water`'s pinned values are updated to the
+new file's real output (re-derived from a live run, not fudged) -- these no
+longer necessarily match the manuscript's currently-typeset `tab:water`
+(that reconciliation is separate, downstream manuscript work).
 """
 import os
 import sys
@@ -56,17 +73,22 @@ def _emit_table(mol):
 
 
 def test_water_tab_water():
-    """Reproduce tab:water to 3 dp (consensus s[R])."""
-    _, t = _normal_table("water")
+    """Score-level water golden values from the finalized roster basename
+    H2O-MP2-321G (consensus s[R]). Re-derived from a live run against the
+    new file -- these are NOT the manuscript's currently-typeset tab:water
+    numbers (see module docstring: the old water.log was a different,
+    mismatched calculation); manuscript reconciliation is separate,
+    downstream work."""
+    _, t = _normal_table("H2O-MP2-321G")
     for ext in ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"]:
         assert abs(t[ext][ext] - 1.0) < TOL, f"external {ext} should be 1.000"
-    assert abs(t["Tx"]["Rz"] - 0.049) < TOL
-    assert abs(t["Tz"]["Rx"] - (-0.333)) < TOL
-    assert abs(t["Vib1"]["V"] - 0.061) < TOL          # bend (sigma)
-    assert abs(t["Vib2"]["V"] - 1.000) < TOL          # nu_s
-    assert abs(t["Vib3"]["V"] - 0.998) < TOL          # nu_as
-    assert abs(t["Vib3"]["Tx"] - (-0.190)) < TOL
-    assert abs(t["Vib3"]["Rz"] - (-0.295)) < TOL
+    assert abs(t["Tx"]["Rz"] - 0.0411) < TOL
+    assert abs(t["Tz"]["Rx"] - (-0.3333)) < TOL
+    assert abs(t["Vib1"]["V"] - 0.1343) < TOL         # bend (sigma)
+    assert abs(t["Vib2"]["V"] - 0.9966) < TOL         # nu_s
+    assert abs(t["Vib3"]["V"] - 0.9984) < TOL         # nu_as
+    assert abs(t["Vib3"]["Tx"] - (-0.1963)) < TOL
+    assert abs(t["Vib3"]["Rz"] - (-0.2959)) < TOL
 
 
 def test_co2_linear():
@@ -79,8 +101,10 @@ def test_co2_linear():
 
 
 def test_benzene_emit_targets():
-    """Score-level benzene-EMIT targets from the manuscript."""
-    _, t = _emit_table("benzene")
+    """Score-level benzene-EMIT targets from the manuscript. Numbers
+    unchanged vs. the pre-2026-07-07 basename (benzene -> C6H6_MP2_3-21G_D6h
+    was a content-preserving rename; re-verified against a live run)."""
+    _, t = _emit_table("C6H6_MP2_3-21G_D6h")
     assert abs(t["EMIT 34"]["V"] - 0.6667) < TOL
     assert abs(t["EMIT 35"]["V"] - 0.5774) < TOL
     assert abs(t["EMIT 36"]["V"] - 0.0) < TOL
@@ -124,7 +148,7 @@ def test_tscore_ignores_subthreshold_noise():
 
 def test_score_ranges():
     """s[T],s[R] in [-1,1]; s[V_S] in [0,1] across all modes of water and benzene."""
-    for mol in ["water", "benzene"]:
+    for mol in ["H2O-MP2-321G", "C6H6_MP2_3-21G_D6h"]:
         _, t = _normal_table(mol)
         for lbl, row in t.items():
             for k in ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"]:
@@ -134,7 +158,7 @@ def test_score_ranges():
 
 def test_bond_decomposition_sums_to_vscore():
     """Sum of per-bond s_AB equals s[V_S] for every mode (water + benzene)."""
-    for mol in ["water", "benzene"]:
+    for mol in ["H2O-MP2-321G", "C6H6_MP2_3-21G_D6h"]:
         gp = GaussianParser(os.path.join(ROOT, "data", "logs", f"{mol}.log"))
         data = gp.parse(parse_modes=True)
         scorer = ModeScorer(data["atoms"], data["coords"], data["bonds"])
@@ -146,7 +170,7 @@ def test_bond_decomposition_sums_to_vscore():
 
 def test_parser_fails_loud_on_bad_emit():
     """EMITParser raises on a malformed (too-short) matrix rather than scoring garbage."""
-    gp = GaussianParser(os.path.join(ROOT, "data", "logs", "water.log"))
+    gp = GaussianParser(os.path.join(ROOT, "data", "logs", "H2O-MP2-321G.log"))
     natoms = len(gp.parse(parse_modes=False)["atoms"])
     bad = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False)
     bad.write("CART EMIT modes\n0.1 0.2 0.3\nEigenvalues:\n1.0\n")

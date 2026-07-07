@@ -325,7 +325,7 @@ def _marker_kwargs(category, ideal_flag=None, marker=None):
 
 def _explode_bonds(lib_df):
     """Long-format per-bond DataFrame from library_scores.csv's semicolon-
-    joined `s_AB`/`rel_db` internal-row strings (see excel_ingest.py's
+    joined `s_AB`/`rel_db` internal-row strings (see library_ingest.py's
     `_bond_string`). One row per (molecule, mode_index, bond).
 
     Columns: molecule, mode_index, bond, s_AB, rel_db, ideal, ref_label.

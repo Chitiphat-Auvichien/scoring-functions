@@ -440,7 +440,7 @@ class ModeScorer:
                     diagnostic quantity (fig:bondscores' x-axis) originally
                     reverse-engineered from the Excel workbook's own
                     "(|b'|-|b|)/|b|" per-bond column (see
-                    src/excel_ingest.py's module docstring); computed here
+                    src/library_ingest.py's module docstring); computed here
                     from geometry + mode displacement using the engine's own
                     displacement convention, not read from the spreadsheet.)
         Both Vscore() and score_bonds() build on this so the per-bond s_AB

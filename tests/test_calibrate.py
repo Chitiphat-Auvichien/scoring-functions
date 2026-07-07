@@ -5,9 +5,9 @@ Run from ``Github/scoring-functions/``:
     py -m pytest tests/                (with pytest)
     py tests/test_calibrate.py        (standalone; no pytest needed)
 
-Design note (mirrors tests/test_excel_ingest.py): the plateau sweep itself is
+Design note (mirrors tests/test_library_ingest.py): the plateau sweep itself is
 cheap (small molecules, ~190 grid points in well under a minute) but does
-depend on data/logs/ parsing for 25 molecules + benzene EMIT; the two derived
+depend on data/logs/ parsing for the geometry-backed library + benzene EMIT; the two derived
 artifacts (``data/results/thresholds.json``,
 ``data/results/tau_sensitivity_sweep.csv``) are already committed goldens, so
 most tests here check those directly rather than re-running the sweep. One
@@ -92,30 +92,30 @@ def test_single_centre_only_exclude_matches_scope_decision():
 def test_filter_single_centre_library_drops_exactly_the_excluded_molecules():
     """filter_single_centre_library() is DATA-LOSS-FREE at the CSV level
     (library_scores.csv keeps every molecule's rows -- see
-    excel_ingest.py); this only checks the analysis-time filter itself
-    removes exactly the 7 excluded molecules' rows and nothing else,
-    against the real checked-in library_scores.csv golden."""
+    src/library_ingest.py); this checks the analysis-time filter itself
+    removes exactly whichever of the excluded molecules are actually present
+    and nothing else.
+
+    **2026-07-07 update (roster-driven pipeline):** six of
+    SINGLE_CENTRE_ONLY_EXCLUDE's seven molecules (C2H2, C2H4, C2H6, H2O2,
+    iso-C4H10, n-C4H10) are two-, four-, or six-centre topologies that are
+    also absent from data/mol_list_method.csv's finalized 72-molecule
+    roster entirely -- they no longer appear in library_scores.csv at all
+    (not merely filtered out), so filter_single_centre_library() is a no-op
+    for them. Only C6H6 (benzene, six-centre, still in the roster) is
+    actually present to be dropped by this filter now."""
     lib_df = pd.read_csv(LIB_CSV)
     before_molecules = set(lib_df["molecule"].unique())
-    assert SINGLE_CENTRE_ONLY_EXCLUDE <= before_molecules  # sanity: all present
+    present_of_excluded = SINGLE_CENTRE_ONLY_EXCLUDE & before_molecules
+    assert present_of_excluded == {"C6H6"}
 
     filtered = filter_single_centre_library(lib_df)
     after_molecules = set(filtered["molecule"].unique())
 
-    assert before_molecules - after_molecules == SINGLE_CENTRE_ONLY_EXCLUDE
-    # 145 internal rows (7+12+18+6+30+36+36) + benzene's 6 geometry-backed
-    # external T/R rows (C6H6 has an on-disk .log/.gjf pair, so it also
-    # contributes external rows that this molecule-level filter drops too,
-    # unlike the other 6 excluded molecules which are Excel-only).
-    assert len(lib_df) - len(filtered) == 151
-    # Kept molecule count: 69 (full excel-sourced library) - 7 = 62.
-    assert lib_df["molecule"].nunique() - len(SINGLE_CENTRE_ONLY_EXCLUDE) == filtered["molecule"].nunique()
-
-    # Non-ideal internal population after the filter: 51 molecules (an
-    # independent hand-count of tab:nonideal's own AB_n grid), 277 modes.
-    nonideal = filtered[(filtered["kind"] == "internal") & (filtered["ideal"] == "no")]
-    assert nonideal["molecule"].nunique() == 51
-    assert len(nonideal) == 277
+    assert before_molecules - after_molecules == {"C6H6"}
+    assert lib_df["molecule"].nunique() - 1 == filtered["molecule"].nunique()
+    # filter_single_centre_library is idempotent (re-filtering drops nothing more).
+    assert set(filter_single_centre_library(filtered)["molecule"].unique()) == after_molecules
 
 
 def test_confusion_matrix_stats_applies_single_centre_filter_internally():

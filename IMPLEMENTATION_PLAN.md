@@ -10,10 +10,79 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-05 (`fig:confusion` restructured to a single non-ideal-tier figure; rigorous
-> tier moved to a new SI self-consistency check, `plot_rigorous_tier_check`; see RESUME HERE below.)
+> Last updated: 2026-07-07 (**final flip to Gaussian-direct** — the xlsx-precomputed-score ingest path
+> is deleted outright, not just defaulted away from; see RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-07 (FINAL flip to Gaussian-direct — `data/mol_list_method.csv` gained a `basename` column
+> mapping all 72 roster molecules to verified on-disk `.log`/`.gjf` pairs; `src/excel_ingest.py` ->
+> `src/library_ingest.py`, xlsx path deleted entirely):** The 2026-07-04 interim decision's own stated
+> trigger ("flip back to Gaussian-direct once coverage is complete") is now met at 100% (72/72,
+> verified). `src/library_ingest.py` (renamed from `src/excel_ingest.py`) is now a SINGLE, roster-driven
+> pipeline: `load_mol_roster()` reads the CSV, `check_roster_disk_consistency()` cross-checks it against
+> `discover_geometry_molecules()`'s directory scan (fail loud — `FileNotFoundError` — on any roster row
+> missing its on-disk pair; warn-and-continue on an on-disk pair with no roster row, e.g. gramicidin's
+> `1grm_MM_UFF`), and the builder iterates roster rows calling the unchanged `score_geometry_molecule()`
+> for each. Deleted entirely: `ingest_internal_rows`, `attach_geometry_classification`,
+> `_build_library_scores_excel`, the Excel-column constants, `EXCEL_TO_LOG`/`_LOG_TO_EXCEL`/
+> `resolve_excel_molecule_name`, `load_excel_tables`/`_read_sheet`, `import openpyxl`,
+> `EXCLUDED_MOLECULES`, and the `source`/`xlsx_path` parameters everywhere (`build_library_scores`,
+> `run_ingest_pipeline`, `run_calibration_pipeline`, `main.py --source`). `attach_excel_labels` ->
+> `attach_labels`, re-sourced from `csv_label_ingest`'s CSVs (already the label default since
+> 2026-07-05) instead of the xlsx sheet — the frequency-agreement gate logic is UNCHANGED (kept
+> deliberately: 19/72 roster molecules run at a fallback level of theory, so genuine mode-index
+> mismatches between the engine and `data_score.csv` still need catching). `src/csv_label_ingest.py`
+> lost `build_label_lookup`'s `fallback_ds` parameter and `_xlsx_fallback_ref_label` — the 6 molecules
+> it covered (C2H2/C2H4/C2H6/H2O2/iso-C4H10/n-C4H10) are multi-centre and confirmed absent from the
+> 72-row roster, genuinely out of scope now. `src/calibrate.py`: no logic changes
+> (`_load_geometry_pool()` already derived its population from `library_scores.csv`'s `has_geometry`
+> dynamically); only its two hardcoded "25 molecules" prose strings now compute from
+> `len(_geometry_pool_molecules(...))` at runtime (new helper, cheap — roster/basename lookups only, no
+> Gaussian parsing) instead of a literal number.
+>
+> **Regeneration results:** `python main.py --library` succeeded: 71/72 roster molecules scored
+> (`data/results/library_scores.csv`, 882 rows, `has_geometry==True` for every row). The 1 exception —
+> **`OBr4`** (basename `OBr4_MP2_cc-pVDZ`) — is warned-and-skipped, NOT a silent drop: its `.com` file's
+> `geom=connectivity` block lists atom indices with no actual bond-pair lines, so the parser correctly
+> finds zero bonds and `build_scorer_and_final` raises `ValueError` per its documented fail-loud
+> contract. This is a genuine source-file data gap (the `.gjf` needs bond lines added), not a
+> library_ingest bug — flagging per the task's "flag rather than silently work around" instruction.
+> 13 molecules tripped the label-join frequency gate this run (vs. 4 before the migration, as predicted
+> by the plan) — see the skip-report list in this session's final report; expected, a real data-quality
+> signal for score-validator/the author to review (mostly the 19 fallback-level-of-theory molecules).
+>
+> **BLOCKED (Phase C steps 2-4 — `--calibrate`, most of pytest):** discovered mid-session that
+> `data/logs/benzene.log`, `data/gjf/benzene.com`, `data/logs/water.log`, `data/gjf/water.gjf`, and the
+> `SbH3`/`SbH5`/`SeBr2-cc`/`XeH4`/`ocl2`/`of2` log+gjf pairs are DELETED from the working tree (present
+> in git HEAD, `git status` shows them as uncommitted deletions) — an out-of-scope side effect of the
+> Phase-A basename-remapping data upload, NOT something this session's Phase-B code touched.
+> `src.calibrate.sweep_tau_tr` hard-requires `data/logs/benzene.log` (benzene EMIT is baked into the
+> tau_TR evaluation set, not optional), so `--calibrate` cannot run at all right now —
+> `thresholds.json`/`tau_sensitivity_sweep.csv` are UNCHANGED (stale, pre-migration) — and every test
+> that opens `water.log`/`benzene.log` directly by that literal name (`test_classifier.py`,
+> `test_scores.py`, `test_projection.py`, `test_flag_validation.py`, `test_intermediate_cache.py`, most
+> of `test_calibrate.py`'s calibrated-threshold checks) fails with `FileNotFoundError` — 29 failures,
+> ALL traced to this one root cause, ZERO caused by the library_ingest/csv_label_ingest rewrite itself
+> (verified: `tests/test_library_ingest.py` 20/20 pass, `tests/test_csv_label_ingest.py` 5/5 pass, the
+> structurally-updated parts of `tests/test_calibrate.py` pass). **The fix is a single git command**
+> (`git checkout -- data/logs/benzene.log data/gjf/benzene.com data/logs/water.log data/gjf/water.gjf
+> data/logs/SbH3.log data/gjf/SbH3.gjf data/logs/SbH5.log data/gjf/SbH5.gjf data/logs/SeBr2-cc.log
+> data/gjf/SeBr2-cc.gjf data/logs/XeH4.log data/gjf/XeH4.gjf data/logs/ocl2.log data/gjf/ocl2.gjf
+> data/logs/of2.log data/gjf/of2.gjf` — pure restoration of committed content, does not touch any new
+> roster file) but this session's tooling explicitly denied that action (flagged as an irreversible,
+> unauthorized destructive op on files never named this session) — **needs the author's explicit
+> go-ahead**, not a workaround. IMPORTANT finding while diagnosing this: `data/logs/H2O-MP2-321G.log`
+> (the NEW roster basename for H2O) is NOT a drop-in replacement for the old `water.log` — its
+> score-level numbers differ substantively (e.g. Vib1 bend `V_Stretch` 0.134 vs. tab:water's pinned
+> 0.061), confirming it's a genuinely different calculation serving the library-scale statistics, not
+> the same water calc under a new name. Do NOT redirect `test_scores.py`'s `tab:water` test at the new
+> basename as a "fix" — restore the original `water.log` instead.
+> Once the six files above are restored: rerun `--calibrate` then `--figures`, then re-verify
+> `tests/test_calibrate.py`'s 6 still-failing threshold-dependent tests (expect some numeric drift —
+> the ideal-population `n_ref_ideal` for stretch dropped 41->27 rows surviving the label-join gate this
+> run, though the derived `tau_S`/`tau_B` boundary VALUES barely moved, ~1e-6 — re-verify the exact
+> `data_score.csv` join skip-report per-molecule before trusting new confusion-matrix numbers).
+>
 > **2026-07-05 (session wrap-up — multi-centre exclusion + rigorous-tier restructure arc, all verified
 > clean):** The full arc across this session is done: (1) excluded C2H2/C2H4/C2H6/H2O2/C6H6/
 > iso-C4H10/n-C4H10 (non-single-centre) from pooled hydride-library stats (`04fcefb`), (2) restructured
@@ -1047,11 +1116,17 @@ first**, validated on data in hand (water, benzene, gramicidin), then scale out 
 library scores from the Excel file.
 
 ### Locked decisions
-- **SUPERSEDED 2026-07-03 (see RESUME HERE at top):** ~~Hydride-library logs live off-server; their
-  scores are already in `data/vibrational-scoring-functions.xlsx` → ingest precomputed scores +
-  reference labels, do not re-score.~~ The author is now supplying real `.log`/`.gjf`/EMIT files for
-  the full library. **Current rule:** every score column is recomputed from those files via the real
-  engine; the Excel workbook supplies `ref_label`/`ideal` ONLY (ground-truth ties, not scores).
+- **SUPERSEDED 2026-07-03, then FINALIZED 2026-07-07 (see RESUME HERE at top):** ~~Hydride-library logs
+  live off-server; their scores are already in `data/vibrational-scoring-functions.xlsx` → ingest
+  precomputed scores + reference labels, do not re-score.~~ The 2026-07-04 interim dual-source
+  scaffolding (`source="excel"`/`source="gaussian"`) is ALSO now retired outright, not just defaulted
+  away from: `data/mol_list_method.csv` (72-row roster, `basename` column added 2026-07-07) has a
+  verified on-disk `.log`/`.gjf` pair for every single molecule. **Current rule (final):** every score
+  column is recomputed from those files via the real engine (`src/library_ingest.py`, formerly
+  `src/excel_ingest.py`); `src/csv_label_ingest.py`'s CSVs (`data/data_score.csv`,
+  `data/characterised_modes.csv`, `data/ref-label_citation.csv`) supply `ref_label`/`ideal`/`ref_key`
+  ONLY (ground-truth ties, not scores) — the xlsx workbook is no longer read by any ingest code path
+  at all.
 - Program **generates figures** (matplotlib), reproducing every manuscript figure.
 - Sequence: **core engine first.**
 - Validation is **two-tier**: *score-level* checks (threshold-independent) are pinned early; *label-level*

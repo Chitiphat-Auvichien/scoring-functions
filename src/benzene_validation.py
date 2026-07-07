@@ -17,7 +17,7 @@ EMIT): the literature/group-theory vibrational assignment for each of
 benzene's 30 real normal modes is external to this framework entirely (it
 predates this code, e.g. Wilson's classic benzene mode numbering) --
 ingested as ``ref_label`` in ``data/results/library_scores.csv`` for molecule
-``C6H6`` by ``src/excel_ingest.py``. Comparing the classifier's own
+``C6H6`` by ``src/library_ingest.py``. Comparing the classifier's own
 ``predicted_label`` against that independent label is therefore a genuine
 accuracy check, not a threshold circularity.
 
@@ -98,7 +98,7 @@ def _expected_pred_bucket(ref_label):
 # Ring bonds in cyclic order, matching data/gjf/benzene.com's connectivity
 # (atoms 1-6 are the ring carbons; 1-2,2-3,3-4,4-5,5-6,6-1 are the C-C bonds,
 # 1-7..6-12 the C-H bonds). Excel's own atom labels (e.g. "C1", "H7") are
-# already embedded in library_scores.csv's s_AB string (src/excel_ingest.py's
+# already embedded in library_scores.csv's s_AB string (src/library_ingest.py's
 # _bond_string()), so no separate atom-type lookup is needed here.
 _CC_RING_BONDS = ("C1-C2", "C2-C3", "C3-C4", "C4-C5", "C5-C6", "C1-C6")
 # C-H bonds, one per ring carbon (Ci-H(i+6), matching the same connectivity).
@@ -141,7 +141,7 @@ def benzene_normal_reference_detail(lib_df=None, data_dir="data"):
     if b.empty:
         raise ValueError(
             f"No {MOLECULE} rows with a ref_label in library_scores.csv -- "
-            "has src.excel_ingest.build_library_scores() been run?")
+            "has src.library_ingest.build_library_scores() been run?")
     missing_pred = b["predicted_label"].isna()
     if missing_pred.any():
         bad = b.loc[missing_pred, "mode_index"].tolist()

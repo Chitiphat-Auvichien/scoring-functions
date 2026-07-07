@@ -34,12 +34,16 @@ tau_TR (Step 3, external purity gate 1)
     full each time for simplicity -- these are small molecules, so the cost
     is negligible):
       1. every geometry-backed library molecule's REAL normal modes (water,
-         CO2, benzene, + the hydride-library molecules that ship a .log/.gjf
-         pair -- 25 molecules total). Ground truth: because normal-mode
-         translation/rotation references are constructed directly from
-         geometry (Eckart-Sayvetz), completeness is EXACT for them -- every
-         one of the n_T+n_R ideal references in this set MUST classify clean
-         at any sane tau_TR. This gives a genuine accuracy metric.
+         CO2, benzene, + every other mol_list_method.csv roster molecule --
+         since the 2026-07-07 final flip to Gaussian-direct, this is the
+         FULL roster, not a partial subset; the exact count is derived at
+         runtime from ``_geometry_pool_molecules()``/``len(pool)``, never
+         hardcoded, so this docstring cannot go stale as the roster changes).
+         Ground truth: because normal-mode translation/rotation references
+         are constructed directly from geometry (Eckart-Sayvetz),
+         completeness is EXACT for them -- every one of the n_T+n_R ideal
+         references in this set MUST classify clean at any sane tau_TR. This
+         gives a genuine accuracy metric.
       2. benzene's 36 EMIT modes -- the paper's sole strongly-mixed-mode
          stress test with real, already-characterized behavior (EMIT 2/9's
          Ry-inversion, EMIT 34/35/36's flag/blind-spot triad). No independent
@@ -50,9 +54,9 @@ tau_TR (Step 3, external purity gate 1)
     0.005 grid from 0.05 to 0.999, the plateau is the LONGEST CONTIGUOUS run
     of grid points for which (a) the label-change fraction relative to the
     immediately preceding grid point is EXACTLY ZERO across the combined
-    evaluation set (25 molecules' external slots + benzene's 36 EMIT modes),
-    AND (b) accuracy against the normal-mode ground truth is at its run
-    maximum. A step size of 0.005 is fine enough that any genuine tau_TR
+    evaluation set (the geometry-backed library's external slots + benzene's
+    36 EMIT modes), AND (b) accuracy against the normal-mode ground truth is
+    at its run maximum. A step size of 0.005 is fine enough that any genuine tau_TR
     sensitivity shows up as a nonzero change fraction at that resolution, so
     a strictly-zero run is a meaningful "nothing changes here" band, not an
     artifact of coarse sampling. tau_TR is then frozen at 0.95 (the value
@@ -75,7 +79,7 @@ import numpy as np
 import pandas as pd
 
 from src.classifier import Thresholds, is_clean_external
-from src.excel_ingest import (
+from src.library_ingest import (
     build_library_scores, resolve_log_basename, _EXTERNAL_SLOTS,
 )
 
@@ -99,13 +103,13 @@ DEFAULT_TAU_GRID = tuple(round(x, 4) for x in np.arange(0.05, 0.9991, 0.005))
 # population as a familiar illustrative molecule (separately also used for
 # the 7-scoring-functions validation table, an unrelated existing use).
 #
-# This is a DATA-LOSS-FREE, analysis-time filter, not an ingest-time one:
-# library_scores.csv itself keeps every one of these molecules' rows
-# (excel_ingest.py's EXCLUDED_MOLECULES = {"Gly5"} is a different,
-# ingest-time exclusion for an out-of-scope companion-paper molecule that
-# has no rows in the library at all; this filter is for molecules that DO
-# belong in the library/CSV but must not be pooled into hydride-library
-# summary STATISTICS). Benzene in particular keeps its own separate,
+# This is a DATA-LOSS-FREE, analysis-time filter, not an ingest-time one, for
+# whichever of these molecules IS in the library/CSV -- as of the 2026-07-07
+# roster-driven pipeline (data/mol_list_method.csv, 72 molecules), only C6H6
+# actually appears in library_scores.csv at all; C2H2/C2H4/C2H6/H2O2/
+# iso-C4H10/n-C4H10 are outside the finalized 72-molecule roster and so are
+# simply absent from the CSV already (this filter is a no-op for them, not
+# the mechanism excluding them). Benzene in particular keeps its own separate,
 # dedicated confusion matrix (src/benzene_validation.py,
 # benzene_internal_confusion_matrix.csv, fig:benzeneconfusion) built
 # directly from library_scores.csv's own C6H6 rows -- this filter has zero
@@ -163,17 +167,24 @@ def derive_stretch_bend_thresholds(lib_df):
     return tau_S, tau_B, stats
 
 
+def _geometry_pool_molecules(lib_df, data_dir="data"):
+    """Molecule names with has_geometry True AND a roster-resolvable basename
+    -- the exact population _load_geometry_pool() will load. No Gaussian
+    parsing here (just roster lookups), so callers that only need the COUNT
+    (e.g. calibrate()'s plateau_criterion prose) don't have to build the full
+    pool just to call len() on it."""
+    molecules = sorted(lib_df.loc[lib_df["has_geometry"], "molecule"].unique())
+    return [mol for mol in molecules if resolve_log_basename(mol, data_dir) is not None]
+
+
 def _load_geometry_pool(lib_df, data_dir="data"):
     """(scorer, final) pairs for every geometry-backed library molecule, built
     once and reused across the whole tau_TR grid."""
     from main import load_inputs, build_scorer_and_final
 
     pool = {}
-    molecules = sorted(lib_df.loc[lib_df["has_geometry"], "molecule"].unique())
-    for mol in molecules:
+    for mol in _geometry_pool_molecules(lib_df, data_dir):
         base = resolve_log_basename(mol, data_dir)
-        if base is None:
-            continue
         raw, _ = load_inputs(base, "normal", data_dir)
         pool[mol] = build_scorer_and_final(raw, "normal")
     return pool
@@ -269,6 +280,7 @@ def calibrate(lib_df, data_dir="data", tau_grid=DEFAULT_TAU_GRID, preferred_tau_
     sweep_df = sweep_tau_tr(lib_df, tau_S, tau_B, data_dir, tau_grid)
     tau_TR, plateau = freeze_tau_tr(sweep_df, preferred_tau_tr)
 
+    n_pool = len(_geometry_pool_molecules(lib_df, data_dir))
     thresholds = Thresholds(tau_TR=tau_TR, tau_S=tau_S, tau_B=tau_B)
     result = {
         "tau_TR": tau_TR, "tau_S": tau_S, "tau_B": tau_B,
@@ -276,7 +288,7 @@ def calibrate(lib_df, data_dir="data", tau_grid=DEFAULT_TAU_GRID, preferred_tau_
         "plateau_criterion": (
             "Longest contiguous run of the tau_TR grid (step 0.005, 0.05-0.999) "
             "with zero label changes vs. the previous grid point AND accuracy "
-            "at its run maximum, evaluated over {25 geometry-backed library "
+            f"at its run maximum, evaluated over {{{n_pool} geometry-backed library "
             "molecules' real normal-mode T/R references [ground truth: always "
             "clean, exact completeness] + benzene's 36 EMIT modes [no "
             "independent ground truth; label-change signal only]}."
@@ -308,14 +320,14 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
 
     Predicted labels:
       - internal rows WITHOUT geometry: vib_label(V_Stretch, thresholds)
-        applied directly (Step 4 only). This is not a simplification for
-        lack of data -- data_score's internal rows are already Gaussian's
-        own T/R-projected-out vibrational modes, so there is no external
-        character for Step 2/3 to catch even if geometry were available;
-        see excel_ingest.py's module docstring for the full argument.
+        applied directly (Step 4 only). Since the 2026-07-07 roster-driven
+        pipeline (src/library_ingest.py), every row is geometry-backed
+        (has_geometry is unconditionally True), so this branch is a
+        defensive fallback, not the common case it used to be under the
+        old Excel-only-molecule path.
       - internal/external rows WITH geometry: the already-computed
-        'predicted_label' column from attach_geometry_classification()
-        (full Algorithm 1, Steps 2-4) -- not recomputed here.
+        'predicted_label' column from src.library_ingest.score_geometry_
+        molecule() (full Algorithm 1, Steps 2-4) -- not recomputed here.
 
     Returns {'acceptance_floor', 'per_category': {...}, 'floor_met',
     'confusion_table': DataFrame} -- the last is the raw reference-label x
@@ -439,24 +451,20 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
 
 
 def run_calibration_pipeline(data_dir="data",
-                              xlsx_path=None,
                               tau_grid=DEFAULT_TAU_GRID,
                               preferred_tau_tr=0.95,
-                              write=True,
-                              source="excel"):
+                              write=True):
     """Headless entry point: ingest the library fresh, calibrate, and
     (optionally) write data/results/thresholds.json +
     data/results/tau_sensitivity_sweep.csv. Returns
     (thresholds, result_dict, sweep_df, (path_json, path_sweep)).
 
-    `source` ("excel" default, or "gaussian") is passed straight through to
-    src.excel_ingest.build_library_scores() -- see its docstring for the
-    2026-07-04 dual-source contract. Default matches run_ingest_pipeline()'s
-    default so --library and --calibrate calibrate against the same
-    population unless told otherwise.
+    Ingests via src.library_ingest.build_library_scores() -- the single,
+    roster-driven (data/mol_list_method.csv) pipeline; matches
+    run_ingest_pipeline()'s own population so --library and --calibrate
+    calibrate against the same data.
     """
-    xlsx_path = xlsx_path or os.path.join(data_dir, "vibrational-scoring-functions.xlsx")
-    lib_df = build_library_scores(xlsx_path, data_dir, source=source)
+    lib_df = build_library_scores(data_dir)
     thresholds, result, sweep_df = calibrate(lib_df, data_dir, tau_grid, preferred_tau_tr)
 
     path_json = os.path.join(data_dir, "results", "thresholds.json")

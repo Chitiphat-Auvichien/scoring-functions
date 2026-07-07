@@ -291,7 +291,7 @@ def _run_flag_pipelines(args):
     """Handle the --classify / --emit-projection / --library / --calibrate /
     --figures flags (Phase-5 CLI subcommands). These wire up the EXISTING
     headless pipeline functions (run_classify_pipeline, run_projection_pipeline,
-    src.excel_ingest.run_ingest_pipeline, src.calibrate.run_calibration_pipeline,
+    src.library_ingest.run_ingest_pipeline, src.calibrate.run_calibration_pipeline,
     src.figures.regenerate_all) -- no scoring/classification logic lives here.
 
     Design (documented in README.md "How to Use" / IMPLEMENTATION_PLAN.md):
@@ -319,23 +319,22 @@ def _run_flag_pipelines(args):
     if args.library:
         if args.molecule:
             print("Note: --library is global and ignores -m/--molecule.")
-        print(f"Running library ingest (src.excel_ingest.run_ingest_pipeline, "
-              f"source={args.source!r}) -- this is known-slow. Please wait...")
-        from src.excel_ingest import run_ingest_pipeline
-        df_lib, path, skip_report = run_ingest_pipeline(source=args.source)
+        print("Running library ingest (src.library_ingest.run_ingest_pipeline) "
+              "-- this is known-slow. Please wait...")
+        from src.library_ingest import run_ingest_pipeline
+        df_lib, path, skip_report = run_ingest_pipeline()
         print(f"Wrote {len(df_lib)} rows -> {path}")
         if skip_report:
             print(f"  {len(skip_report)} molecule(s) had their internal-row ref_label/ideal "
-                  "join skipped (frequency mismatch vs. Excel) -- see warnings above. "
+                  "join skipped (frequency mismatch vs. data_score.csv) -- see warnings above. "
                   "Their scores (V_Stretch, Tx..Rz, predicted_label, ...) are unaffected.")
 
     if args.calibrate:
         if args.molecule and not args.library:
             print("Note: --calibrate is global and ignores -m/--molecule.")
-        print(f"Running threshold calibration (src.calibrate.run_calibration_pipeline, "
-              f"source={args.source!r})...")
+        print("Running threshold calibration (src.calibrate.run_calibration_pipeline)...")
         from src.calibrate import run_calibration_pipeline
-        thresholds, result, sweep_df, (path_json, path_sweep) = run_calibration_pipeline(source=args.source)
+        thresholds, result, sweep_df, (path_json, path_sweep) = run_calibration_pipeline()
         print(f"Frozen thresholds tau_TR={thresholds.tau_TR}, tau_S={thresholds.tau_S}, "
               f"tau_B={thresholds.tau_B} -> {path_json}")
         print(f"Wrote {len(sweep_df)}-row sensitivity sweep -> {path_sweep}")
@@ -394,20 +393,12 @@ def main():
                          "basis for -m <molecule>. Writes <mol>_EMIT_contributions.csv "
                          "and <mol>_EMIT_projection_full.csv.")
     ap.add_argument("--library", action="store_true",
-                    help="Ingest the hydride-library spreadsheet -> "
-                         "data/results/library_scores.csv. Global (ignores -m); slow (~630s).")
+                    help="Ingest the full mol_list_method.csv roster (real-engine recompute "
+                         "for every molecule's on-disk .log/.gjf pair) -> "
+                         "data/results/library_scores.csv. Global (ignores -m); slow.")
     ap.add_argument("--calibrate", action="store_true",
                     help="Calibrate tau_TR/tau_S/tau_B against the ingested library -> "
                          "data/results/thresholds.json + tau_sensitivity_sweep.csv. Global (ignores -m).")
-    ap.add_argument("--source", choices=["excel", "gaussian"], default="excel",
-                    help="Data source for --library/--calibrate (src.excel_ingest."
-                         "build_library_scores). 'excel' (default): precomputed Excel scores "
-                         "for the full ~70-molecule library, geometry-overlaid where an on-disk "
-                         ".log/.gjf pair exists -- matches the population the manuscript's "
-                         "current figures were built from (2026-07-04 interim decision). "
-                         "'gaussian': disk-driven real-engine recompute for every molecule with "
-                         "a .log+.gjf pair on disk (~25 today, growing) -- the intended eventual "
-                         "default once the full library has on-disk geometry.")
     ap.add_argument("--figures", action="store_true",
                     help="Regenerate all manuscript figures from data/results/*.csv -> "
                          "data/figures/*.{pdf,png}. Global (ignores -m).")

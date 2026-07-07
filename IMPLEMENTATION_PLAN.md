@@ -15,6 +15,33 @@
 > `pytest` green (79/79); see RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **TODO (2026-07-07, not yet started): back-fill literature stretch/bend labels for the
+> T-shaped/see-saw non-ideal families (and a few stragglers) in `data/data_score.csv`.**
+> `mol_list_method.csv` has 60 non-ideal single-center molecules computed end to end, but
+> `fig:confusion`'s population is only **28** — `data_score.csv` (the literature `ref_label`
+> ground truth `attach_labels()` joins against) has never been back-filled for most of them.
+> Breakdown (independently re-derived from `library_scores.csv`/`data_score.csv`, not just
+> asserted): **23 molecules have NO `data_score.csv` row at all** — this is not scattered
+> data entry lag, it cleanly tracks the two shape-families added to the roster in the
+> 2026-07-07 finalization session: all 10 non-ideal T-shaped molecules (FH3, F4, FCl3, FBr3,
+> ClH3, ClF3, ClBr3, BrH3, BrF3, BrCl3), all 11 non-ideal see-saw molecules (OH4, OF4, OCl4,
+> OBr4, SH4, SF4, SCl4, SBr4, SeH4, SeF4, SeCl4), plus BBr3 and OCl2. **9 more have a stale
+> `data_score.csv` row that fails the frequency-agreement gate** (AsBr3, AsCl3, NBr3, NCl3,
+> NH3, PBr3, PCl3, PF3, SeBr2) — same root cause as the 13-molecule skip-report diagnosed in
+> the OBr4/roster-flip session (mostly fallback-level-of-theory mismatches; SnO2/SbH3/XeH4/
+> SbH5/SeBr2's specific causes are already written up there for the ideal-molecule side).
+> **How to apply:** the scores themselves (V_Stretch, Tx..Rz, predicted_label) are already
+> correct and complete for all 60 — this is purely a missing-ground-truth problem, not a
+> pipeline bug. Fixing it means literature-sourcing bend/stretch labels for the 23 T-shaped/
+> see-saw/BBr3/OCl2 molecules into `data_score.csv` (+ `characterised_modes.csv`/
+> `ref-label_citation.csv` if citing a source), and for the 9 gate-failures, either
+> re-deriving their `data_score.csv` freq column from the actual on-disk fallback-level-of-
+> theory log or accepting they'll stay excluded. Once done, re-run `--library` and refresh
+> `fig:confusion`'s caption/count in `JCC_temp_LaTeXtemplate.tex` (currently "28 non-ideal,
+> single-center molecules", $n=130$) accordingly. Related to, but distinct from, the already-
+> deferred `fig:irrep_coupling`/`data_score.csv`-staleness TODO below (irrep coupling reads a
+> *different* legacy file's irrep/bond-length columns; this TODO is about the *label* columns
+> `attach_labels()` uses).
 > **2026-07-07 (OBr4 connectivity gap fixed — full 72/72 roster coverage reached):**
 > `data/gjf/OBr4_MP2_cc-pVDZ.com`'s `geom=connectivity` block had bare atom
 > indices with no bond-pair lines; added the missing O-Br×4 bond lines (bond

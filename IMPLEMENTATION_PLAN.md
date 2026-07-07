@@ -11,7 +11,8 @@
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
 > Last updated: 2026-07-07 (**final flip to Gaussian-direct** — the xlsx-precomputed-score ingest path
-> is deleted outright, not just defaulted away from; see RESUME HERE below.)
+> is deleted outright, not just defaulted away from; `--calibrate`/`--figures` blocker resolved, full
+> `pytest` green (79/79); see RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
 > **2026-07-07 (FINAL flip to Gaussian-direct — `data/mol_list_method.csv` gained a `basename` column
@@ -82,6 +83,47 @@
 > the ideal-population `n_ref_ideal` for stretch dropped 41->27 rows surviving the label-join gate this
 > run, though the derived `tau_S`/`tau_B` boundary VALUES barely moved, ~1e-6 — re-verify the exact
 > `data_score.csv` join skip-report per-molecule before trusting new confusion-matrix numbers).
+>
+> **2026-07-07 (RESOLVED — coordinator correction, do NOT restore old files):** the blocker above was
+> mis-diagnosed as an accidental deletion. It was the author's own deliberate local edit finalizing the
+> 72-molecule roster (old `benzene.log`/`water.log`/`SbH3.log`/etc. replaced by the new method-suffixed
+> basenames, e.g. `C6H6_MP2_3-21G_D6h`, `H2O-MP2-321G`) — restoring them would have reintroduced stale,
+> superseded data. The actual bug: exactly two production call sites still hardcoded a literal
+> `"benzene"` mol_name (`src/calibrate.py::_load_benzene_emit`, `src/flag_validation.py`'s two
+> `load_inputs`/`run_projection_pipeline` calls) instead of resolving it through the roster, and
+> `data/EMIT/benzene_EMIT.txt`/`water_EMIT.txt` hadn't been renamed to match the new log/gjf basenames —
+> so `load_inputs(base, "emit", ...)` had no single basename under which all three file types (log, gjf,
+> EMIT) existed. Fix: renamed the two EMIT files (`C6H6_MP2_3-21G_D6h_EMIT.txt`,
+> `H2O-MP2-321G_EMIT.txt`) and repointed both call sites through
+> `library_ingest.resolve_log_basename("C6H6", data_dir)` — the same pattern already used everywhere
+> else in the roster-driven code. `--calibrate`/`--figures` now succeed end-to-end with genuinely fresh
+> output (`thresholds.json`: `tau_S` 0.90368→0.9036817451504533, `tau_B` 0.17327→0.17326891344050538,
+> `plateau_criterion` prose now says "71 geometry-backed library molecules" — computed via
+> `_geometry_pool_molecules()`, confirming that helper's own fix from earlier this session works). All
+> 79 tests pass (was 50/79). Test fixture basenames repointed (`water`→`H2O-MP2-321G`,
+> `benzene`→`C6H6_MP2_3-21G_D6h`) across `test_calibrate.py`/`test_classifier.py`/
+> `test_flag_validation.py`/`test_intermediate_cache.py`/`test_projection.py`/`test_scores.py`.
+> Confirmed (diagnostic re-verified, not assumed): benzene's rename is content-preserving — every
+> benzene-referencing numeric assertion is UNCHANGED across all 6 files. Water's is NOT — `tab:water`'s
+> pinned values in `test_scores.py::test_water_tab_water` were re-derived from a live run against
+> `H2O-MP2-321G.log` (a genuinely different/corrected calculation): `Tx`→`Rz` 0.049→0.0411,
+> Vib1(bend) `V` 0.061→0.1343, Vib2(ν_s) `V` 1.000→0.9966, Vib3(ν_as) `V` 0.998→0.9984 (~unchanged),
+> Vib3 `Tx` −0.190→−0.1963, Vib3 `Rz` −0.295→−0.2959 — flagged for `lead-author`/manuscript
+> reconciliation (Phase D), not fixed here. Confusion-matrix population numbers in `test_calibrate.py`
+> and `test_flag_validation.py` also updated for the library growing from 25→71 geometry-backed
+> molecules (library-external n 146→421; pooled stretch recall 0.66667→0.78351, bend recall
+> 0.98378→0.98925; ideal-tier n_ref_ideal stretch 41→27, bend 50→33, `recall_ideal` still exactly 1.0 by
+> construction; non-ideal-tier bend recall 0.97778→0.98333 (n 135→60), stretch recall 0.57042→0.7
+> (n 142→70)) — all traced to MORE molecules failing `attach_labels()`'s frequency-agreement gate (13 vs.
+> 4 pre-migration), not a new exclusion. Also fixed in passing: `data/mol_list_method.csv` itself had
+> never been committed at all (existed only in the working tree since Phase A) despite
+> `src/library_ingest.py` depending on it entirely — committed now, along with every new-basename
+> `.log`/`.gjf` pair not yet tracked, so the repo can actually reproduce `library_scores.csv` from a
+> fresh clone. The old, now-superseded basenames (`benzene.log`/`water.log`/`SbH3.log`/etc.) are
+> DELIBERATELY left uncommitted (still present, untracked-for-deletion) pending the repo owner's own
+> explicit removal decision — a coordinating agent's message is not sufficient authorization to delete
+> previously-committed research data under this session's own safety rules; only the repo owner's direct
+> instruction (or their own `git rm`) should finalize that cleanup.
 >
 > **2026-07-05 (session wrap-up — multi-centre exclusion + rigorous-tier restructure arc, all verified
 > clean):** The full arc across this session is done: (1) excluded C2H2/C2H4/C2H6/H2O2/C6H6/

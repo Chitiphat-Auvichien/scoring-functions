@@ -15,6 +15,16 @@
 > `pytest` green (79/79); see RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-07 (manuscript scope reconciliation — Table~\ref{tab:library} rebuilt from the finalized
+> roster, all stale library-population counts replaced with live-verified numbers, `tab:water`
+> refreshed from the new `H2O-MP2-321G.log`, two broken SI cross-references fixed): DEFERRED, known
+> TODO:** SI Figure S2 (`fig:irrep_coupling`, `JCC_SI_irrep_coupling.tex`) still reads from a separate,
+> older `data/data_score.csv` that predates `mol_list_method.csv`'s roster finalization — it is missing
+> `BBr3` (now in the roster) and includes 5 molecules (`Cl2O`, `NO2`, `O3`, `SO2`, `TeF2`) that are not
+> in the 72-row roster at all. Author decision: defer regenerating `data/data_score.csv`'s
+> irrep/bond-length columns from the Gaussian-direct pipeline (and updating Figure S2 +
+> `JCC_SI_irrep_coupling.tex`'s "10 molecules"/"16 molecules" prose) to a follow-up session — do not
+> hand-edit that SI file's numeric claims until the underlying data is regenerated.
 > **2026-07-07 (FINAL flip to Gaussian-direct — `data/mol_list_method.csv` gained a `basename` column
 > mapping all 72 roster molecules to verified on-disk `.log`/`.gjf` pairs; `src/excel_ingest.py` ->
 > `src/library_ingest.py`, xlsx path deleted entirely):** The 2026-07-04 interim decision's own stated
@@ -57,6 +67,16 @@
 > `SbH3`/`SbH5`/`SeBr2-cc`/`XeH4`/`ocl2`/`of2` log+gjf pairs are DELETED from the working tree (present
 > in git HEAD, `git status` shows them as uncommitted deletions) — an out-of-scope side effect of the
 > Phase-A basename-remapping data upload, NOT something this session's Phase-B code touched.
+>
+> **2026-07-07 (lead-author, manuscript reconciliation session) — KNOWN TODO, deliberately deferred:**
+> SI Figure S2 (`fig:irrep_coupling`, `JCC_SI_irrep_coupling.tex`) still reads the separate, older
+> `data/data_score.csv`, which predates the 72-row roster and includes molecules out of today's scope
+> (Cl2O, NO2, O3, SO2, TeF2) while missing BBr3. Author decision: do NOT fix this session —
+> `data_score.csv` needs regenerating from the roster before Figure S2's molecule-count/series claims
+> can be trusted. All other stale roster-count numbers in the main `.tex` and the other four SI files
+> WERE reconciled this session against the regenerated `data/results/library_scores.csv`/
+> `thresholds.json`/`rigorous_tier_consistency_table.csv`/`H2O-MP2-321G_normal_classified.csv`.
+>
 > `src.calibrate.sweep_tau_tr` hard-requires `data/logs/benzene.log` (benzene EMIT is baked into the
 > tau_TR evaluation set, not optional), so `--calibrate` cannot run at all right now —
 > `thresholds.json`/`tau_sensitivity_sweep.csv` are UNCHANGED (stale, pre-migration) — and every test

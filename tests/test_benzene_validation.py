@@ -9,7 +9,7 @@ Run from ``Github/scoring-functions/``:
     py -m pytest tests/                          (with pytest)
     py tests/test_benzene_validation.py         (standalone; no pytest needed)
 
-Design note (mirrors tests/test_calibrate.py / tests/test_excel_ingest.py):
+Design note (mirrors tests/test_calibrate.py / tests/test_library_ingest.py):
 reads the already-committed ``data/results/library_scores.csv`` golden
 directly (fast, plain pandas) rather than re-running the ~1-minute Excel
 ingest; both `benzene_validation` functions are pure re-derivations from that

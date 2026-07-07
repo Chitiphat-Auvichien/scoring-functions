@@ -8,9 +8,19 @@ Run from ``Github/scoring-functions/``:
 Pins the exact confusion counts computed this session (see
 src/flag_validation.py's module docstring for the ground-truth criterion and
 its rationale): benzene's 36 EMIT modes give TP=5, FP=0, FN=12, TN=19
-(precision 1.0, recall 5/17 ~ 0.294), and the 146 geometry-backed library
-external (T/R) rows give FP=0/146 (trivial, ground truth always CLEAN by
+(precision 1.0, recall 5/17 ~ 0.294), and the geometry-backed library
+external (T/R) rows give FP=0 (trivial, ground truth always CLEAN by
 Eckart-Sayvetz completeness).
+
+**2026-07-07 basename update:** benzene is now resolved through
+library_ingest.resolve_log_basename("C6H6", ...) inside
+src/flag_validation.py itself (no test-side change needed for the benzene
+tests below -- content-preserving rename, numbers unchanged). The library
+external-reference population grew from 25 to 71 geometry-backed molecules
+(421 external rows) now that the full mol_list_method.csv roster is
+Gaussian-direct (see IMPLEMENTATION_PLAN.md's 2026-07-07 RESUME HERE) --
+test_library_external_references_never_false_positive's counts are updated
+accordingly.
 """
 import os
 import sys
@@ -91,19 +101,20 @@ def test_ground_truth_label_thresholds():
 
 
 def test_library_external_references_never_false_positive():
-    """The 25 geometry-backed library molecules' REAL normal-mode T/R
-    references (146 rows total) are exact-by-construction Eckart-Sayvetz
+    """The 71 geometry-backed library molecules' (2026-07-07: the full
+    mol_list_method.csv roster, Gaussian-direct) REAL normal-mode T/R
+    references (421 rows total) are exact-by-construction Eckart-Sayvetz
     references (ground truth always CLEAN); this checks -- rather than
     assumes -- that the classifier never flags a single one of them
     MIXED_EXTERNAL_WITH_VIBRATION (FP=0), the much easier degenerate case
     named in the task's parenthetical."""
     ext, stats = library_external_flag_confusion()
-    assert stats["n"] == 146
-    assert stats["n_molecules"] == 25
+    assert stats["n"] == 421
+    assert stats["n_molecules"] == 71
     assert stats["FP"] == 0
     assert stats["TP"] == 0
     assert stats["FN"] == 0
-    assert stats["TN"] == 146
+    assert stats["TN"] == 421
 
 
 if __name__ == "__main__":

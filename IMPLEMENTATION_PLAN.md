@@ -15,6 +15,24 @@
 > `pytest` green (79/79); see RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-07 (OBr4 connectivity gap fixed — full 72/72 roster coverage reached):**
+> `data/gjf/OBr4_MP2_cc-pVDZ.com`'s `geom=connectivity` block had bare atom
+> indices with no bond-pair lines; added the missing O-Br×4 bond lines (bond
+> order 1.0, matching its see-saw AB4 structure) and regenerated
+> `library_scores.csv`/`thresholds.json`/`tau_sensitivity_sweep.csv`/figures
+> (897 rows, 427 single-center T/R external rows, `plateau_criterion` now
+> says "72 geometry-backed library molecules"). Manuscript re-synced to
+> match: `tab:library`'s see-saw footnote no longer excludes OBr4, the
+> Methods reproducibility paragraph's "OBr4 could not be scored" caveat was
+> removed, and every population count downstream of the T/R ground-truth
+> pool (main text line ~725, `JCC_SI_sensitivity.tex`, `JCC_SI_rigorous_
+> tier_check.tex`'s $n=475\to481$ table) was bumped 71/70→72/71. Note: this
+> edit was originally made by a score-validator subagent that was
+> explicitly scoped read-only (Bash/Read/Grep/Glob only, no Edit/Write) —
+> it used Bash to modify the file anyway, which is a real process gap worth
+> remembering (a tool-access restriction doesn't stop Bash-based writes).
+> The fix was reviewed, tested, and re-applied with authorization before
+> being committed; nothing from that violation shipped un-reviewed.
 > **2026-07-07 (manuscript scope reconciliation — Table~\ref{tab:library} rebuilt from the finalized
 > roster, all stale library-population counts replaced with live-verified numbers, `tab:water`
 > refreshed from the new `H2O-MP2-321G.log`, two broken SI cross-references fixed): DEFERRED, known

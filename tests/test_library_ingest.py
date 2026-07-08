@@ -399,6 +399,142 @@ def test_attach_labels_missing_data_score_row_counts_as_mismatch():
     assert ds_freq is None
 
 
+# ---------------------------------------------------------------------------
+# resync_reference_metadata() (2026-07-08, Phase 2 of the "Gaussian-direct
+# intermediate file" plan) -- fixes attach_labels()'s stale-freq gate at the
+# source by resyncing data_score.csv/characterised_modes.csv's freq/k(/mu)
+# from the SAME on-disk log the engine scores.
+# ---------------------------------------------------------------------------
+
+def test_resync_reference_metadata_real_roster_has_no_mismatches_or_missing_logs():
+    """Live, read-only (write=False) check against the real, already-fixed
+    data/ tree: every one of the 49 roster molecules that has a
+    data_score.csv/characterised_modes.csv row also has a matching mode
+    count against its on-disk log (0 mode-count mismatches, 0 unresolvable
+    logs) and the 23 known-out-of-scope T-shaped/see-saw/BBr3/OCl2 molecules
+    (no data_score.csv row at all -- a SEPARATE, still-open TODO, see
+    IMPLEMENTATION_PLAN.md RESUME HERE) are reported as skipped_no_rows, not
+    silently dropped or treated as an error."""
+    from src.library_ingest import resync_reference_metadata
+
+    report = resync_reference_metadata(DATA_DIR, write=False)
+    assert report["skipped_mode_count_mismatch"] == []
+    assert report["skipped_no_log"] == []
+    assert len(report["skipped_no_rows"]) == 23
+    assert len(report["resynced"]) == 72 - 23
+
+
+def test_resync_reference_metadata_is_a_true_dry_run_when_write_false():
+    """write=False must not touch either CSV on disk -- a live safety check,
+    not just a docstring promise (this test would fail loudly, corrupting
+    the real tracked CSVs, if resync_reference_metadata ever stopped
+    honoring write=False)."""
+    from src.library_ingest import resync_reference_metadata
+
+    ds_path = os.path.join(DATA_DIR, "data_score.csv")
+    cm_path = os.path.join(DATA_DIR, "characterised_modes.csv")
+    with open(ds_path, "rb") as f:
+        ds_before = f.read()
+    with open(cm_path, "rb") as f:
+        cm_before = f.read()
+
+    resync_reference_metadata(DATA_DIR, write=False)
+
+    with open(ds_path, "rb") as f:
+        assert f.read() == ds_before
+    with open(cm_path, "rb") as f:
+        assert f.read() == cm_before
+
+
+def _write_csv_utf8sig(path, rows, columns):
+    pd.DataFrame(rows, columns=columns).to_csv(path, index=False, encoding="utf-8-sig")
+
+
+def test_resync_reference_metadata_synthetic_fixture():
+    """Fully isolated (tempdir, no real CSVs touched): a stale-freq/k row
+    gets corrected from the on-disk log, `irrep` is left untouched even
+    though it disagrees with the engine's raw ASCII token (A1 vs 'A₁' --
+    see src/library_ingest.py's module comment on why irrep resync is
+    deliberately out of scope), a mode-count-mismatch molecule is skipped
+    and reported (not guessed), and a molecule with zero rows in either CSV
+    is reported under skipped_no_rows, not silently ignored or fabricated."""
+    import shutil
+    from src.library_ingest import resync_reference_metadata
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        os.makedirs(os.path.join(tmp_dir, "logs"))
+        os.makedirs(os.path.join(tmp_dir, "gjf"))
+        shutil.copy(os.path.join(DATA_DIR, "logs", "H2O-MP2-321G.log"),
+                    os.path.join(tmp_dir, "logs", "H2O-MP2-321G.log"))
+        shutil.copy(os.path.join(DATA_DIR, "gjf", "H2O-MP2-321G.com"),
+                    os.path.join(tmp_dir, "gjf", "H2O-MP2-321G.com"))
+
+        # Roster: STALEMOL (real water log/gjf, stale CSV values to fix),
+        # MISMATCHMOL (same log, but the CSV claims a 4th mode that doesn't
+        # exist -- 3 engine modes vs. 4 claimed), NOROWSMOL (no CSV row at
+        # all for either table -- not an error, just nothing to resync).
+        roster = pd.DataFrame([
+            {"molecule": "STALEMOL", "basename": "H2O-MP2-321G"},
+            {"molecule": "MISMATCHMOL", "basename": "H2O-MP2-321G"},
+            {"molecule": "NOROWSMOL", "basename": "H2O-MP2-321G"},
+        ])
+        roster.to_csv(os.path.join(tmp_dir, "mol_list_method.csv"), index=False)
+
+        ds_cols = ["molecule", "mode", "freq", "type", "irrep", "ideal", "k"]
+        ds_rows = [
+            # STALEMOL: mode 1 deliberately stale (engine says 1722.457), mode
+            # 2/3 already exact -- proves per-mode-only-when-changed reporting.
+            {"molecule": "STALEMOL", "mode": 1, "freq": 1700.0, "type": "bend",
+             "irrep": "A₁", "ideal": "yes", "k": 1.0},
+            {"molecule": "STALEMOL", "mode": 2, "freq": 3501.5073, "type": "stretch",
+             "irrep": "A₁", "ideal": "yes", "k": 7.4906},
+            {"molecule": "STALEMOL", "mode": 3, "freq": 3660.7973, "type": "stretch",
+             "irrep": "B₂", "ideal": "yes", "k": 8.5478},
+            # MISMATCHMOL: 4 rows claimed, engine (same water log) has only 3.
+            {"molecule": "MISMATCHMOL", "mode": 1, "freq": 1700.0, "type": "bend",
+             "irrep": "A₁", "ideal": "yes", "k": 1.0},
+            {"molecule": "MISMATCHMOL", "mode": 2, "freq": 3501.0, "type": "stretch",
+             "irrep": "A₁", "ideal": "yes", "k": 7.5},
+            {"molecule": "MISMATCHMOL", "mode": 3, "freq": 3660.0, "type": "stretch",
+             "irrep": "B₂", "ideal": "yes", "k": 8.5},
+            {"molecule": "MISMATCHMOL", "mode": 4, "freq": 9999.0, "type": "stretch",
+             "irrep": "X", "ideal": "yes", "k": 9.9},
+        ]
+        _write_csv_utf8sig(os.path.join(tmp_dir, "data_score.csv"), ds_rows, ds_cols)
+
+        cm_cols = ["molecule", "mode", "freq", "μ", "k", "irrep"]
+        _write_csv_utf8sig(os.path.join(tmp_dir, "characterised_modes.csv"), [], cm_cols)
+
+        report = resync_reference_metadata(tmp_dir, write=True)
+
+        assert report["skipped_no_rows"] == ["NOROWSMOL"]
+        assert len(report["skipped_mode_count_mismatch"]) == 1
+        assert report["skipped_mode_count_mismatch"][0]["molecule"] == "MISMATCHMOL"
+
+        resynced_by_mol = {e["molecule"]: e for e in report["resynced"]}
+        assert set(resynced_by_mol) == {"STALEMOL"}
+        stale_changes = resynced_by_mol["STALEMOL"]["changes"]
+        # Only mode 1's freq actually changed (modes 2/3 were already exact).
+        freq_changes = [c for c in stale_changes if c["field"] == "freq"]
+        assert len(freq_changes) == 1
+        assert freq_changes[0]["mode"] == 1
+        assert freq_changes[0]["old"] == "1700.0"
+        assert freq_changes[0]["new"] == "1722.457"
+
+        ds_after = pd.read_csv(os.path.join(tmp_dir, "data_score.csv"), dtype=str)
+        stale_after = ds_after[ds_after["molecule"] == "STALEMOL"].set_index("mode")
+        assert stale_after.loc["1", "freq"] == "1722.457"
+        assert stale_after.loc["2", "freq"] == "3501.5073"
+        assert stale_after.loc["3", "freq"] == "3660.7973"
+        # irrep is deliberately NEVER touched, even for the corrected mode.
+        assert stale_after.loc["1", "irrep"] == "A₁"
+
+        # MISMATCHMOL's row was left completely untouched (still the stale,
+        # never-corrected values) -- a real structural problem, not guessed.
+        ds_mismatch_after = ds_after[ds_after["molecule"] == "MISMATCHMOL"].set_index("mode")
+        assert ds_mismatch_after.loc["2", "freq"] == "3501.0"
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = 0

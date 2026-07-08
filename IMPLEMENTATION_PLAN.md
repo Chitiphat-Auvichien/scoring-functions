@@ -10,12 +10,90 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-08 (**Phase 1 of the "Gaussian-direct intermediate file" rework** — parser now
-> extracts reduced mass/force constant/irrep from every mode's frequency block, and the normal-mode
-> intermediate file format was rewritten to a Gaussian-direct style; see RESUME HERE below. Full
-> `pytest` green (89/89).)
+> Last updated: 2026-07-08 (**Phase 2 of the "Gaussian-direct intermediate file" rework** — resynced
+> `data_score.csv`/`characterised_modes.csv`'s `freq`/`k`(/`mu`) from the on-disk logs, fixing all 13
+> known `attach_labels()` gate failures; see RESUME HERE below. Full `pytest` green (92/92).)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-08 (Phase 2 — resync `data_score.csv`/`characterised_modes.csv` reference metadata from
+> on-disk logs; PLAN: `C:\Users\User\.claude\plans\before-that-the-program-ethereal-penguin.md`,
+> Phase 2 section):** New `src/library_ingest.py::resync_reference_metadata()` (after
+> `run_ingest_pipeline`) fixes the root cause of the 13-molecule `attach_labels()` frequency-gate
+> failure documented in Phase 1's entry below: `data_score.csv`/`characterised_modes.csv`'s `freq`/`k`
+> columns (and `characterised_modes.csv`'s own `mu` column) were a frozen manual snapshot, not derived
+> from the on-disk `.log` the engine actually scores. The fix parses every `mol_list_method.csv` roster
+> molecule's `.log` directly via `GaussianParser(...).parse(parse_modes=True)` (bypassing the
+> intermediate-file cache deliberately, for a clean one-time resync) and overwrites `freq`/`k`(/`mu`) in
+> place for every CSV row that already exists, matched by 1-based mode index (verified — by a
+> `formula-auditor` review — to be the SAME indexing `main.py build_scorer_and_final()`'s `"Vib i"`
+> labels and `attach_labels()`'s gate use: position within `GaussianParser`'s own parsed-modes list,
+> structurally separate from the T/R slots synthesized later). Ran against the real, tracked
+> `data/data_score.csv`/`data/characterised_modes.csv` (49 of 72 roster molecules have existing rows;
+> the other 23 — T-shaped/see-saw/BBr3/OCl2 — have none at all, see the still-open TODO below, untouched
+> by this session): **25 molecules had real value changes** (479 changed cells total: 13 gate-failure
+> molecules with large frequency shifts — SnO2, SbH3, XeH4, SbH5, SeBr2, NH3, NCl3, NBr3, PF3, PCl3,
+> PBr3, AsCl3, AsBr3 — plus 12 already-gate-passing molecules with sub-0.05 cm⁻¹ last-digit rounding
+> drift: IH3, H2O, OF2, Br2O, H2S, SF2, SCl2, SBr2, H2Se, SeF2, SeCl2, C6H6); the other 24 molecules with
+> rows were already exactly in sync (0 changes). **0 mode-count mismatches, 0 unresolvable logs** across
+> the full 49 — confirmed by direct survey before writing anything. `irrep` was deliberately left
+> UNTOUCHED everywhere (module comment above the function explains why: `src/figures.py::
+> plot_irrep_coupling` hardcodes exact-string Unicode-subscript/prime irrep matches sourced from
+> `data_score.csv`, e.g. `"A₂\""`/`"E'"`/`"B₂"`, that the raw ASCII Gaussian log token — `"A2\""`/`"E"`/
+> `"B2"` — would silently break; a second reason: at least one molecule's existing irrep value is the
+> author's own manual resolution of a Gaussian `?A`/`?B` near-degeneracy placeholder, strictly MORE
+> informative than the raw log — confirmed by `formula-auditor`, independently re-verified against
+> `AlH3.log`/`PH3.log`, PASS). `data_score.csv`'s pre-existing `k` column WAS independently confirmed
+> this session to genuinely be the force constant (mDyne/Å) — not an unrelated "scoring metric adjacent
+> to vib_scr" as an earlier session's comment had assumed — via exact numeric agreement with
+> `Force constants ---` in the log for SnH4/TeH4/NH3, independently re-confirmed by `formula-auditor` on
+> AlH3/PH3 too; both CSVs' `k` are overwritten in place (no new column needed).
+> **Hardening applied after `formula-auditor` review:** the mode-count-mismatch check originally
+> compared only `len(modes) == n_engine` and `max(modes) == n_engine`, which a duplicate/non-contiguous
+> `mode` column (e.g. `[1,1,3,4,5]` for `n_engine=5`) could silently pass while still misaligning a row.
+> Tightened to an exact `sorted(modes_in_csv) == list(range(1, n_engine+1))` check, plus explicit
+> detection of blank `"mode"` cells (previously would have crashed `int(float(''))` in the update loop
+> rather than being caught by the validation step) — re-verified this changes nothing on the real
+> roster (still 0 mismatches, same 25-molecule/479-cell resync result), purely defensive.
+> **Downstream re-run (`--library`/`--calibrate`/`--figures`):** all 13 gate-failure warnings are GONE
+> (0 skip-report entries, was 13) — internal rows with `ref_label` attached: 220→302 (+82, exactly the
+> 13 newly-joined molecules' internal-row count). `thresholds.json`'s `tau_S`/`tau_B` are numerically
+> IDENTICAL bit-for-bit (0.9036817451504533 / 0.17326891344050538 unchanged) — the newly-restored ideal
+> molecules' extremal `s[V_S]` values were never the ones defining the boundary — but the underlying
+> population is now correctly `ideal_stretch_n` 27→41, `ideal_bend_n` 33→50 (exactly the ORIGINAL
+> pre-any-gate-failure size; the bug had only ever hidden 4 ideal molecules — SnO2/SbH3/XeH4/SbH5 — from
+> it, never changed the true boundary). Confusion-matrix (`confusion_matrix_stats()`, live-verified by
+> `score-validator` to 5 dp): stretch recall 0.78351→0.68613 (n_ref 97→137, n_ref_ideal 27→41 @
+> recall_ideal=1.0 exactly, n_ref_nonideal 70→96, recall_nonideal 0.7→0.55208), bend recall
+> 0.98925→0.97037 (n_ref 93→135, n_ref_ideal 33→50 @ recall_ideal=1.0 exactly, n_ref_nonideal 60→85,
+> recall_nonideal 0.98333→0.95294) — recall DROPPED because the 9 newly-joined non-ideal molecules
+> (SeBr2, NH3, NCl3, NBr3, PF3, PCl3, PBr3, AsCl3, AsBr3) genuinely contribute more MIXED-bucket misses
+> than the pre-fix population average — a real, non-circular result, not a defect (underlying scores are
+> engine-derived and completely untouched by this resync — see the score-neutrality check below). Both
+> pinned tests in `tests/test_calibrate.py` (`test_confusion_matrix_precision_perfect_recall_explained_
+> by_mixed_bucket`, `test_confusion_matrix_ideal_nonideal_recall_split`) re-pinned to these new numbers,
+> with a docstring explaining why (repo convention). New tests added to `tests/test_library_ingest.py`
+> for `resync_reference_metadata()` itself (real-roster dry-run sanity check, write=False safety check,
+> and a fully isolated synthetic-fixture test covering the stale-value-correction, irrep-untouched,
+> mode-count-mismatch-skip, and no-rows-at-all paths). Full `pytest` green (92/92, was 89/89).
+> **Incidental finding (pre-existing, NOT caused by this session, flagged by both `formula-auditor`-
+> adjacent investigation and independently confirmed by `score-validator`):** `library_scores.csv`'s
+> `s_AB`/`rel_db` per-bond display strings for NCl3/NBr3 (12 of 470 internal rows) show reordered (not
+> value-changed) bond terms versus the previously-committed golden, because `IntermediateIO`'s bond
+> block writes neighbors via `sorted(adjacency[i])` (`src/parser.py` ~line 470) while a bond list
+> freshly parsed straight from a `.com`/`.gjf` preserves file-encounter order (unsorted for
+> NCl3/NBr3's `.com` files, which list neighbors as `2 4 3`) — a pre-existing `IntermediateIO`
+> cache-cold-vs-cache-warm inconsistency, unconnected to `resync_reference_metadata()` (which never
+> touches connectivity/bonds/`data/intermediate/` at all; `src/parser.py` has zero diff this session).
+> Consequence is two floating-point-summation-order last-ULP differences (`V_Stretch` Δ≈2e-16,
+> `delta_b_mean` Δ≈1e-16 — 10 orders of magnitude below any tolerance used anywhere), numerically inert.
+> Worth a low-priority follow-up ticket (make `_parse_connectivity`'s raw order match `IntermediateIO`'s
+> saved order, or vice versa, so `s_AB` string order is stable across cache states) — not fixed this
+> session, out of scope for Phase 2.
+> **What Phase 2 does NOT fix (separately tracked, still open):** the 23 T-shaped/see-saw/BBr3/OCl2
+> molecules with NO `data_score.csv`/`characterised_modes.csv` row at all (see the 2026-07-07 TODO
+> below) — resync can only correct EXISTING rows' reference metadata, it cannot invent literature
+> type/sym labels that were never entered. These two problems remain clearly distinct.
+>
 > **2026-07-08 (Phase 1 — parser + intermediate-file rework, `mu`/`k`/`irrep` extraction; PLAN:
 > `C:\Users\User\.claude\plans\before-that-the-program-ethereal-penguin.md`):** `GaussianParser` now
 > extracts reduced mass (`mu`), force constant (`k`), and the irrep/symmetry label from every mode's

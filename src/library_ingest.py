@@ -84,6 +84,7 @@ import numpy as np
 import pandas as pd
 
 from src import csv_label_ingest
+from src.parser import GaussianParser
 
 _EXTERNAL_SLOTS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 
@@ -402,3 +403,209 @@ def run_ingest_pipeline(data_dir="data", thresholds=None, write=True):
     if write:
         df.to_csv(out_path, index=False)
     return df, out_path, skip_report
+
+
+# --- Phase 2 (2026-07-08): resync data_score.csv/characterised_modes.csv ---
+# freq/mu/k from the on-disk log, fixing attach_labels()'s stale-freq gate
+# failures at the source. See IMPLEMENTATION_PLAN.md RESUME HERE + the plan
+# file `before-that-the-program-ethereal-penguin.md`, Phase 2.
+#
+# `irrep` is deliberately NOT touched by this resync (see
+# `resync_reference_metadata`'s docstring "irrep is out of scope" note) --
+# confirmed via `plot_irrep_coupling` (src/figures.py) that data_score.csv's
+# irrep column is read downstream with hardcoded Unicode-subscript/prime
+# strings (e.g. "A₂\"", "E'", "B₂") matched by exact equality; the raw
+# Gaussian-log irrep token is a different, ASCII-only alphabet ("A2\"", "E",
+# "B2") that would silently break every category match if written in place.
+# Building a correct, fully-general ASCII->Unicode-subscript/prime/Greek
+# irrep translator (Sigma/Pi for linear groups, primes for D3h, etc.) is a
+# real but separable piece of work matching the already-recorded,
+# author-approved deferral ("defer regenerating data/data_score.csv's
+# irrep/bond-length columns ... to a follow-up session") -- left untouched
+# here rather than risk a silent mistranslation. A second, independent
+# reason: at least one molecule (AlCl3-class, Gaussian's own near-degenerate
+# "?A"/"?B" placeholder irreps) has an EXISTING data_score.csv irrep value
+# that is the author's own manual resolution of an ambiguity Gaussian itself
+# could not resolve -- the raw log value is strictly less informative there,
+# so overwriting would be a regression, not a resync, even before the
+# formatting problem.
+#
+# `k` (data_score.csv) WAS independently verified this session (not assumed)
+# to be a real force constant column, not an unrelated scoring metric: for
+# every molecule whose freq already agrees with the on-disk log (i.e. no
+# staleness), data_score.csv's `k` values match `Force constants ---` in the
+# log to 4 decimal places exactly (e.g. SnH4 mode 1: log 0.3149 == ds 0.3149;
+# TeH4 mode 6: log 1.6307 == ds 1.6307). `characterised_modes.csv` already
+# has an explicit, unambiguous `k` (force constant) + `μ` (reduced mass)
+# column pair with the same semantics. Both are safe to overwrite in place.
+
+def _resolve_log_path(base, data_dir="data"):
+    """basename -> full path to its .log/.out file, or None if neither exists."""
+    for ext in (".log", ".out"):
+        candidate = os.path.join(data_dir, "logs", base + ext)
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _fmt_trim(value, dp=4):
+    """Format `value` to `dp` decimal places, then strip trailing zeros (and
+    a trailing bare '.') -- matches data_score.csv/characterised_modes.csv's
+    own existing convention (e.g. Gaussian's '485.3180' is stored there as
+    '485.318', not '485.3180'), so a resync doesn't introduce a purely
+    cosmetic reformatting diff on top of the real value change."""
+    s = f"{value:.{dp}f}"
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s if s else "0"
+
+
+def resync_reference_metadata(data_dir="data", write=True):
+    """Resync `freq` (+ `k` force constant, + `characterised_modes.csv`'s
+    `μ` reduced mass) in `data_score.csv`/`characterised_modes.csv` from the
+    on-disk Gaussian `.log` the engine actually scores, for every
+    `mol_list_method.csv` roster molecule that already has existing rows in
+    either CSV. `irrep` is intentionally left untouched -- see the module
+    comment above this function for why.
+
+    Rows are matched by 1-based internal mode index (the `mode` column),
+    identical to the indexing `main.py build_scorer_and_final()` assigns as
+    "Vib i" labels and `attach_labels()` gates on -- i.e. position within
+    `GaussianParser.parse(parse_modes=True)['modes']` (Gaussian's own
+    frequency-block order; Gaussian already projects out translation/
+    rotation, so this list is exactly the 3N-6/3N-5 internal modes with no
+    offset bookkeeping needed).
+
+    A molecule's mode COUNT (or the max `mode` index) disagreeing with the
+    on-disk log's parsed mode count is treated as a real structural mismatch
+    (different geometry/atom count), not a staleness problem, and is
+    skipped (both CSVs' rows for that molecule left untouched) -- reported,
+    never silently guessed.
+
+    Returns a report dict:
+      ``resynced``: [{"molecule", "basename", "n_modes",
+                       "changes": [{"csv", "mode", "field", "old", "new"}]}]
+        -- one entry per roster molecule actually touched; `changes` lists
+        only cells whose VALUE materially changed (same-value overwrites are
+        not reported as changes, though the cell is still rewritten).
+      ``skipped_mode_count_mismatch``: [{"molecule", "basename", "detail"}]
+      ``skipped_no_log``: [{"molecule", "basename", "detail"}]
+      ``skipped_no_rows``: [molecule, ...] -- roster molecules with NO row
+        in EITHER csv at all (the separately-tracked, still-open TODO:
+        back-filling literature labels for the 23 T-shaped/see-saw/BBr3/OCl2
+        molecules -- resync cannot invent rows that were never entered).
+    """
+    roster = load_mol_roster(data_dir)
+    ds_path = os.path.join(data_dir, "data_score.csv")
+    cm_path = os.path.join(data_dir, "characterised_modes.csv")
+    ds = pd.read_csv(ds_path, dtype=str, keep_default_na=False)
+    cm = pd.read_csv(cm_path, dtype=str, keep_default_na=False)
+
+    report = {
+        "resynced": [],
+        "skipped_mode_count_mismatch": [],
+        "skipped_no_log": [],
+        "skipped_no_rows": [],
+    }
+
+    for _, r in roster.iterrows():
+        molecule, base = r["molecule"], r["basename"]
+        ds_idx = list(ds.index[ds["molecule"] == molecule])
+        cm_idx = list(cm.index[cm["molecule"] == molecule])
+        if not ds_idx and not cm_idx:
+            report["skipped_no_rows"].append(molecule)
+            continue
+
+        log_path = _resolve_log_path(base, data_dir)
+        if log_path is None:
+            report["skipped_no_log"].append(
+                {"molecule": molecule, "basename": base, "detail": "no .log/.out on disk"})
+            continue
+        try:
+            engine_modes = GaussianParser(log_path).parse(parse_modes=True)["modes"]
+        except Exception as e:
+            report["skipped_no_log"].append(
+                {"molecule": molecule, "basename": base, "detail": f"parse failed: {e}"})
+            continue
+        n_engine = len(engine_modes)
+
+        # Validate EXACT agreement (not just count/max -- a formula-auditor
+        # review, 2026-07-08, caught that count+max alone would silently
+        # pass a CSV with duplicate/non-contiguous mode indices, e.g.
+        # [1, 1, 3, 4, 5] for n_engine=5 -- len==5, max==5, but mode 2 is
+        # missing and mode 1 is duplicated) between the CSV's `mode` values
+        # and {1, ..., n_engine}. A blank "mode" cell is its OWN reported
+        # problem (not silently excluded from the count, which could mask a
+        # real mismatch and would otherwise crash `int(float(''))` in the
+        # update loop below) -- filtered rows are only ever used past this
+        # point once the whole molecule has cleanly passed.
+        problems = []
+        filtered_idx = {}
+        for label, idx, table in (("data_score.csv", ds_idx, ds),
+                                   ("characterised_modes.csv", cm_idx, cm)):
+            if not idx:
+                filtered_idx[label] = []
+                continue
+            blank_rows = [i for i in idx if table.at[i, "mode"] == ""]
+            valid_idx = [i for i in idx if table.at[i, "mode"] != ""]
+            modes_in_csv = sorted(int(float(table.at[i, "mode"])) for i in valid_idx)
+            if blank_rows:
+                problems.append(f"{label}: {len(blank_rows)} row(s) with a blank 'mode' field")
+            if modes_in_csv != list(range(1, n_engine + 1)):
+                problems.append(
+                    f"{label}: mode indices {modes_in_csv} do not exactly match "
+                    f"engine's 1..{n_engine} ({n_engine} parsed modes)")
+            filtered_idx[label] = valid_idx
+        if problems:
+            report["skipped_mode_count_mismatch"].append(
+                {"molecule": molecule, "basename": base, "detail": "; ".join(problems)})
+            continue
+        ds_idx = filtered_idx["data_score.csv"]
+        cm_idx = filtered_idx["characterised_modes.csv"]
+
+        changes = []
+        for i in ds_idx:
+            mode_i = int(float(ds.at[i, "mode"]))
+            m = engine_modes[mode_i - 1]
+            new_freq = _fmt_trim(m["frequency"])
+            if ds.at[i, "freq"] != new_freq:
+                changes.append({"csv": "data_score.csv", "mode": mode_i, "field": "freq",
+                                 "old": ds.at[i, "freq"], "new": new_freq})
+            ds.at[i, "freq"] = new_freq
+            if m.get("force_constant") is not None:
+                new_k = _fmt_trim(m["force_constant"])
+                if ds.at[i, "k"] != new_k:
+                    changes.append({"csv": "data_score.csv", "mode": mode_i, "field": "k",
+                                     "old": ds.at[i, "k"], "new": new_k})
+                ds.at[i, "k"] = new_k
+
+        for i in cm_idx:
+            mode_i = int(float(cm.at[i, "mode"]))
+            m = engine_modes[mode_i - 1]
+            new_freq = _fmt_trim(m["frequency"])
+            if cm.at[i, "freq"] != new_freq:
+                changes.append({"csv": "characterised_modes.csv", "mode": mode_i, "field": "freq",
+                                 "old": cm.at[i, "freq"], "new": new_freq})
+            cm.at[i, "freq"] = new_freq
+            if m.get("force_constant") is not None:
+                new_k = _fmt_trim(m["force_constant"])
+                if cm.at[i, "k"] != new_k:
+                    changes.append({"csv": "characterised_modes.csv", "mode": mode_i, "field": "k",
+                                     "old": cm.at[i, "k"], "new": new_k})
+                cm.at[i, "k"] = new_k
+            if m.get("reduced_mass") is not None:
+                new_mu = _fmt_trim(m["reduced_mass"])
+                if cm.at[i, "μ"] != new_mu:
+                    changes.append({"csv": "characterised_modes.csv", "mode": mode_i, "field": "mu",
+                                     "old": cm.at[i, "μ"], "new": new_mu})
+                cm.at[i, "μ"] = new_mu
+
+        report["resynced"].append({
+            "molecule": molecule, "basename": base, "n_modes": n_engine, "changes": changes,
+        })
+
+    if write:
+        ds.to_csv(ds_path, index=False, encoding="utf-8-sig")
+        cm.to_csv(cm_path, index=False, encoding="utf-8-sig")
+
+    return report

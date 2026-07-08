@@ -41,6 +41,15 @@ def get_symbol(atomic_num):
     """Returns element symbol from atomic number."""
     return atomicNumber.get(atomic_num, 'X').title()
 
+# Reverse of atomicNumber (lowercase symbol -> atomic number), built once.
+_symbolToNumber = {v: k for k, v in atomicNumber.items()}
+
+def get_atomic_number(symbol):
+    """Returns atomic number from an element symbol (case-insensitive).
+    Returns None for an unrecognized symbol (e.g. the 'X' placeholder
+    get_symbol() itself returns for an unknown atomic number)."""
+    return _symbolToNumber.get(symbol.lower())
+
 def get_unit_vector(vec):
     """Returns the unit vector of a given vector."""
     norm = np.linalg.norm(vec)

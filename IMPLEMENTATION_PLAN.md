@@ -10,11 +10,48 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-07 (**final flip to Gaussian-direct** — the xlsx-precomputed-score ingest path
-> is deleted outright, not just defaulted away from; `--calibrate`/`--figures` blocker resolved, full
-> `pytest` green (79/79); see RESUME HERE below.)
+> Last updated: 2026-07-08 (**Phase 1 of the "Gaussian-direct intermediate file" rework** — parser now
+> extracts reduced mass/force constant/irrep from every mode's frequency block, and the normal-mode
+> intermediate file format was rewritten to a Gaussian-direct style; see RESUME HERE below. Full
+> `pytest` green (89/89).)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-08 (Phase 1 — parser + intermediate-file rework, `mu`/`k`/`irrep` extraction; PLAN:
+> `C:\Users\User\.claude\plans\before-that-the-program-ethereal-penguin.md`):** `GaussianParser` now
+> extracts reduced mass (`mu`), force constant (`k`), and the irrep/symmetry label from every mode's
+> Gaussian frequency block (both the "HP" `Coord Atom Element:` and "Standard" `Atom AN` block
+> variants share the same fixed offsets around the `Frequencies ---`/`Frequencies --` line — new
+> shared helper `src/parser.py::_parse_freq_block_header`). `IntermediateIO`'s normal-mode save/load
+> format was rewritten to match a hand-built example (`Github\C6H6_MP2_3-21G.txt`): header line
+> `NATOMS LINEAR NAME`, gjf-style connectivity block, Standard-orientation-style coordinate block, then
+> raw Gaussian HP frequency blocks (5 modes/block) carrying irrep/mu/k. `IntermediateIO.load()`
+> auto-detects EMIT (untouched, old `MOLECULE_DATA` format) vs normal (new format) by content, not
+> filename. `mu`/`k`/`irrep` threaded through to `classify_all_modes()`'s per-mode dict,
+> `main.py score_modes()`'s CSV (`Mu`/`K`/`Irrep` columns, `_normal_scores.csv` only), and
+> `src/library_ingest.py`'s `SCHEMA_COLUMNS` (`reduced_mass`/`force_constant`/`irrep`, appended at the
+> end — named to avoid colliding with `data_score.csv`'s unrelated existing `k` column).
+> `classify_to_rows()`'s CSV output was deliberately NOT extended (an existing test,
+> `test_classify_to_rows_shape`, pins its exact column set).
+> **Migration gotcha found and fixed:** every one of the 80 pre-existing `data/intermediate/
+> *_normal_data.txt` caches predates this session and is mtime-fresh (nothing invalidates it), but is
+> structurally the OLD `MOLECULE_DATA` format with no `mu`/`k`/`irrep` fields at all —
+> `IntermediateIO.load()`'s new content-based format auto-detection correctly parses it (score-neutral)
+> but would silently return `None` for the new fields forever. Fixed with a one-time self-healing
+> migration guard in `main.load_inputs()` (`_normal_cache_is_current_format()`): a `mode_type=="normal"`
+> cache hit whose file still starts with `MOLECULE_DATA` is treated as stale, forcing exactly one
+> reparse-and-rewrite in the new format. All 80 intermediate caches + `data/results/library_scores.csv`
+> were regenerated via `py main.py --library` under this fix; diffed against the pre-change git
+> revision — **0 rows differ on any of the 20 pre-existing columns** (score-neutral, confirmed both by
+> the lead engineer and independently by `score-validator`); only 3 new columns appeared, populated for
+> all 470 internal rows, correctly null for all 427 external (T/R) rows. New tests: `tests/test_parser.py`
+> (mu/k/irrep extraction for HP + Standard blocks incl. the `?A`-placeholder-irrep case, `IntermediateIO`
+> round-trip, fail-loud on a tampered `LINEAR` header flag, bare-pair bond-line acceptance); extended
+> `tests/test_intermediate_cache.py` and `tests/test_library_ingest.py`. Full `pytest` green (89/89).
+> **Deliberately out of scope this session (Phase 2 of the plan, not started):** resyncing
+> `data/data_score.csv`/`data/characterised_modes.csv`'s `freq`/`mu`/`k`/`irrep` columns from the
+> now-available Gaussian-direct data to fix the 13 known `attach_labels()` frequency-gate mismatches —
+> see the plan file for the intended approach.
+>
 > **TODO (2026-07-07, not yet started): back-fill literature stretch/bend labels for the
 > T-shaped/see-saw non-ideal families (and a few stragglers) in `data/data_score.csv`.**
 > `mol_list_method.csv` has 60 non-ideal single-center molecules computed end to end, but

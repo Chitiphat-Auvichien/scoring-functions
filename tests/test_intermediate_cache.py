@@ -91,6 +91,16 @@ def test_cache_hit_skips_reparse():
         assert len(raw2["modes"]) == len(raw1["modes"])
         assert raw2["bonds"] == raw1["bonds"]
 
+        # mu/k/irrep (2026-07-08 Gaussian-direct rework) must survive the
+        # cache round-trip too -- not just frequency/vector/atoms/bonds.
+        # Precision loss here would silently degrade what a cache hit scores
+        # against, same as vector precision (see IntermediateIO's module
+        # docstring / this file's own module docstring).
+        for m1, m2 in zip(raw1["modes"], raw2["modes"]):
+            assert abs(m1["reduced_mass"] - m2["reduced_mass"]) < 1e-3
+            assert abs(m1["force_constant"] - m2["force_constant"]) < 1e-3
+            assert m1["irrep"] == m2["irrep"]
+
 
 def test_stale_source_forces_reparse():
     """Touching the log to be newer than the cached intermediate must trigger

@@ -81,6 +81,7 @@ import pandas as pd
 from src.classifier import Thresholds, is_clean_external
 from src.library_ingest import (
     build_library_scores, resolve_log_basename, _EXTERNAL_SLOTS,
+    multi_centre_molecules,
 )
 
 DEFAULT_TAU_GRID = tuple(round(x, 4) for x in np.arange(0.05, 0.9991, 0.005))
@@ -91,33 +92,50 @@ DEFAULT_TAU_GRID = tuple(round(x, 4) for x in np.arange(0.05, 0.9991, 0.005))
 # bending classification" section) is explicitly scoped to single-centre
 # AB_n topologies only -- "one distinguishable atom anchors all bonds
 # symmetrically" (JCC .tex, "Stretching/bending classification" subsection;
-# tab:ideal lists exactly 11 single-centre AB_n molecules). These 7
-# molecules in library_scores.csv are two-, four-, or six-centre topologies
-# that do not fit that scope and were being pooled into the non-ideal
-# statistics by mistake (58 non-ideal molecules instead of the 51 an
-# independent hand-count of tab:nonideal's own AB_n grid gives):
-#   C2H2 (ethyne, two-centre), C2H4 (ethylene, two-centre), C2H6 (ethane,
-#   two-centre), H2O2 (hydrogen peroxide, two-centre), C6H6 (benzene,
-#   six-centre), iso-C4H10/n-C4H10 (isobutane/n-butane, four-centre).
-# H2O (single-centre AB2) is NOT excluded -- it stays in the non-ideal
-# population as a familiar illustrative molecule (separately also used for
-# the 7-scoring-functions validation table, an unrelated existing use).
+# tab:ideal lists exactly 11 single-centre AB_n molecules). The molecules
+# excluded here are two-, four-, or six-centre topologies that do not fit
+# that scope and would otherwise be pooled into the non-ideal statistics by
+# mistake. H2O (single-centre AB2) is NOT excluded -- it stays in the
+# non-ideal population as a familiar illustrative molecule (separately also
+# used for the 7-scoring-functions validation table, an unrelated existing
+# use).
+#
+# **2026-07-08: roster-derived, not hardcoded.** Originally a hardcoded
+# 7-name frozenset (C2H2, C2H4, C2H6, H2O2, C6H6, iso-C4H10, n-C4H10).
+# Repointed to ``src.library_ingest.multi_centre_molecules()``, which reads
+# ``data/mol_list_method.csv``'s per-molecule ``mol_type`` column
+# ('ideal'/'non-ideal'/'multi-centre') -- the same roster-driven source of
+# truth calibrate.py already uses everywhere else, and forward-compatible
+# with any future multi-centre molecule (just tag it in the CSV, no code
+# change needed). Six of the original 7 hardcoded names (all but C6H6) are
+# outside the finalized 72-molecule roster entirely (removed 2026-07-07)
+# and were already no-ops for filter_single_centre_library() on the real
+# library_scores.csv -- only C6H6 was ever actually present to be dropped.
+# mol_list_method.csv already tags C6H6 'multi-centre' (verified, not
+# assumed), so this reproduces byte-identical FILTERING behavior to the old
+# hardcoded set on every real/current dataset -- confirmed by
+# tests/test_calibrate.py::test_single_centre_only_exclude_matches_scope_
+# decision, which cross-checks both the roster-derived set and the
+# historical 7-name set against the real library_scores.csv and asserts
+# they drop exactly the same molecules ({"C6H6"}).
 #
 # This is a DATA-LOSS-FREE, analysis-time filter, not an ingest-time one, for
-# whichever of these molecules IS in the library/CSV -- as of the 2026-07-07
-# roster-driven pipeline (data/mol_list_method.csv, 72 molecules), only C6H6
-# actually appears in library_scores.csv at all; C2H2/C2H4/C2H6/H2O2/
-# iso-C4H10/n-C4H10 are outside the finalized 72-molecule roster and so are
-# simply absent from the CSV already (this filter is a no-op for them, not
-# the mechanism excluding them). Benzene in particular keeps its own separate,
-# dedicated confusion matrix (src/benzene_validation.py,
-# benzene_internal_confusion_matrix.csv, fig:benzeneconfusion) built
-# directly from library_scores.csv's own C6H6 rows -- this filter has zero
-# effect there since that module never calls confusion_matrix_stats() or
-# this filter.
-SINGLE_CENTRE_ONLY_EXCLUDE = frozenset({
-    "C2H2", "C2H4", "C2H6", "H2O2", "C6H6", "iso-C4H10", "n-C4H10",
-})
+# whichever of these molecules IS in the library/CSV. Benzene in particular
+# keeps its own separate, dedicated confusion matrix
+# (src/benzene_validation.py, benzene_internal_confusion_matrix.csv,
+# fig:benzeneconfusion) built directly from library_scores.csv's own C6H6
+# rows -- this filter has zero effect there since that module never calls
+# confusion_matrix_stats() or this filter.
+try:
+    SINGLE_CENTRE_ONLY_EXCLUDE = multi_centre_molecules()
+except Exception:
+    # Fallback to the historical hardcoded scope decision if
+    # data/mol_list_method.csv can't be read at import time (e.g. cwd isn't
+    # the repo root) -- keeps this module importable in that edge case
+    # rather than crashing on import.
+    SINGLE_CENTRE_ONLY_EXCLUDE = frozenset({
+        "C2H2", "C2H4", "C2H6", "H2O2", "C6H6", "iso-C4H10", "n-C4H10",
+    })
 
 
 def filter_single_centre_library(lib_df):

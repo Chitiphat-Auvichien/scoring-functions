@@ -10,11 +10,123 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-08 (**Phase 2 of the "Gaussian-direct intermediate file" rework** — resynced
-> `data_score.csv`/`characterised_modes.csv`'s `freq`/`k`(/`mu`) from the on-disk logs, fixing all 13
-> known `attach_labels()` gate failures; see RESUME HERE below. Full `pytest` green (92/92).)
+> Last updated: 2026-07-08 (**Phase 3 — retire `data/data_score.csv` from the code path entirely**,
+> regenerate `data/characterised_modes.csv` from a direct on-disk scan, add a new engine-derived `d_CA`
+> column, and repoint `fig:irrep_coupling`/`SINGLE_CENTRE_ONLY_EXCLUDE` off the retired file; see RESUME
+> HERE below. Full `pytest` green (105/105).)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-08 (Phase 3 — `data/data_score.csv` retirement; verified/finalized after a session-limit
+> cutoff, all code already written, this pass was verification + one doc fix + commit):** Author
+> directive: stop reading `data/data_score.csv` anywhere in the pipeline (leave the file on disk,
+> untouched, just unused), regenerate `data/characterised_modes.csv` from a **direct disk scan** of
+> `data/logs`+`data/gjf` (not restricted to `mol_list_method.csv`'s 72-row roster) while preserving every
+> existing manually-curated literature column, compute a new engine-derived `d_CA` (central/hub-atom
+> displacement amplitude) column for single-centre ideal/non-ideal molecules, and repoint
+> `src/figures.py::plot_irrep_coupling` + `src/calibrate.py::SINGLE_CENTRE_ONLY_EXCLUDE` off the retired
+> file onto the new sources.
+> **What changed (`src/library_ingest.py`, the bulk of the diff, +454/-70):** `_central_atom_index(bonds,
+> n_atoms)` — 0-based index of the unique atom with degree `n_atoms-1` (bonded to every other atom), or
+> `None` if zero or more than one such atom exists (multi-centre / no well-defined hub, e.g. benzene's six
+> degree-2 ring carbons). `score_geometry_molecule(..., mol_type=None)` now gates a new `d_CA` column
+> (`||mode_vector[central_atom]||`, the Euclidean per-mode displacement amplitude of that hub atom) to
+> only `mol_type in ("ideal", "non-ideal")` molecules with a resolvable hub — `None` for every external
+> row, every multi-centre molecule, and any ideal/non-ideal molecule whose bond graph has no unique hub
+> (none currently do — see verification below). `multi_centre_molecules()` reads
+> `mol_list_method.csv`'s `mol_type` column and returns the `mol_type=='multi-centre'` molecule set,
+> replacing `src/calibrate.py`'s old hardcoded 7-name `SINGLE_CENTRE_ONLY_EXCLUDE` frozenset
+> (`C2H2,C2H4,C2H6,H2O2,C6H6,iso-C4H10,n-C4H10`) with a roster-driven, forward-compatible source (falls
+> back to the historical hardcoded set only if `mol_list_method.csv` can't be read at import time).
+> `attach_labels()` is repointed off `data_score.csv` onto `characterised_modes.csv` for both `ref_label`/
+> `ref_key` values AND the frequency-agreement gate (now compared against `characterised_modes.csv`'s own
+> `freq`, itself freshly regenerated from the on-disk log — so a gate failure going forward should only
+> ever mean a real mode-count/index problem, not staleness) — it no longer sets `ideal` at all. A new
+> `attach_ideal_tags(df, roster)` sources `ideal` **unconditionally** (not gated by the frequency check,
+> since `mol_type` is a structural roster property, not a per-mode literature match) from
+> `mol_list_method.csv`'s `mol_type` column (`ideal`→`"yes"`, `non-ideal`→`"no"`, `multi-centre`→`None`).
+> `regenerate_characterised_modes()` rebuilds `characterised_modes.csv` from
+> `discover_geometry_molecules()`'s direct disk scan (every `.log`/`.out`+`.com`/`.gjf` basename pair
+> actually present), preserving the 7 manually-curated columns (`shape, type, sym, description, νₖ, ref,
+> Note`) for every `(molecule, mode)` that already had a row, leaving them blank for genuinely new pairs,
+> and reporting (never silently dropping) any molecule that loses its on-disk match. `irrep` is
+> deliberately carved out and treated like a manual column for existing rows (preserved untouched; only a
+> genuinely new row gets the raw engine token) — same reasoning as `resync_reference_metadata()`'s
+> existing `irrep` handling (hand-verified Unicode-subscript/prime strings vs. plain-ASCII Gaussian
+> tokens). `SCHEMA_COLUMNS` gained `d_CA` at the end (purely additive).
+> `src/csv_label_ingest.py`: `data_score.csv` removed from `LABEL_CSV_FILES` entirely; `build_label_lookup()`
+> now reads only `characterised_modes.csv`, and `get_label()` returns a `(ref_label, ref_key)` 2-tuple
+> (was a 3-tuple with `ideal`). `src/figures.py::plot_irrep_coupling` now reads `irrep`/`shape`/`type` from
+> `characterised_modes.csv`, the ideal/non-ideal filter from `mol_list_method.csv`'s `mol_type`, and
+> `V_Stretch`/the new `d_CA` from `library_scores.csv` (merged on `(molecule, mode)`/`mode_index`) — no
+> longer reads `data/data_score.csv` at all. `main.py`'s `run_ingest_pipeline()` skip-report print message
+> updated to name `characterised_modes.csv`/`ref_key` instead of `data_score.csv`/`ideal`.
+> **Verification performed this pass (prior session's code was already complete and correct; this was a
+> genuine independent re-derivation, not a rubber-stamp):**
+> - `data/characterised_modes.csv`: 397 rows/63 molecules → 470 rows/72 molecules. 15 molecules with no
+>   on-disk log+gjf pair dropped (`CCl4, CF4, CH4, Cl2O, GeCl4, GeF4, GeH4, NO2, SO2, SeO2, SiCl4, SiF4,
+>   SiH4, TeF2, TeO2` — all legacy, out-of-roster names, confirmed absent from `mol_list_method.csv`
+>   too); 24 roster molecules gained their first-ever row (`BBr3`, the 10 T-shaped + 11 see-saw families,
+>   `SnO2` — the last one is new information: `SnO2` had a `data_score.csv` row but never a
+>   `characterised_modes.csv` one, a genuine pre-existing gap between the two files, unrelated to this
+>   session's `mol_type`-sourcing change). Spot-checked 5 previously-labeled molecules (`IH3, XeH4, TeH2,
+>   SbH3, InH3`) mode-by-mode against the pre-session committed file — `type`/`sym`/`ref` all preserved
+>   exactly, 0 mismatches.
+> - `d_CA`: 440/470 internal rows non-null (91 ideal + 349 non-ideal), 30 null (all of `C6H6`'s internal
+>   rows, `mol_type=='multi-centre'`, gated off entirely as designed) — **zero** ideal/non-ideal molecules
+>   came back with "no unique hub found" (the `_central_atom_index` warning path exists but never fires on
+>   the real 72-molecule roster). Water (`H2O`, `mol_type='non-ideal'`) spot-checked: O is atom index 0 by
+>   file order, `d_CA` = 0.07478/0.04408/0.07062 for its 3 modes — sane, non-zero, sub-Å-scale magnitudes,
+>   not garbage. `formula-auditor` independently confirmed `_central_atom_index`'s degree-counting logic
+>   and `d_CA`'s indexing consistency (0-based throughout, same convention `score_bonds()` already uses)
+>   with no bugs found, including checking duplicate-bond and self-bond edge cases (both provably
+>   unreachable given `GaussianParser`'s own bond-parsing/dedup behavior).
+> - `multi_centre_molecules()` vs. the old hardcoded 7-name set: `formula-auditor` and this session both
+>   independently confirmed `mol_list_method.csv` tags exactly one roster molecule `mol_type=='multi-centre'`
+>   — `C6H6` — and that both the old and new exclude sets, intersected with the real
+>   `library_scores.csv`'s actual molecule population, drop identically `{"C6H6"}`. Byte-identical
+>   filtering behavior confirmed, not assumed.
+> - `score-validator` independently re-derived (not just trusted the diff) that **0 of 897 rows** in
+>   `library_scores.csv` differ on any of `V_Stretch, Tx, Ty, Tz, Rx, Ry, Rz, predicted_label,
+>   predicted_annotation, s_AB, rel_db, delta_b_mean, freq, reduced_mass, force_constant, irrep,
+>   has_geometry` between the last-committed version and this session's regenerated one (1e-9 tolerance) —
+>   this session changed NO score, only added `d_CA` and re-sourced label columns. Columns that DID
+>   legitimately change: `ideal` (198/897 rows — 168 `NaN→"no"` for newly-row'd non-ideal molecules, 30
+>   `"no"→NaN` for `C6H6`'s internal rows since `multi-centre` now correctly maps to `None` instead of the
+>   old file's `"no"`, both by design), `ref_label` (4/897 rows — `SnO2`'s 4 internal modes lose their
+>   `bend/bend/stretch/stretch` label with nothing to replace them, since that label only ever lived in
+>   the now-retired `data_score.csv` and `SnO2` never had a `characterised_modes.csv` row — a real,
+>   flagged ground-truth loss, not a score regression: `SnO2`'s `predicted_label`/`predicted_annotation`
+>   are unaffected), `ref_key` (0/897 rows differ, unexpectedly stable).
+> - **Own independent finding, not raised by either specialist — `vib_scr` (old `data_score.csv`) vs.
+>   `V_Stretch` (live engine) genuinely diverge for a nontrivial subset, and this matters for
+>   `fig:irrep_coupling`'s repointing:** merged 302 `(molecule, mode)` rows present in both files; `freq`
+>   agrees to the last decimal for every one of them (0.0 diff — confirming these are the same physical
+>   mode, not a fallback-level-of-theory mismatch), but `vib_scr` vs. `V_Stretch` differ by >1e-3 for
+>   **71/302 rows across 14 molecules** (`AlCl3, AsBr3, AsCl3, C6H6, NBr3, NCl3, NH3, PBr3, PCl3, PF3,
+>   SbH3, SbH5, SeBr2, XeH4`), max diff 0.134 (`NCl3` mode 3: 0.200 vs. 0.334). Root cause: a prior
+>   session's `resync_reference_metadata()` explicitly resyncs `freq`/`k`/`mu` in `data_score.csv` from
+>   the on-disk log but was documented to deliberately leave `vib_scr` untouched — so `data_score.csv`'s
+>   `vib_scr` is a genuinely stale score from whatever (older, possibly pre-classifier-fix) computation
+>   originally populated that file, not a live recompute. This divergence **predates this session** (no
+>   file this session touches computes `V_Stretch`) and is now moot for the general pipeline since
+>   `data_score.csv` is fully retired — but it directly affects `fig:irrep_coupling`'s actual plotted
+>   values: of the 14 divergent molecules, `AlCl3` (AB3 trigonal-planar panel) and `SeBr2` (AB2 bent
+>   panel, ~0.02–0.05 diff on all 3 modes) are both in that figure's plotted population, so its
+>   vib_scr-based numbers (if ever compared against a pre-2026-07-08 rendering) will show real,
+>   non-negligible shifts for those two molecules beyond just the already-documented population change
+>   (`Cl2O/NO2/SO2/SeO2/TeF2/TeO2`+4-centre halides dropping out, `BBr3` newly appearing blank-labeled).
+>   **Flagged for `lead-author` to reconcile if/when `fig:irrep_coupling`'s SI prose is next touched — not
+>   fixed here** (out of this session's scope per the explicit "no `.tex` hand-edits" instruction).
+> - **One documentation-only bug fixed this pass:** `tests/test_library_ingest.py`'s
+>   `test_resync_reference_metadata_real_roster_has_no_mismatches_or_missing_logs` docstring claimed "49
+>   roster molecules had `characterised_modes.csv` rows previously (the other 23 had none)" — off by one
+>   in both directions (correct count is **48 had rows, 24 didn't**, the extra one being `SnO2`, per the
+>   finding above). No test assertion depended on the wrong numbers (they were prose-only), so this was a
+>   comment fix, not a logic change — re-ran the full suite after fixing, still 105/105 green.
+> Full `pytest`: **105/105 green** (was 105/105 before this pass too — the 12 new tests for `d_CA`,
+> `multi_centre_molecules`, `attach_ideal_tags`, and `regenerate_characterised_modes` were already written
+> and passing when this verification pass began; nothing needed re-writing).
+>
 > **2026-07-08 (Phase 2 — resync `data_score.csv`/`characterised_modes.csv` reference metadata from
 > on-disk logs; PLAN: `C:\Users\User\.claude\plans\before-that-the-program-ethereal-penguin.md`,
 > Phase 2 section):** New `src/library_ingest.py::resync_reference_metadata()` (after

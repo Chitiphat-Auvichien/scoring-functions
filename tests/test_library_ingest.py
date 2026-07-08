@@ -40,7 +40,9 @@ import pandas as pd                                                # noqa: E402
 from src.library_ingest import (                                   # noqa: E402
     load_mol_roster, check_roster_disk_consistency,
     resolve_log_basename, discover_geometry_molecules,
-    score_geometry_molecule, attach_labels, build_library_scores,
+    score_geometry_molecule, attach_labels, attach_ideal_tags,
+    build_library_scores, multi_centre_molecules, _central_atom_index,
+    _basename_to_molecule_map, regenerate_characterised_modes,
     _EXTERNAL_SLOTS, SCHEMA_COLUMNS,
 )
 from src.classifier import is_clean_external                       # noqa: E402
@@ -290,6 +292,7 @@ def test_score_geometry_molecule_water_direct():
         assert r["reduced_mass"] is None
         assert r["force_constant"] is None
         assert r["irrep"] is None
+        assert r["d_CA"] is None  # d_CA is an internal-mode-only quantity
 
     for r in internal:
         assert r["ref_label"] is None and r["ideal"] is None  # attached later
@@ -304,13 +307,70 @@ def test_score_geometry_molecule_water_direct():
         assert r["reduced_mass"] is not None and r["reduced_mass"] > 0.0
         assert r["force_constant"] is not None and r["force_constant"] > 0.0
         assert r["irrep"] is not None and isinstance(r["irrep"], str)
+        # mol_type defaulted to None (not passed) -> d_CA never attempted.
+        assert r["d_CA"] is None
 
 
-def test_schema_columns_includes_mu_k_irrep():
-    """reduced_mass/force_constant/irrep (2026-07-08) are appended to the end
-    of the locked schema -- purely additive, existing columns untouched."""
-    assert SCHEMA_COLUMNS[-3:] == ["reduced_mass", "force_constant", "irrep"]
-    assert SCHEMA_COLUMNS[:-3] == [
+# ---------------------------------------------------------------------------
+# d_CA (central/hub-atom displacement amplitude) -- _central_atom_index()
+# and score_geometry_molecule(mol_type=...)'s gating of it.
+# ---------------------------------------------------------------------------
+
+def test_central_atom_index_finds_the_unique_hub():
+
+    # Water: O(0) bonded to H(1), H(2) -- O has degree 2 == n_atoms-1.
+    assert _central_atom_index([(0, 1), (0, 2)], 3) == 0
+
+
+def test_central_atom_index_returns_none_for_no_hub_or_multiple_candidates():
+
+    # Benzene-like ring: every atom has degree 2, none has degree n-1=5.
+    ring = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0)]
+    assert _central_atom_index(ring, 6) is None
+    # Two atoms both happen to have degree n_atoms-1 (e.g. two bridging
+    # centres) -- ambiguous, must return None, not guess.
+    assert _central_atom_index([(0, 1), (0, 2), (1, 2)], 3) is None
+
+
+def test_score_geometry_molecule_computes_d_ca_for_non_ideal_water():
+    """Water tagged mol_type='non-ideal' (its real roster tag) gets a real
+    d_CA: the oxygen (the unique central atom, bonded to both hydrogens) is
+    atom index 0 by construction (GaussianParser preserves file order and
+    O is listed first in H2O's geometry)."""
+
+    base = resolve_log_basename("H2O", DATA_DIR)
+    rows = score_geometry_molecule(base, DATA_DIR, mol_type="non-ideal")
+    internal = [r for r in rows if r["kind"] == "internal"]
+    external = [r for r in rows if r["kind"] == "external"]
+    for r in internal:
+        assert r["d_CA"] is not None and r["d_CA"] >= 0.0
+    for r in external:
+        assert r["d_CA"] is None
+
+
+def test_score_geometry_molecule_skips_d_ca_for_multi_centre_or_unset_mol_type():
+    base = resolve_log_basename("H2O", DATA_DIR)
+    for mol_type in (None, "multi-centre", "something-unrecognized"):
+        rows = score_geometry_molecule(base, DATA_DIR, mol_type=mol_type)
+        assert all(r["d_CA"] is None for r in rows if r["kind"] == "internal")
+
+
+def test_multi_centre_molecules_tags_c6h6_and_nothing_else_in_the_real_roster():
+    """multi_centre_molecules() (roster-driven, repoints
+    src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE) must reproduce the real
+    mol_list_method.csv's mol_type=='multi-centre' rows exactly -- as of the
+    72-molecule roster, that is C6H6 alone (verified, not assumed)."""
+
+    result = multi_centre_molecules(DATA_DIR)
+    assert result == frozenset({"C6H6"})
+
+
+def test_schema_columns_includes_mu_k_irrep_and_d_ca():
+    """reduced_mass/force_constant/irrep (2026-07-08 parser rework) and d_CA
+    (2026-07-08 data_score.csv retirement) are appended to the end of the
+    locked schema -- purely additive, existing columns untouched."""
+    assert SCHEMA_COLUMNS[-4:] == ["reduced_mass", "force_constant", "irrep", "d_CA"]
+    assert SCHEMA_COLUMNS[:-4] == [
         "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
         "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
         "predicted_label", "predicted_annotation",
@@ -320,20 +380,24 @@ def test_schema_columns_includes_mu_k_irrep():
 
 # ---------------------------------------------------------------------------
 # attach_labels() -- fully synthetic (no CSV I/O) unit tests of the
-# frequency-gating logic.
+# frequency-gating logic. 2026-07-08: repointed off data_score.csv onto
+# characterised_modes.csv; 'ideal' is no longer set by attach_labels() at
+# all (see attach_ideal_tags() tests below) -- get_label() now returns a
+# (ref_label, ref_key) 2-tuple.
 # ---------------------------------------------------------------------------
 
 def test_attach_labels_gates_on_frequency_and_leaves_unlisted_molecules_alone():
-    """A matching, frequency-consistent internal row gets ref_label/ideal
-    filled in; a mismatched (or data_score.csv-absent) mode disqualifies the
-    WHOLE molecule's internal-row label join (all-or-nothing gate); a
-    molecule with no data_score.csv counterpart at all is untouched (not an
-    error); external rows are never touched."""
-    csv_tables = {"data_score": pd.DataFrame([
-        {"molecule": "TESTMOL", "mode": 1, "freq": 1000.0, "type": "stretch", "ideal": "yes"},
-        {"molecule": "TESTMOL", "mode": 2, "freq": 500.0, "type": "bend", "ideal": "no"},
-        {"molecule": "TESTMOL2", "mode": 1, "freq": 1000.0, "type": "stretch", "ideal": "yes"},
-    ]), "characterised_modes": pd.DataFrame(columns=["molecule", "mode", "ref"])}
+    """A matching, frequency-consistent internal row gets ref_label filled
+    in; a mismatched (or characterised_modes.csv-absent) mode disqualifies
+    the WHOLE molecule's internal-row label join (all-or-nothing gate); a
+    molecule with no characterised_modes.csv counterpart at all is untouched
+    (not an error); external rows are never touched. 'ideal' is untouched by
+    this function entirely (sourced separately by attach_ideal_tags())."""
+    csv_tables = {"characterised_modes": pd.DataFrame([
+        {"molecule": "TESTMOL", "mode": 1, "freq": 1000.0, "type": "stretch", "ref": "Foo1970"},
+        {"molecule": "TESTMOL", "mode": 2, "freq": 500.0, "type": "bend", "ref": None},
+        {"molecule": "TESTMOL2", "mode": 1, "freq": 1000.0, "type": "stretch", "ref": None},
+    ])}
 
     df = pd.DataFrame([
         # TESTMOL: both internal modes match within tolerance -> fully joined.
@@ -347,7 +411,7 @@ def test_attach_labels_gates_on_frequency_and_leaves_unlisted_molecules_alone():
         # whole molecule's internal join skipped.
         {"molecule": "TESTMOL2", "mode_index": 1, "kind": "internal",
          "freq": 999.0, "ref_label": None, "ideal": None},
-        # NOTINCSV: no data_score.csv counterpart at all -> untouched, no warning.
+        # NOTINCSV: no characterised_modes.csv counterpart at all -> untouched, no warning.
         {"molecule": "NOTINCSV", "mode_index": 1, "kind": "internal",
          "freq": 42.0, "ref_label": None, "ideal": None},
     ])
@@ -357,14 +421,14 @@ def test_attach_labels_gates_on_frequency_and_leaves_unlisted_molecules_alone():
 
     tm = out[out["molecule"] == "TESTMOL"]
     assert tm.loc[tm["mode_index"] == 1, "ref_label"].iloc[0] == "stretch"
-    assert tm.loc[tm["mode_index"] == 1, "ideal"].iloc[0] == "yes"
+    assert tm.loc[tm["mode_index"] == 1, "ref_key"].iloc[0] == "Foo1970"
     assert tm.loc[tm["mode_index"] == 2, "ref_label"].iloc[0] == "bend"
-    assert tm.loc[tm["mode_index"] == 2, "ideal"].iloc[0] == "no"
+    # attach_labels() never touches 'ideal' -- stays whatever it was passed in as.
+    assert tm["ideal"].isna().all()
     assert tm.loc[tm["kind"] == "external", "ref_label"].iloc[0] == "translation"
 
     tm2 = out[out["molecule"] == "TESTMOL2"]
     assert tm2["ref_label"].isna().all()
-    assert tm2["ideal"].isna().all()
 
     ne = out[out["molecule"] == "NOTINCSV"]
     assert ne["ref_label"].isna().all()
@@ -372,31 +436,71 @@ def test_attach_labels_gates_on_frequency_and_leaves_unlisted_molecules_alone():
     assert len(skip_report) == 1
     assert skip_report[0]["molecule"] == "TESTMOL2"
     assert skip_report[0]["n_mismatched"] == 1
-    mode_index, engine_freq, ds_freq = skip_report[0]["example"]
+    mode_index, engine_freq, cm_freq = skip_report[0]["example"]
     assert mode_index == 1
     assert engine_freq == 999.0
-    assert ds_freq == 1000.0
+    assert cm_freq == 1000.0
 
 
-def test_attach_labels_missing_data_score_row_counts_as_mismatch():
-    """A mode_index with no corresponding data_score.csv row at all (not
-    just a numeric mismatch) must also disqualify the molecule's join and be
-    reported with ds_freq=None -- not silently skipped past."""
-    csv_tables = {"data_score": pd.DataFrame([
-        {"molecule": "TESTMOL3", "mode": 1, "freq": 1000.0, "type": "stretch", "ideal": "yes"},
-    ]), "characterised_modes": pd.DataFrame(columns=["molecule", "mode", "ref"])}
+def test_attach_labels_missing_characterised_modes_row_counts_as_mismatch():
+    """A mode_index with no corresponding characterised_modes.csv row at all
+    (not just a numeric mismatch) must also disqualify the molecule's join
+    and be reported with cm_freq=None -- not silently skipped past."""
+    csv_tables = {"characterised_modes": pd.DataFrame([
+        {"molecule": "TESTMOL3", "mode": 1, "freq": 1000.0, "type": "stretch", "ref": None},
+    ])}
     df = pd.DataFrame([
         {"molecule": "TESTMOL3", "mode_index": 1, "kind": "internal",
          "freq": 1000.0, "ref_label": None, "ideal": None},
         {"molecule": "TESTMOL3", "mode_index": 2, "kind": "internal",
-         "freq": 2000.0, "ref_label": None, "ideal": None},  # no data_score row for mode 2
+         "freq": 2000.0, "ref_label": None, "ideal": None},  # no characterised_modes row for mode 2
     ])
     label_lookup = build_label_lookup(csv_tables)
     out, skip_report = attach_labels(df, csv_tables, label_lookup)
     assert out["ref_label"].isna().all()  # all-or-nothing: mode 1's match doesn't survive
     assert len(skip_report) == 1
-    mode_index, engine_freq, ds_freq = skip_report[0]["example"]
-    assert ds_freq is None
+    mode_index, engine_freq, cm_freq = skip_report[0]["example"]
+    assert cm_freq is None
+
+
+# ---------------------------------------------------------------------------
+# attach_ideal_tags() -- 'ideal' is now sourced structurally from
+# mol_list_method.csv's per-molecule mol_type column, unconditional (not
+# gated by attach_labels()'s frequency check).
+# ---------------------------------------------------------------------------
+
+def test_attach_ideal_tags_maps_mol_type_onto_internal_rows_only():
+
+    roster = pd.DataFrame([
+        {"molecule": "IDEALMOL", "mol_type": "ideal"},
+        {"molecule": "NONIDEALMOL", "mol_type": "non-ideal"},
+        {"molecule": "MULTIMOL", "mol_type": "multi-centre"},
+    ])
+    df = pd.DataFrame([
+        {"molecule": "IDEALMOL", "kind": "internal", "ideal": None},
+        {"molecule": "IDEALMOL", "kind": "external", "ideal": None},
+        {"molecule": "NONIDEALMOL", "kind": "internal", "ideal": None},
+        {"molecule": "MULTIMOL", "kind": "internal", "ideal": None},
+    ])
+    out = attach_ideal_tags(df, roster)
+    assert out.loc[(out["molecule"] == "IDEALMOL") & (out["kind"] == "internal"), "ideal"].iloc[0] == "yes"
+    assert out.loc[(out["molecule"] == "IDEALMOL") & (out["kind"] == "external"), "ideal"].isna().all()
+    assert out.loc[out["molecule"] == "NONIDEALMOL", "ideal"].iloc[0] == "no"
+    assert out.loc[out["molecule"] == "MULTIMOL", "ideal"].isna().all()
+
+
+def test_attach_ideal_tags_is_unconditional_even_without_a_ref_label():
+    """Unlike the old data_score.csv-sourced 'ideal', attach_ideal_tags()
+    does not require a successful ref_label join -- it is a structural,
+    per-molecule property."""
+
+    roster = pd.DataFrame([{"molecule": "NOLABELMOL", "mol_type": "ideal"}])
+    df = pd.DataFrame([
+        {"molecule": "NOLABELMOL", "kind": "internal", "ref_label": None, "ideal": None},
+    ])
+    out = attach_ideal_tags(df, roster)
+    assert out["ideal"].iloc[0] == "yes"
+    assert out["ref_label"].isna().all()  # unaffected -- separate concern
 
 
 # ---------------------------------------------------------------------------
@@ -408,20 +512,24 @@ def test_attach_labels_missing_data_score_row_counts_as_mismatch():
 
 def test_resync_reference_metadata_real_roster_has_no_mismatches_or_missing_logs():
     """Live, read-only (write=False) check against the real, already-fixed
-    data/ tree: every one of the 49 roster molecules that has a
-    data_score.csv/characterised_modes.csv row also has a matching mode
-    count against its on-disk log (0 mode-count mismatches, 0 unresolvable
-    logs) and the 23 known-out-of-scope T-shaped/see-saw/BBr3/OCl2 molecules
-    (no data_score.csv row at all -- a SEPARATE, still-open TODO, see
-    IMPLEMENTATION_PLAN.md RESUME HERE) are reported as skipped_no_rows, not
-    silently dropped or treated as an error."""
+    data/ tree. **Updated 2026-07-08** (data_score.csv retirement session):
+    ``regenerate_characterised_modes()`` now gives every one of the 72
+    roster molecules a characterised_modes.csv row (previously only 48 did
+    -- the other 24 -- the 23 T-shaped/see-saw/BBr3/OCl2 molecules plus SnO2,
+    which had a data_score.csv row but no characterised_modes.csv row, see
+    ``tests/test_calibrate.py``'s docstrings -- had none at all), so
+    resync_reference_metadata()'s ``if not ds_idx and not cm_idx: skip``
+    condition is never true anymore for a real roster row (data_score.csv
+    itself is untouched, still only 63 molecules -- but characterised_modes
+    alone is now enough to avoid the skip). 0 mode-count mismatches, 0
+    unresolvable logs, 0 skipped_no_rows, all 72 resynced."""
     from src.library_ingest import resync_reference_metadata
 
     report = resync_reference_metadata(DATA_DIR, write=False)
     assert report["skipped_mode_count_mismatch"] == []
     assert report["skipped_no_log"] == []
-    assert len(report["skipped_no_rows"]) == 23
-    assert len(report["resynced"]) == 72 - 23
+    assert report["skipped_no_rows"] == []
+    assert len(report["resynced"]) == 72
 
 
 def test_resync_reference_metadata_is_a_true_dry_run_when_write_false():
@@ -533,6 +641,113 @@ def test_resync_reference_metadata_synthetic_fixture():
         # never-corrected values) -- a real structural problem, not guessed.
         ds_mismatch_after = ds_after[ds_after["molecule"] == "MISMATCHMOL"].set_index("mode")
         assert ds_mismatch_after.loc["2", "freq"] == "3501.0"
+
+
+# ---------------------------------------------------------------------------
+# regenerate_characterised_modes() (2026-07-08) -- direct disk scan
+# (NOT restricted to mol_list_method.csv's roster), preserving manual
+# literature columns and reporting (never silently dropping) any molecule
+# that loses its on-disk log/gjf pair.
+# ---------------------------------------------------------------------------
+
+def test_basename_to_molecule_map_translates_known_roster_basenames():
+    m = _basename_to_molecule_map(DATA_DIR)
+    assert m["SbH3_MP2_3-21G"] == "SbH3"
+    assert m["C6H6_MP2_3-21G_D6h"] == "C6H6"
+    assert m["H2O-MP2-321G"] == "H2O"
+
+
+def test_regenerate_characterised_modes_dry_run_against_real_tree():
+    """Live, read-only (write=False) check against the real data/ tree,
+    which as of 2026-07-08 (this session's own regeneration, already
+    committed) is IDEMPOTENT under regenerate_characterised_modes(): the
+    file already covers all 72 on-disk basenames, so a fresh dry run
+    reports 72 old == 72 new molecules, nothing dropped, nothing added.
+    (The one-time 63->72 transition -- 15 molecules losing their on-disk
+    log+gjf pair, e.g. CCl4/CF4/CH4/Cl2O/NO2/SO2/..., while SnO2/BBr3/the
+    T-shaped/see-saw families gained their first-ever blank-labeled rows --
+    is exercised by the isolated synthetic fixture below instead, since the
+    real tree no longer reproduces that one-time transition after this
+    session.)"""
+    report = regenerate_characterised_modes(DATA_DIR, write=False)
+    assert report["n_disk_basenames"] == 72
+    assert report["n_old_molecules"] == 72
+    assert report["n_new_molecules"] == 72
+    assert report["dropped_molecules"] == []
+    assert report["added_molecules"] == []
+    assert report["parse_failures"] == []
+    assert report["n_rows_written"] > 0
+    # Every row already existed at its (molecule, mode) key (idempotent
+    # regeneration), so every row's manual columns are "preserved".
+    assert report["n_rows_with_preserved_manual_labels"] == report["n_rows_written"]
+
+
+def test_regenerate_characterised_modes_is_a_true_dry_run_when_write_false():
+    cm_path = os.path.join(DATA_DIR, "characterised_modes.csv")
+    with open(cm_path, "rb") as f:
+        before = f.read()
+    regenerate_characterised_modes(DATA_DIR, write=False)
+    with open(cm_path, "rb") as f:
+        assert f.read() == before
+
+
+def test_regenerate_characterised_modes_synthetic_fixture_preserves_manual_columns():
+    """Fully isolated (tempdir, no real CSVs touched): an existing
+    (molecule, mode) row's manual columns (shape/type/sym/description/
+    νₖ/ref/Note) survive a regeneration untouched, its irrep is PRESERVED
+    (not overwritten with the raw engine token, even though it differs --
+    see regenerate_characterised_modes()'s docstring for why), a genuinely
+    new row gets blank manual columns + the raw engine irrep, and a
+    molecule with no on-disk match anymore is reported dropped."""
+    import shutil
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        os.makedirs(os.path.join(tmp_dir, "logs"))
+        os.makedirs(os.path.join(tmp_dir, "gjf"))
+        shutil.copy(os.path.join(DATA_DIR, "logs", "H2O-MP2-321G.log"),
+                    os.path.join(tmp_dir, "logs", "H2O-MP2-321G.log"))
+        shutil.copy(os.path.join(DATA_DIR, "gjf", "H2O-MP2-321G.com"),
+                    os.path.join(tmp_dir, "gjf", "H2O-MP2-321G.com"))
+        # No roster file at all -- regenerate_characterised_modes() must not
+        # need one (disk-scan only); _basename_to_molecule_map() falls back
+        # to the raw basename when the roster can't be read.
+
+        old_cols = ["shape", "molecule", "mode", "freq", "μ", "k", "irrep",
+                    "type", "sym", "description", "νₖ", "ref", "Note"]
+        old_rows = [
+            # Existing row for the water log's mode 1 -- manual columns +
+            # a deliberately "wrong" (but author-curated) irrep that must
+            # survive untouched.
+            {"shape": "bend", "molecule": "H2O-MP2-321G", "mode": "1",
+             "freq": "0", "μ": "0", "k": "0", "irrep": "HAND_RESOLVED",
+             "type": "bend", "sym": "-", "description": "scissor", "νₖ": "ν2",
+             "ref": "Foo1970", "Note": ""},
+            # A molecule with no on-disk match anymore -- must be dropped
+            # and reported.
+            {"shape": "-", "molecule": "GONEMOL", "mode": "1", "freq": "0",
+             "μ": "0", "k": "0", "irrep": "A", "type": "stretch", "sym": "-",
+             "description": "", "νₖ": "", "ref": "", "Note": ""},
+        ]
+        _write_csv_utf8sig(os.path.join(tmp_dir, "characterised_modes.csv"), old_rows, old_cols)
+
+        report = regenerate_characterised_modes(tmp_dir, write=True)
+
+        assert report["dropped_molecules"] == ["GONEMOL"]
+        assert report["added_molecules"] == []  # H2O-MP2-321G already had a row
+        assert report["n_rows_written"] == 3  # water: 3 internal modes
+        assert report["n_rows_with_preserved_manual_labels"] == 1  # only mode 1
+
+        new_df = pd.read_csv(os.path.join(tmp_dir, "characterised_modes.csv"),
+                              dtype=str, keep_default_na=False)
+        assert set(new_df["molecule"]) == {"H2O-MP2-321G"}
+        row1 = new_df[new_df["mode"] == "1"].iloc[0]
+        assert row1["type"] == "bend" and row1["ref"] == "Foo1970"
+        assert row1["irrep"] == "HAND_RESOLVED"  # preserved, not overwritten
+        assert float(row1["freq"]) != 0.0  # freq WAS overwritten from the real log
+
+        row2 = new_df[new_df["mode"] == "2"].iloc[0]
+        assert row2["type"] == "" and row2["ref"] == ""  # genuinely new -> blank manual cols
+        assert row2["irrep"] != ""  # but DOES get the raw engine irrep (nothing to lose)
 
 
 if __name__ == "__main__":

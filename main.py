@@ -357,9 +357,10 @@ def _run_flag_pipelines(args):
         df_lib, path, skip_report = run_ingest_pipeline()
         print(f"Wrote {len(df_lib)} rows -> {path}")
         if skip_report:
-            print(f"  {len(skip_report)} molecule(s) had their internal-row ref_label/ideal "
-                  "join skipped (frequency mismatch vs. data_score.csv) -- see warnings above. "
-                  "Their scores (V_Stretch, Tx..Rz, predicted_label, ...) are unaffected.")
+            print(f"  {len(skip_report)} molecule(s) had their internal-row ref_label/ref_key "
+                  "join skipped (frequency mismatch vs. characterised_modes.csv) -- see warnings "
+                  "above. Their scores (V_Stretch, Tx..Rz, predicted_label, ...) and their "
+                  "'ideal' tag (sourced separately from mol_list_method.csv) are unaffected.")
 
     if args.calibrate:
         if args.molecule and not args.library:

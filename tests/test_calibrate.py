@@ -77,16 +77,39 @@ def test_calibrated_thresholds_differ_from_but_are_close_to_provisional():
     assert abs(calibrated.tau_B - 0.2) < 0.03
 
 
+# Historical reference only (NOT test-enforced as SINGLE_CENTRE_ONLY_EXCLUDE's
+# value anymore -- see below): the 2026-07-05 scope decision originally named
+# these 7 molecules as two-, four-, or six-centre topologies that don't fit
+# the "hydride library" single-centre AB_n scope.
+_HISTORICAL_SINGLE_CENTRE_EXCLUDE_7 = frozenset({
+    "C2H2", "C2H4", "C2H6", "H2O2", "C6H6", "iso-C4H10", "n-C4H10",
+})
+
+
 def test_single_centre_only_exclude_matches_scope_decision():
-    """The 2026-07-05 single-centre-only scope decision names exactly 7
-    molecules -- two-, four-, or six-centre topologies pooled into the
-    "hydride library" (single-centre AB_n) statistics by mistake. H2O is
-    deliberately NOT in this set (it is single-centre itself and stays in
-    the non-ideal population as a familiar illustrative molecule)."""
-    assert SINGLE_CENTRE_ONLY_EXCLUDE == {
-        "C2H2", "C2H4", "C2H6", "H2O2", "C6H6", "iso-C4H10", "n-C4H10",
-    }
+    """**2026-07-08: repointed to be roster-derived**
+    (src.library_ingest.multi_centre_molecules()) rather than the original
+    hardcoded 7-name frozenset -- see src/calibrate.py's own comment above
+    SINGLE_CENTRE_ONLY_EXCLUDE for the full rationale. Six of the historical
+    7 names are outside the finalized 72-molecule roster entirely (removed
+    2026-07-07) and were always no-ops when applied to the real
+    library_scores.csv; only C6H6 was ever actually present to be dropped,
+    and mol_list_method.csv already tags it mol_type=='multi-centre'
+    (verified, not assumed). H2O is deliberately NOT excluded (it is
+    single-centre itself and stays in the non-ideal population as a
+    familiar illustrative molecule)."""
+    assert SINGLE_CENTRE_ONLY_EXCLUDE == {"C6H6"}
     assert "H2O" not in SINGLE_CENTRE_ONLY_EXCLUDE
+
+    # Byte-identical FILTERING behavior check: the roster-derived set and
+    # the historical hardcoded 7-name set must drop exactly the same
+    # molecules from the real, current library_scores.csv.
+    lib_df = pd.read_csv(LIB_CSV)
+    old_dropped = set(lib_df.loc[lib_df["molecule"].isin(_HISTORICAL_SINGLE_CENTRE_EXCLUDE_7),
+                                  "molecule"].unique())
+    new_dropped = set(lib_df.loc[lib_df["molecule"].isin(SINGLE_CENTRE_ONLY_EXCLUDE),
+                                  "molecule"].unique())
+    assert old_dropped == new_dropped == {"C6H6"}
 
 
 def test_filter_single_centre_library_drops_exactly_the_excluded_molecules():
@@ -281,36 +304,33 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     land in the MIXED bucket, never crossing to the OPPOSITE clean category
     (0 cases either way).
 
-    **Numbers re-derived 2026-07-08** (Phase 2 of the "Gaussian-direct
-    intermediate file" plan -- `src/library_ingest.py::resync_reference_
-    metadata()` resynced `freq`/`k`(/`mu` in characterised_modes.csv) in
-    `data/data_score.csv`/`data/characterised_modes.csv` from the SAME
-    on-disk `.log` the engine scores, for all 49 roster molecules that
-    already had rows there. This fixed the root cause of the 2026-07-07
-    13-molecule gate-failure regression noted in this docstring's prior
-    revision (stale freq values that predated the Gaussian-direct roster
-    finalization): `attach_labels()`'s frequency-agreement gate now passes
-    for ALL 49 molecules (0 skip-report entries, down from 13 -- SnO2, SbH3,
-    XeH4, SbH5, SeBr2, NH3, NCl3, NBr3, PF3, PCl3, PBr3, AsCl3, AsBr3). This
-    is a DIFFERENT direction of change from every prior update on this
-    docstring's history: the reference population GROWS back (not shrinks),
-    landing at exactly the same size as the original pre-migration
-    Excel-sourced numbers before ANY gate failures existed (`n_ref_ideal`
-    stretch 41, bend 50 -- see the sibling test's docstring). Freshly
-    measured this session (live `confusion_matrix_stats()` call against the
-    regenerated `library_scores.csv` + freshly recalibrated
-    `Thresholds.calibrated()`, whose tau_S/tau_B values are numerically
-    UNCHANGED bit-for-bit -- the newly-restored ideal molecules' extremal
-    s[V_S] values were never the ones defining the boundary): stretch recall
-    0.68613 (mixed_fraction 0.31387, n_ref=137), bend recall 0.97037
-    (mixed_fraction 0.02963, n_ref=135). Precision is still exactly 1.0 for
-    all four categories (no clean-category mode is ever mispredicted into a
-    different clean category), and `floor_met` is still False (stretch
-    recall well under 0.95) -- recall dropped relative to the (buggy,
-    smaller-population) 2026-07-07 numbers because the 9 newly-joined
-    non-ideal molecules genuinely contribute more MIXED-bucket misses than
-    the population average, not because anything got worse; see
-    IMPLEMENTATION_PLAN.md RESUME HERE for the full before/after table.
+    **Numbers re-derived 2026-07-08** (data_score.csv retirement session --
+    see IMPLEMENTATION_PLAN.md RESUME HERE). `ideal` is now sourced from
+    `mol_list_method.csv`'s per-molecule `mol_type` column
+    (`attach_ideal_tags()`) instead of `data_score.csv`'s per-mode `ideal`
+    column, and `ref_label`/the frequency gate now read exclusively from
+    `characterised_modes.csv` (freshly regenerated straight from the
+    on-disk logs by `regenerate_characterised_modes()`, disk-scan-driven,
+    not restricted to the roster). Net effect on THIS statistic: SnO2 (an
+    `ideal`-tier molecule, 2 stretch + 2 bend modes) has a `data_score.csv`
+    row but -- a genuine, pre-existing, independently-verified gap unrelated
+    to this session's code changes -- never had a `characterised_modes.csv`
+    row at all, so it drops out of the ideal-tier stretch/bend reference
+    population (`n_ref_ideal` stretch 41->39, bend 50->48; see the sibling
+    test's docstring for the exact same delta). `thresholds.json`'s
+    `tau_S`/`tau_B` are UNCHANGED bit-for-bit (SnO2's modes were never the
+    boundary-defining ones). Freshly measured this session (live
+    `confusion_matrix_stats()` against the regenerated `library_scores.csv`
+    + freshly recalibrated `Thresholds.calibrated()`): stretch recall
+    0.68148 (mixed_fraction 0.31852, n_ref=135), bend recall 0.96992
+    (mixed_fraction 0.03008, n_ref=133) -- both a hair lower than the prior
+    0.68613/0.97037 purely because the reference population shrank by
+    SnO2's 4 always-clean-scoring ideal modes (2 true positives each
+    removed from both numerator and denominator), not because any
+    engine-computed score changed (score-neutrality independently confirmed
+    this session -- 0/897 rows differ on any V_Stretch/Tx../predicted_label
+    column). Precision is still exactly 1.0 for all four categories, and
+    `floor_met` is still False (stretch recall well under 0.95).
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -323,12 +343,12 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     assert res["per_category"]["rotation"]["recall"] == 1.0
 
     stretch = res["per_category"]["stretch"]
-    assert abs(stretch["recall"] - 0.68613) < 1e-3
-    assert abs(stretch["mixed_fraction"] - 0.31387) < 1e-3
+    assert abs(stretch["recall"] - 0.68148) < 1e-3
+    assert abs(stretch["mixed_fraction"] - 0.31852) < 1e-3
 
     bend = res["per_category"]["bend"]
-    assert abs(bend["recall"] - 0.97037) < 1e-3
-    assert abs(bend["mixed_fraction"] - 0.02963) < 1e-3
+    assert abs(bend["recall"] - 0.96992) < 1e-3
+    assert abs(bend["mixed_fraction"] - 0.03008) < 1e-3
 
     # The floor is NOT met overall, because stretch recall sits well under
     # 0.95 (bend clears it) -- reported honestly, not forced to pass.
@@ -351,26 +371,25 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     verifies that construction argument computationally rather than assuming
     it.
 
-    **Numbers re-derived 2026-07-08** (Phase 2 resync fix -- see the sibling
-    test's docstring above for the root cause/mechanism). `n_ref_ideal` for
-    stretch/bend is now back to its original, correct, pre-any-gate-failure
-    size (stretch 41, was temporarily 27 during the 2026-07-07 regression;
-    bend 50, was temporarily 33) -- the 11 `tab:ideal` shapes
-    were always the reference population; the frequency-gate bug just hid
-    4 of them (SnO2, SbH3, XeH4, SbH5) from it. `recall_ideal` remains
-    EXACTLY 1.0 for both, by the same construction argument as before
-    (tau_S/tau_B are literally this population's own min/max, so no
-    ideal-tier row can land on the wrong side of its own defining boundary,
-    and this resync did not change the min/max values themselves -- see
-    IMPLEMENTATION_PLAN.md RESUME HERE, `thresholds.json`'s `tau_S`/`tau_B`
-    are numerically identical bit-for-bit before/after this session).
-    Non-ideal tier: bend recall_nonideal 0.95294 (n_ref_nonideal 85, was
-    60), stretch recall_nonideal 0.55208 (n_ref_nonideal 96, was 70) --
-    LARGER populations now (9 more non-ideal molecules gained ground truth:
-    SeBr2, NH3, NCl3, NBr3, PF3, PCl3, PBr3, AsCl3, AsBr3), and their
-    genuinely-mixed modes pull recall down rather than up -- a real,
-    non-circular result, not a regression in the underlying scores (which
-    are engine-derived and untouched by this resync).
+    **Numbers re-derived 2026-07-08** (data_score.csv retirement session --
+    see the sibling test's docstring for the root cause/mechanism).
+    `n_ref_ideal` for stretch/bend drops by exactly 2 each (stretch 41->39,
+    bend 50->48): SnO2, an `ideal`-tier molecule with a `data_score.csv` row
+    but no pre-existing `characterised_modes.csv` row (a genuine,
+    independently-verified, pre-existing coverage gap between the two files
+    -- unrelated to this session's `mol_type`/`ideal`-sourcing change
+    itself), loses its 2 stretch + 2 bend modes' `ref_label` once
+    `characterised_modes.csv` becomes the sole label source. `recall_ideal`
+    remains EXACTLY 1.0 for both, unaffected -- by the same construction
+    argument as before (tau_S/tau_B are literally this (now slightly
+    smaller) population's own min/max, so no ideal-tier row can land on the
+    wrong side of its own defining boundary; `thresholds.json`'s
+    `tau_S`/`tau_B` are numerically IDENTICAL bit-for-bit before/after this
+    session -- SnO2's modes were never the boundary-defining ones). The
+    non-ideal tier is COMPLETELY UNCHANGED (SnO2 is ideal-tier, not
+    non-ideal): bend recall_nonideal 0.95294 (n_ref_nonideal 85), stretch
+    recall_nonideal 0.55208 (n_ref_nonideal 96) -- identical to the prior
+    pinned values.
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -378,10 +397,10 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
 
     assert res["per_category"]["stretch"]["recall_ideal"] == 1.0
     assert res["per_category"]["bend"]["recall_ideal"] == 1.0
-    assert res["per_category"]["stretch"]["n_ref_ideal"] == 41
-    assert res["per_category"]["bend"]["n_ref_ideal"] == 50
+    assert res["per_category"]["stretch"]["n_ref_ideal"] == 39
+    assert res["per_category"]["bend"]["n_ref_ideal"] == 48
 
-    # Non-ideal tier -- see docstring above.
+    # Non-ideal tier -- UNCHANGED (see docstring above).
     assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.95294) < 1e-3
     assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.55208) < 1e-3
     assert res["per_category"]["bend"]["n_ref_nonideal"] == 85
@@ -397,8 +416,8 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
 
     # Pooled keys (existing behavior) must be untouched by this addition --
     # match the sibling test's pooled numbers above.
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.68613) < 1e-3
-    assert abs(res["per_category"]["bend"]["recall"] - 0.97037) < 1e-3
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.68148) < 1e-3
+    assert abs(res["per_category"]["bend"]["recall"] - 0.96992) < 1e-3
 
 
 if __name__ == "__main__":

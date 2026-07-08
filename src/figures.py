@@ -64,9 +64,12 @@ IMPLEMENTATION_PLAN.md (molecule/panel form now confirmed as the AB3
 trigonal-planar / AB2 bent series, NOT ethane). Reproduces the group's
 earlier project report's Figures 3c/3d: mode score vs. central-atom
 displacement amplitude, faceted by whether a mode's irrep has a same-irrep
-coupling partner in its point group. Reads ``data/data_score.csv`` directly
-(the only source with the needed ``irrep``/``|d_CA|`` columns), not
-``data/results/library_scores.csv``.
+coupling partner in its point group. **Repointed 2026-07-08** (data_score.csv
+retirement): reads ``irrep``/``shape``/``type`` from
+``data/characterised_modes.csv``, the ideal/non-ideal filter from
+``data/mol_list_method.csv``'s ``mol_type`` column, and ``V_Stretch``/the
+new engine-derived ``d_CA`` column from ``data/results/library_scores.csv``
+-- ``data/data_score.csv`` is no longer read anywhere in this module.
 
 Cross-figure visual consistency (one meaning per color/marker, paper-wide)
 --------------------------------------------------------------------------
@@ -1657,10 +1660,21 @@ def plot_mode_mixing(
 #     from 0, stretch-A1 droops down from 1). B2 (antisymmetric stretch) is
 #     the only B2-labeled mode -- unique, and stays comparatively clean.
 #
-# Data source: ``data/data_score.csv`` (NOT ``data/results/library_scores.csv``,
-# which lacks the `irrep`/`|d_CA|` columns this figure needs) -- read
-# directly, never recomputed here (this module is presentation-only,
-# same as every other function above).
+# Data source (REPOINTED 2026-07-08, data_score.csv retirement):
+# ``data/characterised_modes.csv`` for `irrep`/`shape`/`type` (regenerated
+# from a direct on-disk scan by
+# ``src.library_ingest.regenerate_characterised_modes()``),
+# ``data/mol_list_method.csv``'s `mol_type` column for the ideal/non-ideal
+# filter (replaces the old per-row `ideal` column; naturally excludes
+# multi-centre molecules like C6H6, same outcome as before), and
+# ``data/results/library_scores.csv`` for `V_Stretch` (-> `vib_scr`) and the
+# new `d_CA` column (-> `|d_CA|`, an engine-derived quantity now, not a
+# frozen spreadsheet snapshot -- see src/library_ingest.py's
+# `_central_atom_index`/`score_geometry_molecule`). `data/data_score.csv`
+# itself is no longer read anywhere in this module. Merged on
+# (molecule, mode) -- characterised_modes.csv's `mode` and
+# library_scores.csv's internal-row `mode_index` share the same 1-based
+# internal-mode indexing convention (Gaussian's own frequency-block order).
 # --------------------------------------------------------------------------
 
 def _hollow_marker_kwargs(color_key, marker):
@@ -1682,35 +1696,55 @@ def _hollow_marker_kwargs(color_key, marker):
 
 
 def plot_irrep_coupling(
-    data_score_csv="data/data_score.csv",
+    characterised_modes_csv="data/characterised_modes.csv",
+    library_scores_csv="data/results/library_scores.csv",
+    mol_list_csv="data/mol_list_method.csv",
     out_dir="data/figures",
     label="fig_irrep_coupling",
 ):
     """Build the irrep-degeneracy mixing-mechanism SI figure: (a) trigonal-
     planar AB3 series (A=B,Al,Ga; B=H,F,Cl,Br -- ``tab:nonideal``'s "Trig.
-    planar AB3" row), (b) bent AB2 series (A=O,S,Se; B=H,F,Cl,Br, plus the
-    grid-external single-centre oxide/chalcogenide species O3/SO2/NO2/TeF2
-    that ``tab:nonideal``'s caption also folds into the pooled non-ideal
-    population -- ``tab:nonideal``'s "Bent AB2" row). Both panels plot mode
-    score (``vib_scr``) vs. central-atom displacement amplitude (``|d_CA|``),
-    faceted by (type, irrep): ALL markers are unfilled/hollow (author
-    revision 2026-07-06); color is bend (blue)/stretch (vermillion), the same
-    CATEGORY_COLOR hues used everywhere else in this module, and marker SHAPE
-    encodes irrep identity, with the SAME shape reused for the same irrep
-    symbol whenever it appears in BOTH a bend and a stretch category (the
-    shared/coupling-capable case) -- e.g. panel (a)'s E' is a triangle in
-    both "bend E'" and "stretch E'"; panel (b)'s A1 is a diamond in both
-    "bend A1" and "stretch A1". Irreps unique to one category each get their
-    own distinct shape (panel (a): A2″ = circle, A1' = square; panel (b):
-    B2 = circle). Shape-matching across the bend/stretch color split is
-    itself the visual cue for a symmetry-permitted coupling pathway between
-    those two categories.
+    planar AB3" row), (b) bent AB2 series (A=O,S,Se; B=H,F,Cl,Br). Both
+    panels plot mode score (``V_Stretch``, from ``library_scores.csv``) vs.
+    central-atom displacement amplitude (``d_CA``, also from
+    ``library_scores.csv`` -- a genuine engine-derived quantity now, see the
+    data-source comment above this function), faceted by (type, irrep): ALL
+    markers are unfilled/hollow (author revision 2026-07-06); color is bend
+    (blue)/stretch (vermillion), the same CATEGORY_COLOR hues used
+    everywhere else in this module, and marker SHAPE encodes irrep identity,
+    with the SAME shape reused for the same irrep symbol whenever it appears
+    in BOTH a bend and a stretch category (the shared/coupling-capable
+    case) -- e.g. panel (a)'s E' is a triangle in both "bend E'" and
+    "stretch E'"; panel (b)'s A1 is a diamond in both "bend A1" and
+    "stretch A1". Irreps unique to one category each get their own distinct
+    shape (panel (a): A2″ = circle, A1' = square; panel (b): B2 = circle).
+    Shape-matching across the bend/stretch color split is itself the visual
+    cue for a symmetry-permitted coupling pathway between those two
+    categories.
 
     Reproduces the group's earlier project report's Figures 3c/3d with the
     current pipeline's own recomputed scores (see data source note in this
-    section's header comment above) -- confirmed against `data/data_score.csv`
-    directly (not `data/results/library_scores.csv`, which lacks the
-    `irrep`/`|d_CA|` columns needed here).
+    section's header comment above).
+
+    **2026-07-08 repointing note:** previously read ``data/data_score.csv``
+    directly (a frozen, no-longer-maintained snapshot). Now reads
+    ``irrep``/``shape``/``type`` from the disk-scan-regenerated
+    ``characterised_modes.csv``, the ideal/non-ideal filter from
+    ``mol_list_method.csv``'s ``mol_type`` column, and ``V_Stretch``/``d_CA``
+    from the live-computed ``library_scores.csv``. Population may differ
+    from the pre-2026-07-08 figure: several molecules that used to appear
+    here (``Cl2O``, ``NO2``, ``SO2``, ``SeO2``, ``TeF2``, ``TeO2``, plus
+    ``CCl4``/``CF4``/``CH4``/``GeCl4``/``GeF4``/``GeH4``/``SiCl4``/``SiF4``/
+    ``SiH4`` in other shape families) no longer have an on-disk ``.log``/
+    ``.gjf`` pair at all (removed in an earlier roster-finalization cleanup)
+    and are therefore absent from the regenerated ``characterised_modes.csv``
+    -- this is the pre-existing, already-documented ``fig:irrep_coupling``/
+    ``data_score.csv``-staleness gap (IMPLEMENTATION_PLAN.md, 2026-07-07
+    entry) now surfaced rather than papered over by stale data. Newly-added
+    roster molecules with no prior literature ``type``/``irrep`` label (e.g.
+    ``BBr3``) simply do not plot (blank strings match no category) until
+    hand-labeled -- not a regression, the same "purely a missing-ground-
+    truth problem" status as the rest of the library.
 
     Not one of the 6 originally-scoped ``fig:*`` labels -- a new SI figure
     filling the "irrep-degeneracy sub-panel" pending gap flagged against
@@ -1718,10 +1752,25 @@ def plot_irrep_coupling(
     form (AB3/AB2, not ethane) 2026-07-06.
     """
     _style()
-    df = pd.read_csv(data_score_csv)
+    cm = pd.read_csv(characterised_modes_csv, dtype={"mode": "Int64"})
+    lib = pd.read_csv(library_scores_csv)
+    roster = pd.read_csv(mol_list_csv)
 
-    ab3 = df[(df["shape"] == "trigonal planar") & (df["ideal"] == "no")].copy()
-    ab2 = df[(df["shape"] == "bend") & (df["ideal"] == "no")].copy()
+    mol_type = dict(zip(roster["molecule"], roster["mol_type"]))
+    nonideal_molecules = {m for m, t in mol_type.items() if t == "non-ideal"}
+
+    internal = lib.loc[lib["kind"] == "internal",
+                        ["molecule", "mode_index", "V_Stretch", "d_CA"]].copy()
+    internal = internal.rename(columns={
+        "mode_index": "mode", "V_Stretch": "vib_scr", "d_CA": "|d_CA|"})
+    internal["mode"] = internal["mode"].astype("Int64")
+
+    df = cm.merge(internal, on=["molecule", "mode"], how="inner")
+    df = df[df["molecule"].isin(nonideal_molecules)]
+    df = df.dropna(subset=["|d_CA|"])  # multi-centre/no-central-atom rows
+
+    ab3 = df[df["shape"] == "trigonal planar"].copy()
+    ab2 = df[df["shape"] == "bend"].copy()
 
     # (type, irrep) -> (color_key, marker shape, legend text). Defined
     # per-panel (not a single shared dict) since the two point groups use
@@ -1791,7 +1840,10 @@ def plot_irrep_coupling(
         "ab2_molecules": sorted(ab2["molecule"].unique().tolist()),
         "n_ab3_points": n_ab3,
         "n_ab2_points": n_ab2,
-        "data_source": "data/data_score.csv (irrep/|d_CA| columns; not library_scores.csv)",
+        "data_source": ("data/characterised_modes.csv (irrep/shape/type) + "
+                         "data/mol_list_method.csv (mol_type ideal filter) + "
+                         "data/results/library_scores.csv (V_Stretch/d_CA) -- "
+                         "not data/data_score.csv (retired 2026-07-08)"),
     }
     return summary
 

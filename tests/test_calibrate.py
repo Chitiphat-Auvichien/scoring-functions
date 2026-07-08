@@ -281,24 +281,36 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     land in the MIXED bucket, never crossing to the OPPOSITE clean category
     (0 cases either way).
 
-    **Numbers re-derived 2026-07-07** (final flip to Gaussian-direct --
-    `library_scores.csv` now comes from the roster-driven
-    `src/library_ingest.py`, 71/72 `mol_list_method.csv` molecules, not the
-    old ~69-molecule Excel-sourced population). The population size changed
-    for a reason DIFFERENT from every prior update on this docstring's
-    history: it is not that more/fewer molecules exist, but that MORE
-    molecules now fail `attach_labels()`'s frequency-agreement gate against
-    `data_score.csv` (13 vs. 4 previously -- see IMPLEMENTATION_PLAN.md's
-    2026-07-07 RESUME HERE for the full skip-report), so fewer internal rows
-    have a `ref_label` at all to be counted as "true stretch/bend reference"
-    in the first place. Freshly measured this session (live
-    `confusion_matrix_stats()` call against the regenerated
-    `library_scores.csv` + freshly recalibrated `Thresholds.calibrated()`):
-    stretch recall 0.78351 (mixed_fraction 0.21649, n_ref=97), bend recall
-    0.98925 (mixed_fraction 0.01075, n_ref=93). Precision is still exactly
-    1.0 for all four categories (no clean-category mode is ever mispredicted
-    into a different clean category), and `floor_met` is still False (stretch
-    recall well under 0.95).
+    **Numbers re-derived 2026-07-08** (Phase 2 of the "Gaussian-direct
+    intermediate file" plan -- `src/library_ingest.py::resync_reference_
+    metadata()` resynced `freq`/`k`(/`mu` in characterised_modes.csv) in
+    `data/data_score.csv`/`data/characterised_modes.csv` from the SAME
+    on-disk `.log` the engine scores, for all 49 roster molecules that
+    already had rows there. This fixed the root cause of the 2026-07-07
+    13-molecule gate-failure regression noted in this docstring's prior
+    revision (stale freq values that predated the Gaussian-direct roster
+    finalization): `attach_labels()`'s frequency-agreement gate now passes
+    for ALL 49 molecules (0 skip-report entries, down from 13 -- SnO2, SbH3,
+    XeH4, SbH5, SeBr2, NH3, NCl3, NBr3, PF3, PCl3, PBr3, AsCl3, AsBr3). This
+    is a DIFFERENT direction of change from every prior update on this
+    docstring's history: the reference population GROWS back (not shrinks),
+    landing at exactly the same size as the original pre-migration
+    Excel-sourced numbers before ANY gate failures existed (`n_ref_ideal`
+    stretch 41, bend 50 -- see the sibling test's docstring). Freshly
+    measured this session (live `confusion_matrix_stats()` call against the
+    regenerated `library_scores.csv` + freshly recalibrated
+    `Thresholds.calibrated()`, whose tau_S/tau_B values are numerically
+    UNCHANGED bit-for-bit -- the newly-restored ideal molecules' extremal
+    s[V_S] values were never the ones defining the boundary): stretch recall
+    0.68613 (mixed_fraction 0.31387, n_ref=137), bend recall 0.97037
+    (mixed_fraction 0.02963, n_ref=135). Precision is still exactly 1.0 for
+    all four categories (no clean-category mode is ever mispredicted into a
+    different clean category), and `floor_met` is still False (stretch
+    recall well under 0.95) -- recall dropped relative to the (buggy,
+    smaller-population) 2026-07-07 numbers because the 9 newly-joined
+    non-ideal molecules genuinely contribute more MIXED-bucket misses than
+    the population average, not because anything got worse; see
+    IMPLEMENTATION_PLAN.md RESUME HERE for the full before/after table.
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -311,12 +323,12 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     assert res["per_category"]["rotation"]["recall"] == 1.0
 
     stretch = res["per_category"]["stretch"]
-    assert abs(stretch["recall"] - 0.78351) < 1e-3
-    assert abs(stretch["mixed_fraction"] - 0.21649) < 1e-3
+    assert abs(stretch["recall"] - 0.68613) < 1e-3
+    assert abs(stretch["mixed_fraction"] - 0.31387) < 1e-3
 
     bend = res["per_category"]["bend"]
-    assert abs(bend["recall"] - 0.98925) < 1e-3
-    assert abs(bend["mixed_fraction"] - 0.01075) < 1e-3
+    assert abs(bend["recall"] - 0.97037) < 1e-3
+    assert abs(bend["mixed_fraction"] - 0.02963) < 1e-3
 
     # The floor is NOT met overall, because stretch recall sits well under
     # 0.95 (bend clears it) -- reported honestly, not forced to pass.
@@ -339,19 +351,26 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     verifies that construction argument computationally rather than assuming
     it.
 
-    **Numbers re-derived 2026-07-07** (final flip to Gaussian-direct, same
-    root cause as the sibling test's docstring above: 13 molecules now fail
-    the `attach_labels()` frequency gate against `data_score.csv`, so
-    `n_ref_ideal` for stretch/bend is smaller than the pre-migration
-    Excel-sourced population even though the ideal-molecule roster itself
-    (11 `tab:ideal` shapes) hasn't changed). Freshly measured this session:
-    `n_ref_ideal` stretch 27 (was 41), bend 33 (was 50) -- `recall_ideal`
-    remains EXACTLY 1.0 for both, by the same construction argument as
-    before (tau_S/tau_B are literally this population's own min/max, so no
-    ideal-tier row can land on the wrong side of its own defining boundary).
-    Non-ideal tier: bend recall_nonideal 0.98333 (n_ref_nonideal 60, was
-    135), stretch recall_nonideal 0.7 (n_ref_nonideal 70, was 142) -- smaller
-    populations for the same frequency-gate reason, not a new exclusion.
+    **Numbers re-derived 2026-07-08** (Phase 2 resync fix -- see the sibling
+    test's docstring above for the root cause/mechanism). `n_ref_ideal` for
+    stretch/bend is now back to its original, correct, pre-any-gate-failure
+    size (stretch 41, was temporarily 27 during the 2026-07-07 regression;
+    bend 50, was temporarily 33) -- the 11 `tab:ideal` shapes
+    were always the reference population; the frequency-gate bug just hid
+    4 of them (SnO2, SbH3, XeH4, SbH5) from it. `recall_ideal` remains
+    EXACTLY 1.0 for both, by the same construction argument as before
+    (tau_S/tau_B are literally this population's own min/max, so no
+    ideal-tier row can land on the wrong side of its own defining boundary,
+    and this resync did not change the min/max values themselves -- see
+    IMPLEMENTATION_PLAN.md RESUME HERE, `thresholds.json`'s `tau_S`/`tau_B`
+    are numerically identical bit-for-bit before/after this session).
+    Non-ideal tier: bend recall_nonideal 0.95294 (n_ref_nonideal 85, was
+    60), stretch recall_nonideal 0.55208 (n_ref_nonideal 96, was 70) --
+    LARGER populations now (9 more non-ideal molecules gained ground truth:
+    SeBr2, NH3, NCl3, NBr3, PF3, PCl3, PBr3, AsCl3, AsBr3), and their
+    genuinely-mixed modes pull recall down rather than up -- a real,
+    non-circular result, not a regression in the underlying scores (which
+    are engine-derived and untouched by this resync).
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -359,14 +378,14 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
 
     assert res["per_category"]["stretch"]["recall_ideal"] == 1.0
     assert res["per_category"]["bend"]["recall_ideal"] == 1.0
-    assert res["per_category"]["stretch"]["n_ref_ideal"] == 27
-    assert res["per_category"]["bend"]["n_ref_ideal"] == 33
+    assert res["per_category"]["stretch"]["n_ref_ideal"] == 41
+    assert res["per_category"]["bend"]["n_ref_ideal"] == 50
 
     # Non-ideal tier -- see docstring above.
-    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.98333) < 1e-3
-    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.7) < 1e-3
-    assert res["per_category"]["bend"]["n_ref_nonideal"] == 60
-    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 70
+    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.95294) < 1e-3
+    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.55208) < 1e-3
+    assert res["per_category"]["bend"]["n_ref_nonideal"] == 85
+    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 96
 
     # Translation/rotation: every row is an external (T/R) reference, so the
     # ideal tier reproduces the pooled recall exactly and there is no
@@ -378,8 +397,8 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
 
     # Pooled keys (existing behavior) must be untouched by this addition --
     # match the sibling test's pooled numbers above.
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.78351) < 1e-3
-    assert abs(res["per_category"]["bend"]["recall"] - 0.98925) < 1e-3
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.68613) < 1e-3
+    assert abs(res["per_category"]["bend"]["recall"] - 0.97037) < 1e-3
 
 
 if __name__ == "__main__":

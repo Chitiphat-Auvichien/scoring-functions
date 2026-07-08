@@ -1,5 +1,5 @@
 category,n_reference,n_predicted_correct,precision,recall
 clean translation,213,213,1.0,1.0
 clean rotation,208,208,1.0,1.0
-S,27,27,1.0,1.0
-B,33,33,1.0,1.0
+S,41,41,1.0,1.0
+B,50,50,1.0,1.0

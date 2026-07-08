@@ -1741,10 +1741,31 @@ def plot_irrep_coupling(
     -- this is the pre-existing, already-documented ``fig:irrep_coupling``/
     ``data_score.csv``-staleness gap (IMPLEMENTATION_PLAN.md, 2026-07-07
     entry) now surfaced rather than papered over by stale data. Newly-added
-    roster molecules with no prior literature ``type``/``irrep`` label (e.g.
-    ``BBr3``) simply do not plot (blank strings match no category) until
-    hand-labeled -- not a regression, the same "purely a missing-ground-
-    truth problem" status as the rest of the library.
+    roster molecules with no prior literature ``type``/``irrep`` label simply
+    do not plot (blank strings match no category) until hand-labeled -- not a
+    regression, the same "purely a missing-ground-truth problem" status as
+    the rest of the library.
+
+    **2026-07-08 back-fill note:** 24 T-shaped/see-saw/stragglers (incl.
+    ``BBr3``, ``OCl2``) gained literature labels this session (see
+    IMPLEMENTATION_PLAN.md's back-fill entry) but only ``OCl2`` (bent AB2)
+    actually contributes points here -- ``BBr3`` (labeled ``shape="trigonal
+    pyramidal"`` with ASCII-digit irreps ``"A1'"``/``'A2"'``) matches neither
+    this panel's ``shape=="trigonal planar"`` filter nor its Unicode-subscript
+    irrep categories (``"A₁'"``/``"A₂\""``), despite its irrep *pattern*
+    (E'/A1'/A2") being the D3h signature every other AB3 sibling in this
+    figure (BF3, BCl3, AlCl3, AlBr3, GaCl3, ...) already uses -- almost
+    certainly a data-entry inconsistency in the manual back-fill, flagged for
+    the author to verify, NOT silently corrected here. ``OCl2`` itself has
+    the same ASCII-vs-Unicode-subscript irrep mismatch (``"A1"``/``"B2"``
+    instead of its Br2O/OF2 siblings' ``"A₁"``/``"B₂"``) and so ALSO plots
+    zero points despite passing the ``shape=="bend"`` eligibility check --
+    the returned summary's ``ab3_shape_eligible_but_not_plotted``/
+    ``ab2_shape_eligible_but_not_plotted`` keys surface exactly this
+    eligible-but-unrendered case (added this session; ``ab3_molecules``/
+    ``ab2_molecules`` now report only molecules with >=1 rendered point,
+    where they previously reported shape-eligibility only and could
+    misleadingly list a molecule that drew nothing, as OCl2 did).
 
     Not one of the 6 originally-scoped ``fig:*`` labels -- a new SI figure
     filling the "irrep-degeneracy sub-panel" pending gap flagged against
@@ -1797,6 +1818,7 @@ def plot_irrep_coupling(
 
     def _plot_panel(ax, sub_df, categories, title):
         n_plotted = 0
+        plotted_molecules = set()
         for mode_type, irrep, color_key, marker, legend_text in categories:
             pts = sub_df[(sub_df["type"] == mode_type) & (sub_df["irrep"] == irrep)]
             if pts.empty:
@@ -1805,19 +1827,34 @@ def plot_irrep_coupling(
             ax.scatter(pts["|d_CA|"], pts["vib_scr"], s=34, zorder=3,
                        label=legend_text, **kw)
             n_plotted += len(pts)
+            plotted_molecules.update(pts["molecule"].unique().tolist())
         ax.set_xlabel(r"$|\mathbf{d}_{CA}|$ (central-atom displacement amplitude)")
         ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
         ax.set_xlim(-0.03, sub_df["|d_CA|"].max() * 1.08)
         ax.set_ylim(-0.05, 1.08)
         ax.legend(loc="center left", frameon=False, fontsize=6.8,
                    handletextpad=0.4, labelspacing=0.4, borderaxespad=0.2)
-        return n_plotted
+        return n_plotted, plotted_molecules
 
-    n_ab3 = _plot_panel(ax_3, ab3, ab3_categories,
-                         "(a) Trigonal-planar AB$_3$ (non-ideal)")
-    n_ab2 = _plot_panel(ax_2, ab2, ab2_categories,
-                         "(b) Bent AB$_2$ (non-ideal)")
+    n_ab3, ab3_plotted = _plot_panel(ax_3, ab3, ab3_categories,
+                                      "(a) Trigonal-planar AB$_3$ (non-ideal)")
+    n_ab2, ab2_plotted = _plot_panel(ax_2, ab2, ab2_categories,
+                                      "(b) Bent AB$_2$ (non-ideal)")
     ax_3.set_ylabel(r"Mode score $s[\mathrm{V}]$")
+
+    # Molecules whose `shape` matched the panel but that contributed ZERO
+    # actually-rendered points because their `type`/`irrep` strings didn't
+    # match any (mode_type, irrep) category above (e.g. an ASCII "A1"/"B2"
+    # irrep where the category list expects the Unicode-subscript "A₁"/"B₂"
+    # used by every other sibling row, or a `shape` value that is itself
+    # inconsistent with the family, e.g. BBr3 -- see IMPLEMENTATION_PLAN.md's
+    # 2026-07-08 back-fill entry). Reported explicitly rather than silently
+    # folded into "ab3_molecules"/"ab2_molecules" below, since those two keys
+    # used to report shape-eligibility, not actual rendering, which was
+    # misleading (e.g. OCl2 previously appeared in "ab2_molecules" with 0 of
+    # its 3 modes ever drawn).
+    ab3_shape_only = sorted(set(ab3["molecule"].unique()) - ab3_plotted)
+    ab2_shape_only = sorted(set(ab2["molecule"].unique()) - ab2_plotted)
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -1836,8 +1873,10 @@ def plot_irrep_coupling(
                                "same shape across the bend/stretch color "
                                "split, so shape-matching visually flags a "
                                "coupling-capable shared irrep."),
-        "ab3_molecules": sorted(ab3["molecule"].unique().tolist()),
-        "ab2_molecules": sorted(ab2["molecule"].unique().tolist()),
+        "ab3_molecules": sorted(ab3_plotted),
+        "ab2_molecules": sorted(ab2_plotted),
+        "ab3_shape_eligible_but_not_plotted": ab3_shape_only,
+        "ab2_shape_eligible_but_not_plotted": ab2_shape_only,
         "n_ab3_points": n_ab3,
         "n_ab2_points": n_ab2,
         "data_source": ("data/characterised_modes.csv (irrep/shape/type) + "

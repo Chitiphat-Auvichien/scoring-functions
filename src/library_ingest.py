@@ -91,12 +91,19 @@ _EXTERNAL_SLOTS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 # column names). `ref_key` (2026-07-05, citation key from
 # src/csv_label_ingest.py, e.g. "Shi1972") is a purely-additive column
 # appended at the end: existing consumers read columns by name, not
-# position, so this does not disturb them.
+# position, so this does not disturb them. `reduced_mass`/`force_constant`/
+# `irrep` (2026-07-08, Gaussian-direct parser rework) are appended the same
+# way -- engine-parsed metadata for internal rows, None/blank for external
+# (T/R) rows since construct_T/construct_R never set these keys. Named
+# `reduced_mass`/`force_constant` (NOT bare `k`) to avoid colliding with this
+# same CSV's existing, differently-scoped `k` column (a scoring metric
+# adjacent to `vib_scr`, unrelated to force constant).
 SCHEMA_COLUMNS = [
     "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
     "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
     "predicted_label", "predicted_annotation",
     "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "ref_key",
+    "reduced_mass", "force_constant", "irrep",
 ]
 
 
@@ -188,6 +195,11 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None):
                 "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
                 "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
                 "ref_key": None,  # T/R rows are structural/exact -- no literature citation
+                # construct_T/construct_R never set these (synthetic, not
+                # parsed from a Gaussian frequency block) -- None by design.
+                "reduced_mass": m.get("reduced_mass"),
+                "force_constant": m.get("force_constant"),
+                "irrep": m.get("irrep"),
             })
             continue
 
@@ -221,6 +233,9 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None):
             "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
             "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
             "ref_key": None,  # attached later, label-only
+            "reduced_mass": m.get("reduced_mass"),
+            "force_constant": m.get("force_constant"),
+            "irrep": m.get("irrep"),
         })
     return rows
 

@@ -69,6 +69,29 @@ def _cache_is_fresh(inter_path, source_paths):
     return all(inter_mtime >= os.path.getmtime(p) for p in source_paths)
 
 
+def _normal_cache_is_current_format(inter_path):
+    """True iff a 'normal' intermediate at `inter_path` is in the NEW
+    Gaussian-direct format (2026-07-08), not the OLD 'MOLECULE_DATA' format
+    it used to share with EMIT intermediates.
+
+    A cache written before this rework is mtime-fresh (nothing re-parsed
+    it) but structurally cannot supply reduced_mass/force_constant/irrep --
+    those fields simply do not exist in the old format. Without this check,
+    such a pre-existing cache would silently return None for them forever,
+    since IntermediateIO.load() correctly auto-detects and parses the old
+    format (score-neutral -- frequency/vector/atoms/bonds are unaffected)
+    rather than raising, so mtime-based staleness alone never catches it.
+    Treating an old-format 'normal' cache as NOT current forces exactly one
+    self-healing reparse-and-rewrite (in the new format), after which it
+    stays current like any other fresh cache. IntermediateIO.load()'s own
+    format auto-detection (peeking at the first line) is mirrored here
+    rather than imported, to keep this a cheap one-line-read check without
+    a full parse."""
+    with open(inter_path, 'r') as f:
+        first_line = f.readline().strip()
+    return first_line != "MOLECULE_DATA"
+
+
 def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
     """Parse geometry, modes, and connectivity for a molecule -- via a
     mtime-invalidated cache in data/intermediate/ so repeated runs (and the
@@ -107,7 +130,10 @@ def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
         emit_path = _find_emit(dirs["EMIT"], mol_name)
         source_paths.append(emit_path)
 
-    if use_cache and _cache_is_fresh(inter_path, source_paths):
+    cache_fresh = use_cache and _cache_is_fresh(inter_path, source_paths)
+    if cache_fresh and mode_type == "normal" and os.path.exists(inter_path):
+        cache_fresh = _normal_cache_is_current_format(inter_path)
+    if cache_fresh:
         return IntermediateIO.load(inter_path), dirs
 
     gp = GaussianParser(log_path)
@@ -183,6 +209,12 @@ def score_modes(raw, mode_type):
             "Tx": sc["T"]["x"], "Ty": sc["T"]["y"], "Tz": sc["T"]["z"],
             "Rx": sc["R"]["x"], "Ry": sc["R"]["y"], "Rz": sc["R"]["z"],
             "V_Stretch": sc["V"],
+            # mu/k/irrep (2026-07-08): only real Gaussian normal modes carry
+            # these; EMIT modes and the synthetic ideal T/R references never
+            # set these keys, so .get() naturally yields None/blank for them.
+            "Mu": mode.get("reduced_mass"),
+            "K": mode.get("force_constant"),
+            "Irrep": mode.get("irrep"),
         })
     return rows
 

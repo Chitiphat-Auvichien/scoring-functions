@@ -41,7 +41,7 @@ from src.library_ingest import (                                   # noqa: E402
     load_mol_roster, check_roster_disk_consistency,
     resolve_log_basename, discover_geometry_molecules,
     score_geometry_molecule, attach_labels, build_library_scores,
-    _EXTERNAL_SLOTS,
+    _EXTERNAL_SLOTS, SCHEMA_COLUMNS,
 )
 from src.classifier import is_clean_external                       # noqa: E402
 from src.csv_label_ingest import build_label_lookup                # noqa: E402
@@ -286,6 +286,10 @@ def test_score_geometry_molecule_water_direct():
         assert r["ref_label"] in ("translation", "rotation")
         assert r["ideal"] is None  # label-only join not yet attached
         assert r["has_geometry"] is True
+        # construct_T/construct_R are synthetic -- never carry mu/k/irrep.
+        assert r["reduced_mass"] is None
+        assert r["force_constant"] is None
+        assert r["irrep"] is None
 
     for r in internal:
         assert r["ref_label"] is None and r["ideal"] is None  # attached later
@@ -295,6 +299,23 @@ def test_score_geometry_molecule_water_direct():
         assert r["delta_b_mean"] is not None and r["delta_b_mean"] >= 0.0
         total = sum(float(part.split(":")[1]) for part in r["s_AB"].split(";"))
         assert abs(total - r["V_Stretch"]) < 1e-3
+        # 2026-07-08 Gaussian-direct parser rework: real internal modes carry
+        # engine-parsed mu/k/irrep.
+        assert r["reduced_mass"] is not None and r["reduced_mass"] > 0.0
+        assert r["force_constant"] is not None and r["force_constant"] > 0.0
+        assert r["irrep"] is not None and isinstance(r["irrep"], str)
+
+
+def test_schema_columns_includes_mu_k_irrep():
+    """reduced_mass/force_constant/irrep (2026-07-08) are appended to the end
+    of the locked schema -- purely additive, existing columns untouched."""
+    assert SCHEMA_COLUMNS[-3:] == ["reduced_mass", "force_constant", "irrep"]
+    assert SCHEMA_COLUMNS[:-3] == [
+        "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
+        "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
+        "predicted_label", "predicted_annotation",
+        "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "ref_key",
+    ]
 
 
 # ---------------------------------------------------------------------------

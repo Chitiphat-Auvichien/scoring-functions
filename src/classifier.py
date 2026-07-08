@@ -280,6 +280,14 @@ def classify_all_modes(scorer, final, thresholds=None):
             "T": sc["T"],
             "R": sc["R"],
             "V": sc["V"],
+            # mu/k/irrep (2026-07-08): only real Gaussian normal modes carry
+            # these (GaussianParser/IntermediateIO); EMIT eigenvectors and
+            # the synthetic ideal T/R references (construct_T/construct_R)
+            # never set these keys, so .get() correctly yields None for them
+            # rather than a KeyError -- see src/parser.py's module docstring.
+            "reduced_mass": mode.get("reduced_mass"),
+            "force_constant": mode.get("force_constant"),
+            "irrep": mode.get("irrep"),
             "_bonds_all": bonds,   # every bond's s_AB; filtered later by label
             "classification": None,
             "annotation": "",

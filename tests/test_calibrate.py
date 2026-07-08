@@ -301,57 +301,71 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     internally -- see that constant's docstring). Recall is 1.0 for
     translation/rotation (exact completeness); stretch/bend recall is NOT
     quite >=0.95 -- and that is not a defect: most stretch/bend 'misses'
-    land in the MIXED bucket, never crossing to the OPPOSITE clean category
-    (0 cases either way).
+    land in the MIXED bucket, not the opposite clean category.
 
-    **Numbers re-derived 2026-07-08** (data_score.csv retirement session --
-    see IMPLEMENTATION_PLAN.md RESUME HERE). `ideal` is now sourced from
-    `mol_list_method.csv`'s per-molecule `mol_type` column
-    (`attach_ideal_tags()`) instead of `data_score.csv`'s per-mode `ideal`
-    column, and `ref_label`/the frequency gate now read exclusively from
-    `characterised_modes.csv` (freshly regenerated straight from the
-    on-disk logs by `regenerate_characterised_modes()`, disk-scan-driven,
-    not restricted to the roster). Net effect on THIS statistic: SnO2 (an
-    `ideal`-tier molecule, 2 stretch + 2 bend modes) has a `data_score.csv`
-    row but -- a genuine, pre-existing, independently-verified gap unrelated
-    to this session's code changes -- never had a `characterised_modes.csv`
-    row at all, so it drops out of the ideal-tier stretch/bend reference
-    population (`n_ref_ideal` stretch 41->39, bend 50->48; see the sibling
-    test's docstring for the exact same delta). `thresholds.json`'s
-    `tau_S`/`tau_B` are UNCHANGED bit-for-bit (SnO2's modes were never the
-    boundary-defining ones). Freshly measured this session (live
-    `confusion_matrix_stats()` against the regenerated `library_scores.csv`
-    + freshly recalibrated `Thresholds.calibrated()`): stretch recall
-    0.68148 (mixed_fraction 0.31852, n_ref=135), bend recall 0.96992
-    (mixed_fraction 0.03008, n_ref=133) -- both a hair lower than the prior
-    0.68613/0.97037 purely because the reference population shrank by
-    SnO2's 4 always-clean-scoring ideal modes (2 true positives each
-    removed from both numerator and denominator), not because any
-    engine-computed score changed (score-neutrality independently confirmed
-    this session -- 0/897 rows differ on any V_Stretch/Tx../predicted_label
-    column). Precision is still exactly 1.0 for all four categories, and
-    `floor_met` is still False (stretch recall well under 0.95).
+    **Numbers re-derived 2026-07-08 (T-shaped/see-saw literature back-fill
+    session)**: the author manually back-filled `shape`/`type`/`sym`/`ref`
+    ground truth in `data/characterised_modes.csv` for 24 molecules that
+    previously had NO row at all (the 10 non-ideal T-shaped AB3 families, the
+    11 non-ideal see-saw AB4 families, plus `BBr3`/`OCl2`, and -- new
+    information this session -- `SnO2`, closing the exact ideal-tier gap the
+    PRIOR 2026-07-08 (`data_score.csv` retirement) session's docstring here
+    described). `--library`/`--calibrate` were rerun: `thresholds.json`'s
+    `tau_S`/`tau_B` are UNCHANGED bit-for-bit (0.9036817451504533 /
+    0.17326891344050538) -- SnO2 contributes 2 stretch modes at V_Stretch=1.0
+    and 2 bend modes at V_Stretch=0.0, comfortably inside the existing
+    boundary, never an extremum (`ideal_stretch_n` 39->41, `ideal_bend_n`
+    48->50 in `thresholds.json`, min/max unchanged). `attach_labels()`'s
+    frequency-agreement gate had ZERO skip-report entries for all 24 newly
+    labeled molecules (172/172 internal rows joined `ref_label` cleanly).
+
+    **Precision is NO LONGER exactly 1.0 for stretch/bend -- a genuinely new
+    finding, not a regression in the code:** of the 24 newly-labeled
+    molecules' 172 modes, exactly 4 (all in the see-saw AB4 family, and only
+    in `OH4`/`OF4` specifically -- no other see-saw or T-shaped molecule
+    shows this) land on the OPPOSITE clean category from their literature
+    label: `OH4` mode 5 (lit. bend, `V_Stretch`=0.9675, predicted clean
+    stretch) and mode 7 (lit. stretch, `V_Stretch`=0.1283, predicted clean
+    bend); `OF4` mode 4 (lit. bend, `V_Stretch`=0.9839, predicted clean
+    stretch) and mode 6 (lit. stretch, `V_Stretch`=0.0468, predicted clean
+    bend) -- all 4 are confidently on the wrong side of tau_S/tau_B, not
+    borderline/mixed misses. This is the population's first-ever opposite-
+    category crossing (0 cases in every previously-tested non-ideal
+    molecule); both are the lightest-ligand members of the see-saw family
+    (O central atom with H/F ligands), consistent with a genuine A1-symmetry
+    stretch/bend coupling the literature's normal-mode-eigenvector label
+    doesn't reflect but the geometric V_Stretch score picks up -- flagged for
+    `lead-author`/`expert-reviewer-jcc` to discuss as a concrete limitation
+    example, not fixed here (framework classifies; it does not adjudicate
+    which of two coupled, same-irrep descriptions is "more correct").
+    Precision: stretch 0.98450 (tp=127, n_pred=129, 2 false positives -- the
+    2 `OH4`/`OF4` lit.-bend-predicted-stretch modes), bend 0.99010 (tp=200,
+    n_pred=202, 2 false positives -- the 2 lit.-stretch-predicted-bend
+    modes); translation/rotation stay exactly 1.0.
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
     res = confusion_matrix_stats(lib_df, calibrated, acceptance_floor=0.95)
 
-    for cat in ("stretch", "bend", "translation", "rotation"):
+    for cat in ("translation", "rotation"):
         assert res["per_category"][cat]["precision"] == 1.0, cat
+
+    assert abs(res["per_category"]["stretch"]["precision"] - 0.98450) < 1e-4
+    assert abs(res["per_category"]["bend"]["precision"] - 0.99010) < 1e-4
 
     assert res["per_category"]["translation"]["recall"] == 1.0
     assert res["per_category"]["rotation"]["recall"] == 1.0
 
     stretch = res["per_category"]["stretch"]
-    assert abs(stretch["recall"] - 0.68148) < 1e-3
-    assert abs(stretch["mixed_fraction"] - 0.31852) < 1e-3
+    assert abs(stretch["recall"] - 0.58796) < 1e-3
+    assert abs(stretch["mixed_fraction"] - 0.40278) < 1e-3
 
     bend = res["per_category"]["bend"]
-    assert abs(bend["recall"] - 0.96992) < 1e-3
-    assert abs(bend["mixed_fraction"] - 0.03008) < 1e-3
+    assert abs(bend["recall"] - 0.89286) < 1e-3
+    assert abs(bend["mixed_fraction"] - 0.09821) < 1e-3
 
     # The floor is NOT met overall, because stretch recall sits well under
-    # 0.95 (bend clears it) -- reported honestly, not forced to pass.
+    # 0.95 (bend also now falls short) -- reported honestly, not forced to pass.
     assert res["floor_met"] is False
 
 
@@ -371,25 +385,28 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     verifies that construction argument computationally rather than assuming
     it.
 
-    **Numbers re-derived 2026-07-08** (data_score.csv retirement session --
-    see the sibling test's docstring for the root cause/mechanism).
-    `n_ref_ideal` for stretch/bend drops by exactly 2 each (stretch 41->39,
-    bend 50->48): SnO2, an `ideal`-tier molecule with a `data_score.csv` row
-    but no pre-existing `characterised_modes.csv` row (a genuine,
-    independently-verified, pre-existing coverage gap between the two files
-    -- unrelated to this session's `mol_type`/`ideal`-sourcing change
-    itself), loses its 2 stretch + 2 bend modes' `ref_label` once
-    `characterised_modes.csv` becomes the sole label source. `recall_ideal`
-    remains EXACTLY 1.0 for both, unaffected -- by the same construction
-    argument as before (tau_S/tau_B are literally this (now slightly
-    smaller) population's own min/max, so no ideal-tier row can land on the
-    wrong side of its own defining boundary; `thresholds.json`'s
-    `tau_S`/`tau_B` are numerically IDENTICAL bit-for-bit before/after this
-    session -- SnO2's modes were never the boundary-defining ones). The
-    non-ideal tier is COMPLETELY UNCHANGED (SnO2 is ideal-tier, not
-    non-ideal): bend recall_nonideal 0.95294 (n_ref_nonideal 85), stretch
-    recall_nonideal 0.55208 (n_ref_nonideal 96) -- identical to the prior
-    pinned values.
+    **Numbers re-derived 2026-07-08 (T-shaped/see-saw literature back-fill
+    session)** -- see the sibling test's docstring for the full mechanism.
+    `n_ref_ideal` for stretch/bend is RESTORED to 41/50 (was 39/48 after the
+    prior 2026-07-08 `data_score.csv`-retirement session, which had exposed
+    -- but not fixed -- `SnO2` missing its `characterised_modes.csv` row;
+    this session's back-fill closes that exact gap, +2 stretch/+2 bend, back
+    to the original pre-any-gap size). `recall_ideal` remains EXACTLY 1.0 for
+    both, unaffected -- by construction (tau_S/tau_B are literally this
+    population's own min/max, so no ideal-tier row can land on the wrong
+    side of its own defining boundary; ALSO independently confirmed this
+    session: SnO2's 2 stretch modes score V_Stretch=1.0 and its 2 bend modes
+    score V_Stretch=0.0, nowhere near tau_S/tau_B, so they were never
+    boundary-defining -- `thresholds.json` is bit-identical before/after).
+    The non-ideal tier grew substantially this session (23 new non-ideal
+    molecules' 168 modes joined `ref_label` for the first time): bend
+    recall_nonideal 0.86207 (n_ref_nonideal 174, was 85), stretch
+    recall_nonideal 0.49143 (n_ref_nonideal 175, was 96) -- both recall
+    figures move because the new T-shaped/see-saw population's mixed/
+    opposite-category rate differs from the pre-existing non-ideal pool's
+    average, not because of any change to previously-scored molecules'
+    numbers (score-neutrality for all pre-existing rows -- unaffected by a
+    label-only back-fill).
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -397,14 +414,14 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
 
     assert res["per_category"]["stretch"]["recall_ideal"] == 1.0
     assert res["per_category"]["bend"]["recall_ideal"] == 1.0
-    assert res["per_category"]["stretch"]["n_ref_ideal"] == 39
-    assert res["per_category"]["bend"]["n_ref_ideal"] == 48
+    assert res["per_category"]["stretch"]["n_ref_ideal"] == 41
+    assert res["per_category"]["bend"]["n_ref_ideal"] == 50
 
-    # Non-ideal tier -- UNCHANGED (see docstring above).
-    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.95294) < 1e-3
-    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.55208) < 1e-3
-    assert res["per_category"]["bend"]["n_ref_nonideal"] == 85
-    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 96
+    # Non-ideal tier -- grew this session (see docstring above).
+    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.86207) < 1e-3
+    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.49143) < 1e-3
+    assert res["per_category"]["bend"]["n_ref_nonideal"] == 174
+    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 175
 
     # Translation/rotation: every row is an external (T/R) reference, so the
     # ideal tier reproduces the pooled recall exactly and there is no
@@ -416,8 +433,8 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
 
     # Pooled keys (existing behavior) must be untouched by this addition --
     # match the sibling test's pooled numbers above.
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.68148) < 1e-3
-    assert abs(res["per_category"]["bend"]["recall"] - 0.96992) < 1e-3
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.58796) < 1e-3
+    assert abs(res["per_category"]["bend"]["recall"] - 0.89286) < 1e-3
 
 
 if __name__ == "__main__":

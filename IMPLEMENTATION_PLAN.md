@@ -10,12 +10,114 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-08 (**Phase 3 — retire `data/data_score.csv` from the code path entirely**,
-> regenerate `data/characterised_modes.csv` from a direct on-disk scan, add a new engine-derived `d_CA`
-> column, and repoint `fig:irrep_coupling`/`SINGLE_CENTRE_ONLY_EXCLUDE` off the retired file; see RESUME
-> HERE below. Full `pytest` green (105/105).)
+> Last updated: 2026-07-08 (**literature back-fill for the T-shaped/see-saw non-ideal families closes
+> the TODO two entries below** — 24 molecules gain their first-ever `characterised_modes.csv` row,
+> `--library`/`--calibrate`/`--figures` regenerated, `fig:irrep_coupling`'s `ab2_molecules`/
+> `ab3_molecules` reporting bug fixed, 2 confusion-matrix tests re-pinned with a genuinely new
+> opposite-category-crossing finding; see RESUME HERE below. Full `pytest` green (105/105).)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-08 (literature back-fill session — T-shaped/see-saw/BBr3/OCl2/SnO2 ground truth; closes
+> the 2026-07-07 TODO below):** Author manually back-filled `shape`/`type`/`sym`/`ref` in
+> `data/characterised_modes.csv` for **24 molecules** that previously had NO row at all (not just blank
+> labels): the 10 non-ideal T-shaped AB3 families (`FH3, F4, FCl3, FBr3, ClH3, ClF3, ClBr3, BrH3, BrF3,
+> BrCl3`), the 11 non-ideal see-saw AB4 families (`OH4, OF4, OCl4, OBr4, SH4, SF4, SCl4, SBr4, SeH4,
+> SeF4, SeCl4`), `BBr3` and `OCl2` (2 stragglers), plus — new information, not part of the original
+> TODO's list — `SnO2`, which independently closes the exact ideal-tier `characterised_modes.csv` gap
+> the PRIOR 2026-07-08 (`data_score.csv`-retirement) session's entry below had surfaced but explicitly
+> left open. **Verified directly, not assumed:** of these 24, 23 are `mol_type=='non-ideal'` and
+> **1 (`SnO2`) is `mol_type=='ideal'`** — the task briefing that queued this work asserted all 24 were
+> non-ideal; that was checked and found incomplete (SnO2's presence matters for the threshold-stability
+> claim below, not just cosmetically). This session did NOT touch `regenerate_characterised_modes()` or
+> re-run it — the manual edit was accepted as-is per explicit author instruction, and no other column
+> in the file was altered.
+> **Step 1 (`--library`):** skip-report was EMPTY — 0 of the 24 newly-labeled molecules' 172 internal
+> rows failed `attach_labels()`'s frequency-agreement gate (independently re-verified: `library_scores.csv`
+> shows `ref_label` populated for all 172, `0` null). Non-ideal single-centre library coverage jumped
+> from 181/349 modes (52%) with a `ref_label` to **349/349 (100%)** — every non-ideal internal mode in
+> the single-centre-filtered library now has literature ground truth for the first time.
+> **Step 2 (`--calibrate`):** `tau_S`/`tau_B` are **bit-for-bit unchanged** (0.9036817451504533 /
+> 0.17326891344050538) — verified directly, not assumed. Mechanism: `SnO2` (the one ideal-tier addition)
+> contributes 2 stretch modes at `V_Stretch`=1.0 and 2 bend modes at `V_Stretch`=0.0, both comfortably
+> inside the existing boundary and never an extremum. `ideal_stretch_n`/`ideal_bend_n` in
+> `thresholds.json` moved 39→41 / 48→50 (SnO2's 4 modes restoring the exact population size from before
+> the `data_score.csv`-retirement session first exposed the gap — see that entry below), gap_width
+> unchanged (0.7304128317099479), means shifted by <0.001 (population-size effect only).
+> **A genuinely new failure mode, found and disclosed (not present in any previously-tested non-ideal
+> molecule):** confusion-matrix precision for stretch/bend is **no longer exactly 1.0** —
+> `confusion_matrix_stats()` now shows stretch precision 0.98450 (tp=127/n_pred=129) and bend precision
+> 0.99010 (tp=200/n_pred=202), each with exactly 2 false positives. All 4 are OPPOSITE-CATEGORY
+> crossings (not mixed-bucket misses), confined to the see-saw AB4 family and, within it, only its two
+> lightest-ligand members: `OH4` mode 5 (lit. bend, `V_Stretch`=0.9675, predicted clean **stretch**) and
+> mode 7 (lit. stretch, `V_Stretch`=0.1283, predicted clean **bend**); `OF4` mode 4 (lit. bend,
+> `V_Stretch`=0.9839, predicted clean **stretch**) and mode 6 (lit. stretch, `V_Stretch`=0.0468,
+> predicted clean **bend**). No other T-shaped or see-saw molecule (21 of the 23 non-ideal additions)
+> shows this pattern. Recall also moved (pooled stretch 0.68148→0.58796, mixed_fraction 0.31852→0.40278;
+> pooled bend 0.96992→0.89286, mixed_fraction 0.03008→0.09821; non-ideal-tier recall_nonideal: bend
+> 0.95294→0.86207 (n 85→174), stretch 0.55208→0.49143 (n 96→175)) — expected, since the newly-joined
+> 168 non-ideal modes' mixed/opposite-category rate differs from the pre-existing pool's average; NOT a
+> change to any previously-scored molecule's numbers. `floor_met` stays `False`. Both `tests/test_calibrate.py`
+> confusion-matrix tests (`test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket`,
+> `test_confusion_matrix_ideal_nonideal_recall_split`) re-pinned to these numbers with docstrings
+> explaining the mechanism (repo convention). **Flagged for `lead-author`/`expert-reviewer-jcc`:** this
+> is a legitimate, disclosable limitation example — a genuine A1-symmetry stretch/bend coupling in
+> lightest-ligand see-saw AB4 molecules that the literature's normal-mode-eigenvector label doesn't
+> reflect but the geometric `V_Stretch` score confidently does — not a bug to fix (the framework
+> classifies; it does not adjudicate between two internally-coupled, same-irrep descriptions).
+> **Step 3 (`fig:irrep_coupling` repoint):** found, on inspection, that `src/figures.py::plot_irrep_coupling`
+> was **already fully repointed** onto `V_Stretch`/`d_CA` from `library_scores.csv` (+ `irrep`/`shape`/
+> `type` from `characterised_modes.csv`, ideal filter from `mol_list_method.csv`) in the PRIOR 2026-07-08
+> (`data_score.csv`-retirement) session's commit `9435481` — that session's own RESUME HERE entry below
+> already documents this, so the task briefing's framing ("left untouched, still reads `data_score.csv`")
+> was stale/incorrect for the *code path*; verified directly (`grep data_score.csv src/figures.py` inside
+> this function: zero hits) rather than trusted. `Cl2O`/`NO2`/`O3`/`SO2`/`TeF2` are NOT hardcoded anywhere
+> in `src/figures.py` (only in a docstring/comment) — nothing to drop, the function is entirely
+> data-driven and these 5 are already absent because they lack on-disk `.log`/`.gjf` pairs. **What WAS
+> a real, fixed bug this session:** the function's returned summary's `ab3_molecules`/`ab2_molecules`
+> keys reported `shape`-eligibility (i.e. `shape=="trigonal planar"` / `shape=="bend"`), NOT which
+> molecules actually got a point rendered — misleading, since a molecule can pass the shape filter but
+> match none of the panel's (type, irrep) categories and silently contribute 0 points. Fixed:
+> `_plot_panel` now also returns the set of molecules it actually drew, and the summary's
+> `ab3_molecules`/`ab2_molecules` are now that actually-plotted set, with two new keys
+> (`ab3_shape_eligible_but_not_plotted`, `ab2_shape_eligible_but_not_plotted`) surfacing the
+> discrepancy explicitly. **`BBr3` does NOT appear in this figure** — checked directly per the task's
+> instruction to "make sure BBr3 is included if it belongs": it does not currently belong, for what
+> looks like a data-entry inconsistency in the just-back-filled row, not a missing-label gap: `BBr3`'s
+> `shape` is entered as `"trigonal pyramidal"` (fails the panel's `shape=="trigonal planar"` filter
+> outright) even though its `irrep` PATTERN (`E'`/`A1'`/`A2"`) is exactly the D3h signature every other
+> AB3 sibling already in this figure uses (`BF3, BCl3, AlCl3, AlBr3, GaCl3, ...`, all `shape=="trigonal
+> planar"`) — and even if `shape` were corrected, `BBr3`'s `A1'`/`A2"` irreps use ASCII digits
+> (`"A1'"`, `'A2"'`) rather than the Unicode-subscript convention (`"A₁'"`, `"A₂\""`) every sibling row
+> and this panel's category matcher use, so those 2 of its 6 modes still wouldn't render (only its 4
+> `E'` modes, ASCII-digit-free, would). **`OCl2` has the same ASCII-vs-Unicode-subscript irrep
+> mismatch** (`"A1"`/`"B2"` vs. its `Br2O`/`OF2` siblings' `"A₁"`/`"B₂"`) — its `shape=="bend"` passes,
+> so it now surfaces via the new `ab2_shape_eligible_but_not_plotted` key, but it still contributes 0
+> rendered points. **Not corrected in `data/characterised_modes.csv`** — that file is the author's
+> manually-verified ground truth per this session's explicit instruction not to overwrite it; both
+> findings are flagged here for the author to confirm/fix at the source, not silently patched. Population
+> actually plotted (unchanged by the code fix, only its reporting is now honest): AB3 panel 10 molecules/
+> 60 points (`AlBr3, AlCl3, AlF3, AlH3, BCl3, BF3, BH3, GaCl3, GaF3, GaH3`), AB2 panel 11 molecules/33
+> points (`Br2O, H2O, H2S, H2Se, OF2, SBr2, SCl2, SF2, SeBr2, SeCl2, SeF2`) — identical to the
+> pre-session population (none of the 24 newly-labeled molecules render), confirming this session's
+> back-fill has NO effect on this specific figure's plotted content, only on its honesty of reporting.
+> **`vib_scr` (retired `data_score.csv`) vs. `V_Stretch` (live) divergence for the two ACTUALLY-PLOTTED
+> molecules the prior session flagged** (`AlCl3`, AB3 panel; `SeBr2`, AB2 panel) — re-derived directly
+> this session: `AlCl3` modes 1–6: `V_Stretch` = 0.016561, 0.017079, 0.000000, 1.000000, 0.769636,
+> 0.806010 vs. old `vib_scr` = 0.01907, 0.01908, 0.00000, 1.00000, 0.78615, 0.79877 (diffs −0.00251,
+> −0.00200, 0.0, ~0.0, −0.01652, +0.00724; max |diff| 0.0165 on mode 5). `SeBr2` modes 1–3: `V_Stretch`
+> = 0.027654, 0.870212, 0.914513 vs. old `vib_scr` = 0.04749, 0.91482, 0.86328 (diffs −0.01984,
+> −0.04461, +0.05123; max |diff| 0.0512 on mode 3). Neither divergence flips any predicted clean-vs-mixed
+> bucket for these molecules — the two panels' visual content differs only by these sub-0.06 point shifts
+> along the y-axis, not by any point appearing/disappearing.
+> Full `pytest`: **105/105 green** (2 pre-existing confusion-matrix tests re-pinned to the new numbers
+> above with docstrings explaining why, per repo convention; no other test needed changes — nothing
+> references `plot_irrep_coupling`'s summary keys directly).
+> **Still open (unchanged by this session):** the `BBr3`/`OCl2` `shape`/irrep-formatting inconsistency
+> flagged above (author's call whether to correct `data/characterised_modes.csv`); the general
+> `IntermediateIO` bond-order cache-cold-vs-warm inconsistency noted in the prior Phase 2 entry.
+>
+> **2026-07-08 (Phase 3 — `data/data_score.csv` retirement; verified/finalized after a session-limit
+> cutoff, all code already written, this pass was verification + one doc fix + commit):** Author
 > **2026-07-08 (Phase 3 — `data/data_score.csv` retirement; verified/finalized after a session-limit
 > cutoff, all code already written, this pass was verification + one doc fix + commit):** Author
 > directive: stop reading `data/data_score.csv` anywhere in the pipeline (leave the file on disk,
@@ -242,8 +344,12 @@
 > now-available Gaussian-direct data to fix the 13 known `attach_labels()` frequency-gate mismatches —
 > see the plan file for the intended approach.
 >
-> **TODO (2026-07-07, not yet started): back-fill literature stretch/bend labels for the
+> **TODO (2026-07-07): back-fill literature stretch/bend labels for the
 > T-shaped/see-saw non-ideal families (and a few stragglers) in `data/data_score.csv`.**
+> **RESOLVED 2026-07-08 — see the RESUME HERE entry at the top of this file** (the target file is now
+> `data/characterised_modes.csv`, `data_score.csv` having been retired in the interim; 24 molecules
+> back-filled, not the 23 this TODO originally scoped — `SnO2` also closed, `Br2O`/`NCl3`/`NF3`/`OF2`
+> turned out to already have rows). Left below for history.
 > `mol_list_method.csv` has 60 non-ideal single-center molecules computed end to end, but
 > `fig:confusion`'s population is only **28** — `data_score.csv` (the literature `ref_label`
 > ground truth `attach_labels()` joins against) has never been back-filled for most of them.

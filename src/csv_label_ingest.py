@@ -32,8 +32,12 @@ against -- see ``src.library_ingest.attach_labels()``'s docstring), and
 ``ideal`` itself is no longer a per-mode literature label at all: it is
 sourced structurally from ``data/mol_list_method.csv``'s per-molecule
 ``mol_type`` column by ``src.library_ingest.attach_ideal_tags()``, entirely
-outside this module. ``data/data_score.csv`` is left on disk, untouched,
-simply unread by any code path now.
+outside this module. ``data/data_score.csv`` was left on disk, unread by
+any code path, from 2026-07-08 until 2026-07-09, when the author deleted it
+entirely (an unrelated cleanup of an already-retired file, alongside the
+OH4/OF4 library-exclusion session) -- ``src.library_ingest.resync_
+reference_metadata()`` was updated the same session to stop reading/writing
+it, so no code path references the file at all anymore.
 
 **Coverage gap (2026-07-07: out of scope, not a gap to patch).** These CSVs
 do not cover every molecule the old workbook-driven pipeline used to score

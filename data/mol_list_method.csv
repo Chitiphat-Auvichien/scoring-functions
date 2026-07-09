@@ -59,8 +59,6 @@ non-ideal,trigonal planar,D3h,3,0,3,4,AlBr3,AlBr₃,TRUE,,,AlBr3
 non-ideal,trigonal planar,D3h,3,0,3,4,GaH3,GaH₃,TRUE,,,GaH3
 non-ideal,trigonal planar,D3h,3,0,3,4,GaF3,GaF₃,TRUE,,,GaF3
 non-ideal,trigonal planar,D3h,3,0,3,4,GaCl3,GaCl₃,TRUE,,some mode irreps are error,GaCl3
-non-ideal,see-saw,C2v,4,1,5,5,OH4,OH₄,TRUE,,,oh4
-non-ideal,see-saw,C2v,4,1,5,5,OF4,OF₄,TRUE,,,of4
 non-ideal,see-saw,C2v,4,1,5,5,OCl4,OCl₄,TRUE,,,ocl4
 non-ideal,see-saw,C2v,4,1,5,5,OBr4,OBr₄,FALSE,MP2/cc-pVDZ,symmetry broken with 3-21G,OBr4_MP2_cc-pVDZ
 non-ideal,see-saw,C2v,4,1,5,5,SH4,SH₄,TRUE,,,sh4

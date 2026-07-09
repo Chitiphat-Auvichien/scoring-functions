@@ -10,13 +10,86 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-08 (**literature back-fill for the T-shaped/see-saw non-ideal families closes
-> the TODO two entries below** — 24 molecules gain their first-ever `characterised_modes.csv` row,
-> `--library`/`--calibrate`/`--figures` regenerated, `fig:irrep_coupling`'s `ab2_molecules`/
-> `ab3_molecules` reporting bug fixed, 2 confusion-matrix tests re-pinned with a genuinely new
-> opposite-category-crossing finding; see RESUME HERE below. Full `pytest` green (105/105).)
+> Last updated: 2026-07-09 (**OH4/OF4 excluded from the hydride library entirely** — neither is a
+> genuine stationary point at this project's MP2/3-21G level (imaginary/negative frequencies), so their
+> normal modes cannot be validly compared to the TeH4 ideal see-saw template; roster 72→70 (60→58
+> non-ideal single-centre), `--library`/`--calibrate`/`--figures` regenerated, the population's only
+> opposite-category stretch/bend crossings (found in the 2026-07-08 entry below) are gone with them —
+> confusion-matrix precision for stretch/bend is back to exactly 1.0; see RESUME HERE below. Full
+> `pytest` green (105/105).)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-09 (OH4/OF4 exclusion session):** Author determined `OH4` and `OF4` — the two
+> lightest-ligand members of the see-saw AB4 family — are not genuine stationary points at the
+> MP2/3-21G level used throughout this project: Gaussian's output shows negative/imaginary frequencies
+> (`OH4` mode 1 = -303.26 cm⁻¹ in the pre-this-session `library_scores.csv`). Since their "normal
+> modes" are not physically meaningful vibrations of a real minimum, they cannot be validly compared to
+> the `TeH4` ideal see-saw template, so the author excluded both from the hydride reference library
+> entirely (not just re-labeled/flagged) — removed from `data/mol_list_method.csv` (roster rows),
+> `data/characterised_modes.csv` (all 18 literature-label rows, 9+9), and their `data/gjf/`, `data/logs/`,
+> `data/intermediate/` input files deleted outright. `XeOH4`/`XeOF4` (unrelated Xe-centered library
+> molecules that merely share the substring) were explicitly left untouched. A separate, unrelated
+> cleanup already staged in the same working-tree change deleted the already-retired
+> `data/data_score.csv` (see the 2026-07-08 Phase 3 entry below for its retirement history) — this
+> session finished that retirement by updating `src/library_ingest.py::resync_reference_metadata()` to
+> stop reading/writing `data_score.csv` (it now resyncs `characterised_modes.csv` only), since the
+> function would otherwise unconditionally `FileNotFoundError` on the now-deleted file.
+> **Roster:** 72→70 total molecules (11 ideal + 58 non-ideal single-centre + benzene; was 11+60+1).
+> **`--library`/`--calibrate` rerun (`python main.py --library --calibrate --figures`):** `tau_S`/`tau_B`
+> **unchanged bit-for-bit** (0.9036817451504533 / 0.17326891344050538, `ideal_stretch_n`/`ideal_bend_n`
+> unchanged at 41/50) — OH4/OF4 were both non-ideal, never boundary-defining. `library_scores.csv`: 70
+> molecules, 867 rows (452 internal + 415 external); internal-mode counts split 331 non-ideal/91 ideal,
+> and by ref_label×ideal: bend 164 non-ideal/50 ideal, stretch 167 non-ideal/41 ideal (2 benzene rows are
+> `ref_label=="SB"`, tracked separately by the benzene-specific confusion matrix, not this split).
+> **Confusion-matrix outcome — confirmed from the regenerated numbers, not assumed:** the population's
+> ONLY opposite-category stretch/bend crossings (`OH4` modes 5/7, `OF4` modes 4/6 — see the 2026-07-08
+> entry below for the original finding) are gone with the molecules that produced them.
+> `confusion_matrix_stats()` (`src/calibrate.py`) now reports, for `data/results/library_scores.csv`:
+> translation `tp=207, n_pred=207, n_ref=207, precision=1.0, recall=1.0`; rotation `tp=202, n_pred=202,
+> n_ref=202, precision=1.0, recall=1.0`; **stretch `tp=125, n_pred=125, n_ref=208, precision=1.0`** (was
+> 0.98450, tp=127/n_pred=129), `recall=0.6009615384615384`, `mixed_fraction=0.39903846153846156`,
+> `recall_ideal=1.0` (`n_ref_ideal=41`), `recall_nonideal=0.5029940119760479` (`n_ref_nonideal=167`, was
+> 175); **bend `tp=197, n_pred=197, n_ref=214, precision=1.0`** (was 0.99010, tp=200/n_pred=202),
+> `recall=0.9205607476635514`, `mixed_fraction=0.0794392523364486`, `recall_ideal=1.0`
+> (`n_ref_ideal=50`), `recall_nonideal=0.8963414634146342` (`n_ref_nonideal=164`, was 174). `floor_met`
+> (0.95 acceptance floor) is still `False` overall — stretch/bend pooled recall sits under 0.95 because
+> most non-clean stretch/bend reference modes land in the mixed bucket (by design, not a defect); this
+> was already true before OH4/OF4's removal and is unrelated to it. `library_external_flag_confusion()`
+> (`src/flag_validation.py`): 415 external rows / 70 molecules (was 427/72, -12 = 2 molecules ×
+> (n_T=3+n_R=3) for non-linear AB4), still `FP=0/TP=0/FN=0/TN=415` (exact-by-construction Eckart-Sayvetz
+> references, unaffected by the exclusion beyond the row count).
+> **Figures (`--figures`):** all 7 manuscript figures + SI companions regenerated;
+> `fig_bondscores`/`fig_boxplots`/`fig_confusion`/`fig_modemixing` are the ones with real content
+> changes (derive from the hydride-library results) — `fig:confusion`'s non-ideal-tier footer now reads
+> "0% of bend or stretch reference-labeled modes crossed to the OPPOSITE clean category" (both directions
+> 0.0%, matching the precision=1.0 result above); `fig:bondscores` `n_molecules=69` = 70 roster molecules
+> minus benzene (multi-centre, excluded from this single-centre-only figure via
+> `SINGLE_CENTRE_ONLY_EXCLUDE`, unrelated to this session). `fig_irrep_coupling`/`fig_sensitivity`
+> regenerated too but not expected to change in content
+> (irrep_coupling only covers the AB2/AB3 series, unrelated to AB4; sensitivity's `tau_TR` sweep is
+> independent of the stretch/bend library) — confirmed unchanged in substance (`tau_TR_frozen=0.95`,
+> `accuracy_range=(1.0, 1.0)` both before and after).
+> **Windows console encoding note (unrelated pre-existing bug, found and worked around, not fixed in
+> code):** `python main.py --figures` on this Windows/PowerShell environment crashes with
+> `UnicodeEncodeError` (`cp1252` codec, character U+2033 ″) printing `plot_irrep_coupling`'s verbose
+> summary (category strings like `"A₂\""`) to the console — happens AFTER the figure's PDF/PNG are
+> already written, so only the console echo is affected, not the output files, but it DOES abort the
+> `regenerate_all()` loop before `fig:sensitivity` runs. Worked around this session by rerunning
+> `--figures` with `PYTHONIOENCODING=utf-8` set (`fig:sensitivity` then completed normally) rather than
+> touching `src/figures.py`'s print statements — flagged here as a real, reproducible environment gap
+> (any Windows user without a UTF-8 console codepage will hit the same abort) for a future session to
+> fix properly (e.g. `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` in `main.py`), not
+> assumed away.
+> **Tests updated for the new 70-molecule/precision=1.0 state** (all pinned-number tests, plus their
+> docstrings — obsolete "OH4/OF4 crossing" explanations replaced with the new clean-precision numbers,
+> not just the numbers themselves): `tests/test_library_ingest.py` (roster-count asserts 72→70 throughout,
+> `resync_reference_metadata()`'s synthetic fixture rewritten off `data_score.csv` onto
+> `characterised_modes.csv` to match the source change above), `tests/test_flag_validation.py`
+> (`n==415`, `n_molecules==70`, `TN==415`), `tests/test_calibrate.py` (both confusion-matrix tests
+> re-pinned to `precision==1.0` for stretch/bend with the mechanism above in their docstrings, replacing
+> the retracted 0.98450/0.99010 numbers and the OH4/OF4 mechanism explanation). Full `pytest`: **105/105
+> green** (same count as before — no tests added/removed, only re-pinned).
+>
 > **2026-07-08 (literature back-fill session — T-shaped/see-saw/BBr3/OCl2/SnO2 ground truth; closes
 > the 2026-07-07 TODO below):** Author manually back-filled `shape`/`type`/`sym`/`ref` in
 > `data/characterised_modes.csv` for **24 molecules** that previously had NO row at all (not just blank

@@ -22,6 +22,15 @@ Gaussian-direct, including OBr4 once its data/gjf .com connectivity gap
 was fixed (see IMPLEMENTATION_PLAN.md's 2026-07-07 RESUME HERE) --
 test_library_external_references_never_false_positive's counts are updated
 accordingly.
+
+**2026-07-09 OH4/OF4 exclusion:** OH4 and OF4 removed from the roster (not
+genuine stationary points at this project's MP2/3-21G level -- imaginary/
+negative frequencies -- so their normal modes cannot be validly compared to
+the TeH4 ideal see-saw template). The library external-reference population
+shrank from 72 to 70 geometry-backed molecules (427 to 415 external rows,
+-12 = 2 molecules x (n_T=3 + n_R=3) for non-linear AB4) --
+test_library_external_references_never_false_positive's counts are updated
+accordingly.
 """
 import os
 import sys
@@ -102,20 +111,24 @@ def test_ground_truth_label_thresholds():
 
 
 def test_library_external_references_never_false_positive():
-    """The 72 geometry-backed library molecules' (2026-07-07: the full
-    mol_list_method.csv roster, Gaussian-direct, including OBr4 once its
-    connectivity gap was fixed) REAL normal-mode T/R references (427 rows
-    total) are exact-by-construction Eckart-Sayvetz references (ground truth
-    always CLEAN); this checks -- rather than assumes -- that the classifier
-    never flags a single one of them MIXED_EXTERNAL_WITH_VIBRATION (FP=0),
-    the much easier degenerate case named in the task's parenthetical."""
+    """The 70 geometry-backed library molecules' (2026-07-09: OH4/OF4 removed
+    from the roster -- both are not genuine stationary points at this
+    project's MP2/3-21G level (imaginary/negative frequencies), so their
+    normal modes cannot be validly compared to the TeH4 ideal see-saw
+    template; was 72 molecules/427 rows before removal, -12 external rows
+    for OH4+OF4's 2x(n_T=3+n_R=3) non-linear-AB4 references) REAL normal-mode
+    T/R references (415 rows total) are exact-by-construction Eckart-Sayvetz
+    references (ground truth always CLEAN); this checks -- rather than
+    assumes -- that the classifier never flags a single one of them
+    MIXED_EXTERNAL_WITH_VIBRATION (FP=0), the much easier degenerate case
+    named in the task's parenthetical."""
     ext, stats = library_external_flag_confusion()
-    assert stats["n"] == 427
-    assert stats["n_molecules"] == 72
+    assert stats["n"] == 415
+    assert stats["n_molecules"] == 70
     assert stats["FP"] == 0
     assert stats["TP"] == 0
     assert stats["FN"] == 0
-    assert stats["TN"] == 427
+    assert stats["TN"] == 415
 
 
 if __name__ == "__main__":

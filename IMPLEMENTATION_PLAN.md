@@ -1974,6 +1974,21 @@ library scores from the Excel file.
       table) added; `tests/test_flag_validation.py` (6 new tests, pins TP/FP/FN/TN and the EMIT 2/9/34-36
       anchors) — 40/40 tests green. score-validator dispatched to independently re-run and confirm all
       counts — see Changelog for verdict.
+      **Manuscript-inclusion decision, 2026-07-09 (consistency/submission-readiness pass): reviewed and
+      deliberately EXCLUDED from `JCC_temp_LaTeXtemplate.tex` (main text and SI).** Author's objection,
+      confirmed correct on inspection: benzene EMIT modes have no a priori discrete T/R identity the way
+      geometry-backed normal modes do (those get it exactly, by construction, via Eckart-Sayvetz — see
+      `library_external_flag_confusion`'s M_ext=1.0-exactly docstring). The "ground truth" here is instead
+      a continuous projection fraction (`M_ext`) binarized at `GT_EXT_LO=0.05`/`GT_EXT_HI=0.95` — a
+      defensible but non-canonical modeling choice, not a fact. Reporting precision=1.0/recall=0.294 in
+      the manuscript as a clean validated accuracy statistic would overstate its rigor to a reader/referee
+      who doesn't see this threshold-dependence. This is *not* the same circularity flagged for the
+      rigorous-tier check (`JCC_SI_rigorous_tier_check.tex` / [[project_two-gate-purity-decision]]) — the
+      ground truth here is an independently-computed quantity (projection, not the classifier's own
+      score) — but it still isn't rigorous enough to state as a bare number without heavy caveats, which
+      would read strangely embedded in prose. Keep the code, tests, and CSV as-is (legitimate internal
+      diagnostic); this note exists so the result isn't silently re-proposed for the manuscript without
+      this context.
 - [ ] **Validate the mixed-SB bucket** by irrep-degeneracy + CoM arguments; report the fraction of
       lit-labeled modes landing in "mixed" (defends against the bending = low-stretch circularity
       concern). **Promoted:** this is the direct evidentiary backbone for the manuscript's residual-risk

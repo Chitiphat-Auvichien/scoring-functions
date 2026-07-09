@@ -1501,13 +1501,16 @@ def plot_bond_scores(
     bonds = bonds[bonds["ref_label"].isin(("stretch", "bend")) & bonds["ideal"].isin(("yes", "no"))]
     bonds["abs_rel_db"] = bonds["rel_db"].abs()
 
-    # Widened this session (3.6 -> 7.2in, ~2:1 aspect): the manuscript's
-    # \includegraphics[width=0.95\columnwidth] already rescales this to
-    # near-full page width regardless of source aspect ratio (single-column
-    # article class), so the wider aspect exists to leave the author room to
-    # manually composite depicted-mode panel images beside/onto the plot
-    # afterward -- not a change to the printed page width itself.
-    fig, ax = plt.subplots(figsize=(7.2, 3.4))
+    # Width set to ~6.2in (author decision, 2026-07-09) to match the fixed
+    # ~6.2in target every main-text single-panel figure prints at once
+    # LaTeX's \includegraphics[width=0.95\columnwidth] rescales it on the A4
+    # single-column page (see fig:confusion, sized at exactly this width for
+    # the same reason) -- at the previous 7.2in source width, the 9pt/7.5pt
+    # rcParams fonts were shrinking to an effective ~7.75pt/6.5pt on the
+    # printed page, smaller than every other figure in the set. (Previously
+    # widened to 7.2in to leave room for manually compositing depicted-mode
+    # panel images beside the plot; re-widen if that need resurfaces.)
+    fig, ax = plt.subplots(figsize=(6.2, 3.4))
     for ideal_flag in ("no", "yes"):  # non-ideal first (background), ideal on top
         for ref in ("bend", "stretch"):
             cat = REF_LABEL_TO_CATEGORY[ref]
@@ -1515,17 +1518,16 @@ def plot_bond_scores(
             if sub.empty:
                 continue
             kw = _marker_kwargs(cat, ideal_flag, marker="o")
-            ax.scatter(sub["abs_rel_db"], sub["s_AB"], s=7,
+            ax.scatter(sub["abs_rel_db"], sub["s_AB"], s=13,
                        zorder=3 if ideal_flag == "yes" else 2, **kw)
 
-    # Bond-vector symbol approximated as bold-upright (\mathbf), not true
-    # bold-italic (\boldsymbol): matplotlib's default mathtext renderer
-    # (text.usetex is not set anywhere in this module) does not support the
-    # amsmath \boldsymbol macro. This is the closest available rendering
-    # without adding a text.usetex dependency; escalate only if this
-    # visibly doesn't match the manuscript's own \boldsymbol{b}^{AB} prose
-    # closely enough once rendered.
-    ax.set_xlabel(r"$|\Delta\mathbf{b}^{AB}|\,/\,|\mathbf{b}^{AB}|$")
+    # matplotlib's mathtext DOES support \boldsymbol (verified by rendering,
+    # 2026-07-09; superseding an earlier note here that claimed otherwise),
+    # so the bond-vector symbol now matches the manuscript prose's own
+    # \boldsymbol{b} exactly, dropping the "AB" superscript to match the
+    # quantity actually plotted (the per-bond |Delta|b||/|b| ratio, same
+    # notation fig:boxplots panel (b) already uses for its averaged version).
+    ax.set_xlabel(r"$|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$")
     ax.set_ylabel(r"Bond score $s^{AB}$")
     ax.set_xlim(-0.03, bonds["abs_rel_db"].max() * 1.05)
     ax.set_ylim(-0.03, 1.05)
@@ -1542,16 +1544,16 @@ def plot_bond_scores(
     legend_elems = [
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor=COLORS["stretching"], markeredgecolor=COLORS["stretching"],
-               markersize=6, label="S, ideal"),
+               markersize=8, label="S, ideal"),
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor="none", markeredgecolor=COLORS["stretching"],
-               markersize=6, label="S, non-ideal"),
+               markersize=8, label="S, non-ideal"),
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor=COLORS["bending"], markeredgecolor=COLORS["bending"],
-               markersize=6, label="B, ideal"),
+               markersize=8, label="B, ideal"),
         Line2D([0], [0], marker="o", color="none",
                markerfacecolor="none", markeredgecolor=COLORS["bending"],
-               markersize=6, label="B, non-ideal"),
+               markersize=8, label="B, non-ideal"),
     ]
     ax.legend(handles=legend_elems, loc="upper left", frameon=False, fontsize=6.8,
               handletextpad=0.4, labelspacing=0.4, borderaxespad=0.2)
@@ -1624,10 +1626,10 @@ def plot_boxplots(
     # tick labels (as tried first, pre-2026-07-02) made adjacent 2-line
     # labels visually run together in this narrow a panel (3 panels sharing
     # a ~7.4in figure) regardless of spacing/font tweaks -- switched instead
-    # to a two-level tick scheme: short primary labels only, comfortably
-    # narrow, plus a single shared "ideal"/"non-ideal" group annotation
-    # (with an under-bracket) spanning each pair, which only has to appear
-    # ONCE per pair rather than once per box.
+    # to short primary labels only. A shared "ideal"/"non-ideal" bracket
+    # annotation below each pair (tried next) was itself removed 2026-07-09
+    # (author decision): that distinction is now stated in the caption text
+    # instead of drawn on the raster.
     group_labels = ["B", "S", "B", "S"]
     # Positions: gap 1.3 within a bend/stretch pair, gap 1.6 between the
     # ideal pair (1,2) and non-ideal pair (3,4) -- sized (see
@@ -1635,13 +1637,11 @@ def plot_boxplots(
     # "bending"/"stretching" tick-label text nor the pair-level "ideal"/
     # "non-ideal" bracket labels below them collide, verified by rendering.
     positions = [1.0, 2.3, 3.9, 5.2]
-    pair_spans = [(positions[0], positions[1], "ideal"),
-                  (positions[2], positions[3], "non-ideal")]
 
     panels = [
         ("freq", r"Frequency (cm$^{-1}$)", "(a) Frequency"),
         ("delta_b_mean", r"Averaged $|\Delta|\mathbf{b}|\,/\,|\mathbf{b}|\,|$", "(b) Bond-length change"),
-        ("V_Stretch", r"$s[\mathrm{V_S}]$", "(c) Mode score"),
+        ("V_Stretch", r"$s[\mathrm{V_S}]$", "(c) Vibrational score"),
     ]
 
     fig, axes = plt.subplots(1, 3, figsize=(7.4, 3.3))
@@ -1666,9 +1666,10 @@ def plot_boxplots(
             whisk.set_color("#555555")
         for cap in bp["caps"]:
             cap.set_color("#555555")
-        for flier, (ref, _) in zip(bp["fliers"], groups):
-            flier.set_markerfacecolor(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[ref]])
-            flier.set_markeredgecolor(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[ref]])
+        for flier, (ref, ideal_flag) in zip(bp["fliers"], groups):
+            color = CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[ref]]
+            flier.set_markerfacecolor(color if IDEAL_STYLE[ideal_flag]["filled"] else "none")
+            flier.set_markeredgecolor(color)
 
         ax.set_xticks(positions)
         # Horizontal, unrotated (reverted 2026-07-02 alongside the gloss
@@ -1682,37 +1683,13 @@ def plot_boxplots(
         ax.set_ylabel(ylabel)
         ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
 
-        # Pair-level "ideal"/"non-ideal" bracket + label, in the axes'
-        # x-data/y-axes-fraction mixed transform so it sits at a fixed
-        # vertical offset below the primary tick labels regardless of each
-        # panel's own y-data range. clip_on=False since this offset is
-        # deliberately outside the data area (bbox_inches="tight" on save
-        # still captures it).
-        trans = ax.get_xaxis_transform()
-        for lo, hi, text in pair_spans:
-            mid = (lo + hi) / 2
-            ax.plot([lo - 0.45, hi + 0.45], [-0.28, -0.28], transform=trans,
-                    color="#555555", lw=0.7, clip_on=False)
-            ax.plot([lo - 0.45, lo - 0.45], [-0.28, -0.24], transform=trans,
-                    color="#555555", lw=0.7, clip_on=False)
-            ax.plot([hi + 0.45, hi + 0.45], [-0.28, -0.24], transform=trans,
-                    color="#555555", lw=0.7, clip_on=False)
-            ax.annotate(text, xy=(mid, -0.34), xycoords=trans, ha="center",
-                        va="top", fontsize=7.5, style="italic",
-                        color="#333333", annotation_clip=False)
-
-    # tau_S / tau_B reference lines on panel (c) only. Extra right-hand xlim
-    # padding (vs. the other two panels) so the tau labels have clear room
-    # and don't sit flush against the panel's right edge.
+    # tau_S/tau_B are no longer drawn on panel (c) (author decision,
+    # 2026-07-09: threshold lines removed as visual clutter -- the values
+    # are still returned below for the caption/summary). The pair-level
+    # "ideal"/"non-ideal" bracket annotation below each panel's ticks was
+    # also removed the same session (deferred to the caption text instead);
+    # positions/group_labels alone are enough to read each box.
     th = Thresholds.calibrated()
-    axes[2].set_xlim(positions[0] - 0.7, positions[-1] + 1.05)
-    axes[2].axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8)
-    axes[2].axhline(th.tau_B, color=COLORS["threshold"], ls="--", lw=0.8)
-    tau_label_x = positions[-1] + 0.55
-    axes[2].text(tau_label_x, th.tau_S, r"$\tau_S$", ha="left", va="center", fontsize=7,
-                 color=COLORS["threshold"])
-    axes[2].text(tau_label_x, th.tau_B, r"$\tau_B$", ha="left", va="center", fontsize=7,
-                 color=COLORS["threshold"])
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)

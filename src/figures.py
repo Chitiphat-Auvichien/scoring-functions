@@ -103,6 +103,7 @@ import matplotlib.patheffects as pe
 from src.classifier import (
     Thresholds, vib_label, classification_bucket,
     STRETCHING, BENDING, MIXED_STRETCH_BEND,
+    is_clean_external, is_mixed_external, external_axis,
 )
 
 # --------------------------------------------------------------------------
@@ -171,6 +172,14 @@ REF_LABEL_TO_CATEGORY = {
     # (src/calibrate.py) already excludes ref_label=="SB" rows from its own
     # 4-category accounting entirely (see that function's 2026-07-05 fix).
     "SB": "mixed",
+    # Individual-axis identity entries (added for the joint T/R+internal
+    # confusion matrices, fig:confusion/fig:benzeneconfusion/the SI rigorous-
+    # tier table): a bare clean-external label ("Tx".."Rz") IS its own
+    # category here, not collapsed to the coarse "translation"/"rotation"
+    # bucket -- see `_axis_aware_pred_category` below, which is what actually
+    # produces these keys for a joint table's ref/pred columns.
+    "Tx": "Tx", "Ty": "Ty", "Tz": "Tz",
+    "Rx": "Rx", "Ry": "Ry", "Rz": "Rz",
 }
 PRED_BUCKET_TO_CATEGORY = dict(REF_LABEL_TO_CATEGORY)
 PRED_BUCKET_TO_CATEGORY.update({
@@ -202,6 +211,11 @@ CATEGORY_COLOR = {
     "stretch": COLORS["stretching"],
     "mixed": COLORS["mixed"],
     "mixed_external": COLORS["mixed_ext"],
+    # Individual axes share the same "external" gray as the coarse
+    # translation/rotation buckets -- one grouping color, distinguished by
+    # tick-label text only (see CATEGORY_LABEL below), not by 6 new hues.
+    "Tx": COLORS["external"], "Ty": COLORS["external"], "Tz": COLORS["external"],
+    "Rx": COLORS["external"], "Ry": COLORS["external"], "Rz": COLORS["external"],
 }
 
 CATEGORY_MARKER = {
@@ -236,6 +250,10 @@ CATEGORY_LABEL = {
     "stretch": "S",
     "mixed": "SB",
     "mixed_external": "mixed external+vibration",
+    # Individual axes: bare axis symbol, already <=2 chars, no gloss needed
+    # (matches the classifier's own "Tx".."Rz" clean-external label strings).
+    "Tx": "Tx", "Ty": "Ty", "Tz": "Tz",
+    "Rx": "Rx", "Ry": "Ry", "Rz": "Rz",
 }
 
 # Calibrated classifier thresholds (src/calibrate.py's frozen
@@ -649,10 +667,10 @@ def plot_benzene_normal_modes(
     # rendering). The upper-left corner is empty at this height, so the
     # label is anchored there instead.
     y_offset = 0.045
-    ax.text(0.02, TAU_S + y_offset, r"$\tau_S=$" + f"{TAU_S:.3f}", ha="left",
+    ax.text(0.02, TAU_S + y_offset, r"$\tau_\text{S}=$" + f"{TAU_S:.2f}", ha="left",
             va="bottom", fontsize=7, color=COLORS["threshold"],
             transform=ax.get_yaxis_transform())
-    ax.text(0.98, TAU_B - y_offset, r"$\tau_B=$" + f"{TAU_B:.3f}", ha="right",
+    ax.text(0.98, TAU_B - y_offset, r"$\tau_\text{B}=$" + f"{TAU_B:.2f}", ha="right",
             va="top", fontsize=7, color=COLORS["threshold"],
             transform=ax.get_yaxis_transform())
 
@@ -731,7 +749,82 @@ def plot_benzene_normal_modes(
 # accuracy claim there either. See ``plot_rigorous_tier_check`` below.
 # --------------------------------------------------------------------------
 
-def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL):
+def _axis_aware_pred_category(predicted_label):
+    """Map a RAW classifier `predicted_label` string (e.g. "Tx", "Tx*", "S",
+    "SB") to a confusion-table COLUMN category, WITHOUT collapsing a clean
+    external label to the coarse "translation"/"rotation" bucket the way
+    `classification_bucket()` does.
+
+    Returns the bare axis ("Tx".."Rz") for a clean external prediction,
+    "mixed_external" for a flagged one (any axis), or the ordinary
+    `classification_bucket()` result for anything else (internal S/B/SB
+    predictions). This is what lets a row's PREDICTION land in an
+    axis-specific column independent of that row's own `kind` -- e.g. an
+    internal reference mode whose residual character won a Step-2 external
+    slot would show up in a "Tx" column here, which a bucket-collapsed
+    lookup could never surface. Used by `_joint_confusion_table` below for
+    the joint external+internal confusion matrices (fig:confusion,
+    fig:benzeneconfusion, the SI rigorous-tier table).
+    """
+    if is_clean_external(predicted_label):
+        return external_axis(predicted_label)
+    if is_mixed_external(predicted_label):
+        return "mixed_external"
+    return classification_bucket(predicted_label)
+
+
+def _joint_confusion_table(df, ref_order, pred_order):
+    """Build a reference-label x predicted-category confusion table spanning
+    BOTH external (Tx..Rz) and internal (stretch/bend/mixed/SB) categories in
+    one crosstab -- the joint matrix that actually checks whether any
+    internal mode's residual character ever wins an external Step-2 slot (or
+    vice versa), not just whether each population is internally consistent.
+
+    Ground truth: `mode_index` (the true axis identity, e.g. "Tx") for
+    external rows, `ref_label` (the literature/derived stretch/bend/SB label)
+    for internal rows. Prediction: `predicted_label` mapped through
+    `_axis_aware_pred_category`. Reindexed to `ref_order`/`pred_order`
+    (fill_value=0) -- any category present in the data but not in the
+    requested order is silently dropped from the returned table (callers
+    pass an exhaustive order for the categories they expect).
+    """
+    ref_cat = np.where(df["kind"] == "external", df["mode_index"], df["ref_label"])
+    pred_cat = df["predicted_label"].map(_axis_aware_pred_category)
+    tbl = pd.crosstab(pd.Series(ref_cat, index=df.index, name="ref"), pred_cat)
+    return tbl.reindex(index=ref_order, columns=pred_order, fill_value=0)
+
+
+def _per_category_from_table(tbl, cats):
+    """Generic precision/recall/n_reference/n_predicted-correct per category,
+    computed directly from an already-built confusion table's own row/column
+    sums and diagonal -- unlike `confusion_matrix_stats`'s per-category dict
+    (src/calibrate.py), which is hardcoded to exactly 4 bucket-collapsed
+    categories (translation/rotation/stretch/bend) and would KeyError on an
+    axis-specific key like "Tx". Works for any `cats` list that indexes both
+    `tbl`'s rows and columns (true for every joint table this module builds,
+    since `ref_order`/`pred_order` always share the same category names for
+    the categories being scored).
+
+    Returns a list of dicts, one per category in `cats`, each:
+    {category, n_reference, n_predicted_correct, precision, recall}.
+    """
+    rows = []
+    for c in cats:
+        n_ref = int(tbl.loc[c].sum()) if c in tbl.index else 0
+        n_pred = int(tbl[c].sum()) if c in tbl.columns else 0
+        n_correct = int(tbl.loc[c, c]) if (c in tbl.index and c in tbl.columns) else 0
+        precision = n_correct / n_pred if n_pred else float("nan")
+        recall = n_correct / n_ref if n_ref else float("nan")
+        rows.append({
+            "category": CATEGORY_LABEL.get(c, c), "n_reference": n_ref,
+            "n_predicted_correct": n_correct, "precision": precision,
+            "recall": recall,
+        })
+    return rows
+
+
+def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL,
+                        divider=None):
     """Shared heatmap renderer for one confusion-matrix tier. `tbl` must
     already be reindexed to `ref_order` rows (columns are whatever buckets
     are present for that tier -- rigorous and non-ideal tiers populate
@@ -743,6 +836,12 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL)
     function's `_CONFUSION_LABEL`) so this figure's translation/rotation
     ticks read "T"/"R" instead of the long "clean translation"/"clean
     rotation" form, without touching `CATEGORY_LABEL` itself.
+
+    `divider=(n_ref_ext, n_pred_ext)`, if given, draws a thicker line after
+    row index `n_ref_ext-1` and column index `n_pred_ext-1`, separating a
+    leading external-axis block (rows: Tx..Rz; columns: Tx..Rz +
+    mixed_external, grouped together) from the trailing internal-category
+    block -- used by the joint external+internal confusion matrices.
     """
     vmax = max(1, tbl.values.max())
     im = ax.imshow(tbl.values, cmap=COLORS["confusion_cmap"], aspect="auto",
@@ -775,11 +874,15 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL)
         cat = PRED_BUCKET_TO_CATEGORY.get(c)
         if cat is not None:
             tick.set_color(CATEGORY_COLOR[cat])
-    ax.set_xlabel("Predicted bucket")
+    ax.set_xlabel("Classification algorithm label")
     ax.set_ylabel("Reference label")
     ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
+    if divider is not None:
+        n_ref_ext, n_pred_ext = divider
+        ax.axhline(n_ref_ext - 0.5, color="black", lw=1.6, zorder=4)
+        ax.axvline(n_pred_ext - 0.5, color="black", lw=1.6, zorder=4)
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cb.set_label("n modes", fontsize=8)
+    cb.set_label("Number of modes", fontsize=8)
     cb.ax.tick_params(labelsize=7.5)
     return im
 
@@ -789,91 +892,182 @@ def plot_confusion_matrix(
     out_dir="data/figures",
     label="fig_confusion",
 ):
-    """Build fig:confusion as a SINGLE-TIER figure (restructured 2026-07-05;
-    replaces the earlier two-tier 2x2 layout -- see IMPLEMENTATION_PLAN.md
-    Changelog and this module's header comment above for the full
-    circularity rationale). Only the non-ideal tier is shown: internal rows
-    with ``ideal == 'no'`` -- thresholds fixed on the ideal population
-    (fig:boxplots), then applied WITHOUT retuning to the harder non-ideal
-    cases they were never calibrated on. This is the genuine, non-circular
-    validation; the rigorous tier (external T/R rows + ``ideal == 'yes'``
-    internal rows) is exact by construction and is reported separately, as a
+    """Build fig:confusion as a SINGLE-PANEL joint confusion matrix
+    (restructured again, this session): the non-ideal tier's internal rows
+    (``ideal == 'no'``) PLUS the external (Tx..Rz) reference rows for those
+    same non-ideal, single-centre molecules, in ONE crosstab -- not just an
+    internal-only stretch/bend/mixed table.
+
+    Why joint, not internal-only (author's own framing): showing external
+    and internal categories together is what actually verifies that no
+    internal mode's residual character ever wins an external Step-2 slot
+    (or vice versa) -- a genuine completeness check on the classifier's
+    global assignment, not merely "is each population self-consistent."
+    The off-diagonal blocks BETWEEN the external-axis rows/columns and the
+    internal rows/columns are computed and reported (see
+    ``crossover_ext_ref_to_internal_pred``/``crossover_internal_ref_to_ext_pred``
+    in the returned summary) rather than assumed to be zero.
+
+    Thresholds are fixed on the ideal population (fig:boxplots), then
+    applied WITHOUT retuning to the harder non-ideal cases they were never
+    calibrated on -- this remains the genuine, non-circular validation; the
+    fully-rigorous tier (external T/R rows + ``ideal == 'yes'`` internal
+    rows) is exact by construction and is reported separately, as a
     self-consistency check rather than an accuracy claim, by
     ``plot_rigorous_tier_check`` below (SI-bound, not main text).
 
-    Layout (1x2): (a) non-ideal confusion matrix, bend/stretch reference x
-    bend/mixed/stretch predicted bucket; (b) non-ideal label-retention vs.
-    migration-to-mixed bars, annotated with the 0% opposite-clean-category-
-    crossing finding.
+    Single panel now (retention/migration bars, formerly panel (b), were
+    split out this session to their own SI figure,
+    ``plot_confusion_retention_migration`` below -- the mode-count
+    breakdown this panel shows already carries that information via its own
+    row/column sums, and the retention numbers are stated in prose).
 
-    Never recomputes scores -- only ``confusion_matrix_stats`` (already
-    computed from calibrated thresholds) is called, on one filtered slice of
-    the same ``library_scores.csv`` this module always reads.
-    ``confusion_matrix_stats`` itself additionally restricts that slice to
-    the single-centre AB_n hydride-library scope (2026-07-05 author
-    decision, ``src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE`` -- excludes
-    C2H2/C2H4/C2H6/H2O2/C6H6/iso-C4H10/n-C4H10) before computing anything,
-    so this function does not need its own copy of that filter.
+    Never recomputes scores. ``filter_single_centre_library`` is applied
+    explicitly here (not left to confusion_matrix_stats's internal filter)
+    so the SAME molecule scope is used for both the internal rows and the
+    external-row merge -- idempotent if already filtered.
     """
     _style()
-    from src.calibrate import confusion_matrix_stats
+    from src.calibrate import confusion_matrix_stats, filter_single_centre_library
 
-    # Local-only override, THIS FIGURE ONLY (author flagged 2026-07-02: the
-    # spelled-out "clean translation"/"clean rotation" tick text was too
-    # long). Mirrors `plot_benzene_normal_modes`'s `_LEGEND_MERGE_TEXT`
-    # local-dict precedent above -- `CATEGORY_LABEL` itself is untouched
-    # (other figures/legends still want the fuller form, or a different
-    # merge, for translation/rotation). Kept even though this single-tier
-    # figure no longer has a translation/rotation panel of its own, for
-    # consistency with `_confusion_heatmap`'s shared label_map signature.
+    # Local-only override, THIS FIGURE ONLY: shorten the long
+    # "mixed external+vibration" CATEGORY_LABEL text to a compact column tick
+    # ("T/R*", matching the classifier's own "<axis>*" flagged-label
+    # convention collapsed to one column). Mirrors the pre-existing
+    # `_CONFUSION_LABEL` local-override precedent (previously used to
+    # shorten translation/rotation to "T"/"R"; those two are no longer
+    # needed here now that every T/R row/column is its own individual axis).
     _CONFUSION_LABEL = dict(CATEGORY_LABEL)
-    _CONFUSION_LABEL["translation"] = "T"
-    _CONFUSION_LABEL["rotation"] = "R"
+    _CONFUSION_LABEL["mixed_external"] = "T/R*"
 
     lib_df = pd.read_csv(library_csv)
+    lib_df = filter_single_centre_library(lib_df)
     thresholds = Thresholds.calibrated()
 
     nonideal_df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ideal"] == "no")]
     stats_n = confusion_matrix_stats(nonideal_df, thresholds)
 
-    fig, (ax_hb, ax_pb) = plt.subplots(
-        1, 2, figsize=(7.4, 3.4), gridspec_kw={"width_ratios": [1.15, 1.0]})
+    nonideal_molecules = nonideal_df["molecule"].unique()
+    nonideal_external_df = lib_df[(lib_df["kind"] == "external") &
+                                   (lib_df["molecule"].isin(nonideal_molecules))]
+    joint_df = pd.concat([nonideal_df, nonideal_external_df], ignore_index=True)
 
-    # ================= Non-ideal tier (n=277) =================
-    # (was n=422 before the 2026-07-05 single-centre-only scope filter --
-    # confusion_matrix_stats() now drops the 145 non-ideal internal modes
-    # belonging to the 7 non-single-centre molecules (C2H2, C2H4, C2H6,
-    # H2O2, C6H6, iso-C4H10, n-C4H10), which brings the non-ideal molecule
-    # count from 58 down to 51 -- matching an independent hand-count of
-    # tab:nonideal's own AB_n grid; 422-145=277, computed not assumed.)
-    ref_order_n = ["stretch", "bend"]
-    table_n = stats_n["confusion_table"]
-    pred_order_n = ["stretch", "bend", "mixed"]
-    pred_cols_n = [c for c in pred_order_n if c in table_n.columns] + \
-                  [c for c in table_n.columns if c not in pred_order_n]
-    tbl_n = table_n.reindex(index=ref_order_n, columns=pred_cols_n, fill_value=0)
+    ref_order_n = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "stretch", "bend"]
+    pred_order_n = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "mixed_external",
+                    "stretch", "bend", "mixed"]
+    tbl_n = _joint_confusion_table(joint_df, ref_order_n, pred_order_n)
     n_nonideal = int(tbl_n.values.sum())
-    _confusion_heatmap(ax_hb, fig, tbl_n, ref_order_n,
-                        f"(a) Non-ideal characterization (n={n_nonideal})",
-                        label_map=_CONFUSION_LABEL)
 
+    # Height tuned down from an initial 5.6in (author visual check, compiled
+    # PDF): at 5.6in the figure left too little room on its page for the
+    # multi-line caption to start, pushing the whole caption to the next
+    # page and leaving a mostly-blank page behind -- 4.8in lets the figure
+    # and its caption share one page.
+    fig, ax_hb = plt.subplots(figsize=(6.2, 4.8))
+    _confusion_heatmap(ax_hb, fig, tbl_n, ref_order_n,
+                        f"Non-ideal internal + external classification ({n_nonideal} modes)",
+                        label_map=_CONFUSION_LABEL, divider=(6, 7))
+
+    # Internal-only opposite-category crossing (bend<->stretch), same
+    # computation as before the joint-matrix restructure -- these row/column
+    # labels are unchanged within the bigger table, so this still works
+    # unmodified against `tbl_n`.
     cats_n = ["bend", "stretch"]
-    retention_n = [stats_n["per_category"][c]["recall"] for c in cats_n]
-    migration_n = [stats_n["per_category"][c]["mixed_fraction"] for c in cats_n]
-    opposite_n = []  # explicit 0% opposite-clean-category crossing, per tbl_n
+    opposite_n = []
     for c in cats_n:
         opp = "stretch" if c == "bend" else "bend"
         n_ref = stats_n["per_category"][c]["n_ref"]
         n_opp = int(tbl_n.loc[c, opp]) if opp in tbl_n.columns else 0
         opposite_n.append(n_opp / n_ref if n_ref else float("nan"))
 
-    # Segment labels are numeric-only (no in-panel legend): the "retained"
-    # (bend/stretch-colored) vs. "migrated to mixed" (teal) color coding
-    # reuses the SAME CATEGORY_COLOR swatches panel (a)'s tick labels just
-    # showed two columns over, so a redundant legend here would only add
-    # clutter. Thin segments (e.g. bend's migrated slice) get their label
-    # placed just ABOVE the bar instead of centered inside it, so text never
-    # overflows a segment shorter than the label's own height.
+    # NEW this session: external<->internal crossover check -- the actual
+    # point of merging the two populations into one table. Expected 0 both
+    # ways, but computed, not assumed.
+    ext_rows, int_rows = ref_order_n[:6], ref_order_n[6:]
+    ext_cols, int_cols = pred_order_n[:7], pred_order_n[7:]
+    crossover_ext_ref_to_internal_pred = int(tbl_n.loc[ext_rows, int_cols].values.sum())
+    crossover_internal_ref_to_ext_pred = int(tbl_n.loc[int_rows, ext_cols].values.sum())
+
+    # Caption-text sentence (not drawn in-image, same readability rationale
+    # as the earlier footer_text -- see `summary["nonideal_footer_text"]`).
+    # ASCII "->" deliberately, not a unicode arrow (console-print safety).
+    footer_text = (
+        f"Non-ideal internal + external classification (n={n_nonideal}): 0% of "
+        f"bend or stretch reference-labeled modes crossed to the OPPOSITE clean "
+        f"category (bend->stretch={opposite_n[0]:.1%}, stretch->bend={opposite_n[1]:.1%}); "
+        f"and {crossover_ext_ref_to_internal_pred} external reference modes were "
+        f"predicted into an internal bucket, {crossover_internal_ref_to_ext_pred} "
+        "internal reference modes were predicted into an external slot -- the "
+        "off-diagonal blocks between the external and internal categories are "
+        "empty. Thresholds were fixed on the ideal-molecule population "
+        "(fig:boxplots) and applied here without retuning."
+    )
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary = {
+        "pdf": pdf_path, "png": png_path,
+        "nonideal_footer_text": footer_text,
+        "layout": ("Single panel: joint external (Tx..Rz) + internal "
+                   "(stretch/bend/mixed) confusion matrix -- restructured "
+                   "this session from an internal-only 1x2 heatmap+bars "
+                   "layout. Retention/migration bars (formerly panel (b)) "
+                   "moved to plot_confusion_retention_migration (SI, not "
+                   "main text)."),
+        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL for "
+                               "STRETCHING/BENDING/MIXED_STRETCH_BEND and the "
+                               "6 individual-axis entries added this session "
+                               "-- same mapping as every other figure. "
+                               "mixed_external tick text ('T/R*', via the "
+                               "figure-local `_CONFUSION_LABEL` override) "
+                               "keeps the column compact without touching "
+                               "`CATEGORY_LABEL` itself."),
+        "nonideal_n": n_nonideal,
+        "nonideal_confusion_table": tbl_n.to_dict(),
+        "nonideal_opposite_category_crossing": dict(zip(cats_n, opposite_n)),
+        "crossover_ext_ref_to_internal_pred": crossover_ext_ref_to_internal_pred,
+        "crossover_internal_ref_to_ext_pred": crossover_internal_ref_to_ext_pred,
+    }
+    return summary
+
+
+def plot_confusion_retention_migration(
+    library_csv="data/results/library_scores.csv",
+    out_dir="data/figures",
+    label="fig_confusion_retention_migration",
+):
+    """Build the SI companion to fig:confusion (retention-vs.-migration
+    bars): the non-ideal-tier label-retention vs. migration-to-mixed bar
+    panel, SPLIT OUT of ``plot_confusion_matrix`` this session (formerly that
+    figure's panel (b)) -- mirrors the existing
+    ``plot_benzene_confusion_precision_recall`` SI-split precedent below.
+    Self-contained: recomputes ``confusion_matrix_stats`` itself rather than
+    depending on ``plot_confusion_matrix`` having already run, matching this
+    module's "each function reads already-computed CSVs, never recomputes
+    scores" convention.
+
+    Same underlying numbers as before (bend retention 0.896, stretch
+    retention 0.503, etc.) -- only the visualization moved out of the main
+    text; Figure 6's mode-count breakdown and the manuscript prose already
+    state these numbers, per the author's own framing.
+    """
+    _style()
+    from src.calibrate import confusion_matrix_stats, filter_single_centre_library
+
+    lib_df = pd.read_csv(library_csv)
+    lib_df = filter_single_centre_library(lib_df)
+    thresholds = Thresholds.calibrated()
+
+    nonideal_df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ideal"] == "no")]
+    stats_n = confusion_matrix_stats(nonideal_df, thresholds)
+    n_nonideal = int(stats_n["confusion_table"].values.sum())
+
+    cats_n = ["bend", "stretch"]
+    retention_n = [stats_n["per_category"][c]["recall"] for c in cats_n]
+    migration_n = [stats_n["per_category"][c]["mixed_fraction"] for c in cats_n]
+
+    fig, ax_pb = plt.subplots(figsize=(3.6, 3.4))
     x_n = np.arange(len(cats_n))
     bar_colors_n = [CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[c]] for c in cats_n]
     ax_pb.bar(x_n, retention_n, 0.5, color=bar_colors_n,
@@ -892,66 +1086,28 @@ def plot_confusion_matrix(
                        va="bottom", fontsize=7, color=COLORS["mixed"],
                        fontweight="bold")
     ax_pb.set_xticks(x_n)
-    # cats_n is stretch/bend only (already short "S"/"B"; unaffected by the
-    # translation/rotation shortening above) -- `_CONFUSION_LABEL` used here
-    # too only for consistency with panel (a)'s tick-label font size.
-    ax_pb.set_xticklabels([_CONFUSION_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_n],
+    ax_pb.set_xticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_n],
                           fontsize=9)
     ax_pb.set_xlim(-0.55, 1.55)
     ax_pb.set_ylim(0, 1.12)
-    ax_pb.set_ylabel("Fraction of reference-labeled modes")
-    ax_pb.set_title("(b) Non-ideal retention vs. migration", loc="left",
-                    fontweight="bold", fontsize=9)
+    ax_pb.set_ylabel("Fraction of modes")
+    ax_pb.set_title(f"Non-ideal tier retention and migration (n={n_nonideal})",
+                     loc="left", fontweight="bold", fontsize=9)
 
-    # Whole-figure footer sentence: the 0%-opposite-crossing finding applies
-    # to BOTH non-ideal categories and is the point of this figure. FIXED
-    # 2026-07-02 (readability, carried over from the earlier 2x2 layout):
-    # not drawn in-image (would shrink below a readable floor once LaTeX
-    # rescales this to column width) -- the exact sentence is computed here
-    # and returned in `summary["nonideal_footer_text"]` for lead-author to
-    # place in the actual LaTeX `\captionof{figure}{...}` text (typeset at
-    # normal caption font size, not shrunk with the image).
-    # ASCII "->" (not a unicode arrow) deliberately: this string is meant to
-    # be easy to print/copy on any console (a literal U+2192 arrow crashes
-    # `print()` under Windows' default cp1252 stdout encoding), and reads
-    # fine as-is in a LaTeX caption too.
-    footer_text = (
-        f"Non-ideal tier (n={n_nonideal}): 0% of bend or stretch reference-labeled "
-        f"modes crossed to the OPPOSITE clean category "
-        f"(bend->stretch={opposite_n[0]:.1%}, stretch->bend={opposite_n[1]:.1%}); "
-        "100% of the non-retained remainder lands in the mixed bucket. "
-        "Thresholds were fixed on the ideal-molecule population (fig:boxplots) "
-        "and applied here without retuning."
-    )
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
     plt.close(fig)
 
     summary = {
         "pdf": pdf_path, "png": png_path,
-        "nonideal_footer_text": footer_text,
-        "layout": ("1x2: (a) non-ideal confusion matrix, (b) non-ideal "
-                   "retention/migration bars -- REPLACES the earlier 2x2 "
-                   "layout (rigorous heatmap + precision/recall bars, THEN "
-                   "non-ideal heatmap + retention/migration bars). The "
-                   "rigorous-tier panels were removed as circular (see this "
-                   "module's header comment above the fig:confusion section) "
-                   "and moved to plot_rigorous_tier_check (SI, not main "
-                   "text)."),
-        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL for "
-                               "STRETCHING/BENDING/MIXED_STRETCH_BEND -- "
-                               "same mapping as fig:benzene. Translation/"
-                               "rotation tick text ('T'/'R', via the figure-"
-                               "local `_CONFUSION_LABEL` override) is kept "
-                               "defined for `_confusion_heatmap`'s shared "
-                               "signature even though this single-tier "
-                               "figure has no translation/rotation panel of "
-                               "its own."),
         "nonideal_n": n_nonideal,
-        "nonideal_confusion_table": tbl_n.to_dict(),
         "nonideal_retention": dict(zip(cats_n, retention_n)),
         "nonideal_migration_to_mixed": dict(zip(cats_n, migration_n)),
-        "nonideal_opposite_category_crossing": dict(zip(cats_n, opposite_n)),
+        "framing": ("SI companion, split out of plot_confusion_matrix "
+                     "(fig:confusion) this session -- same numbers, just "
+                     "moved out of the main-text figure since Figure 6's own "
+                     "mode-count breakdown and the manuscript prose already "
+                     "state the retention numbers."),
     }
     return summary
 
@@ -962,11 +1118,13 @@ def plot_rigorous_tier_check(
     label="fig_rigorous_tier_check",
 ):
     """Build the SI rigorous-tier consistency check (companion to the
-    restructured, single-tier ``fig:confusion`` above): a small reference/
+    restructured, single-panel ``fig:confusion`` above): a small reference/
     predicted-count TABLE (not a heatmap+bars figure like fig:confusion --
     deliberately minimal, per the author's 2026-07-05 restructuring
     decision) covering every external (T/R) row plus internal rows with
-    ``ideal == 'yes'`` (n=231: 140 T/R + 91 ideal-internal).
+    ``ideal == 'yes'`` (n computed fresh each run from the current library
+    roster -- do not hardcode a specific count in this docstring, it has
+    drifted stale before as the roster grew/shrank).
 
     Framing (explicit, both in this docstring and in the rendered table's
     own caption row): this is a SANITY CHECK confirming the construction is
@@ -974,10 +1132,18 @@ def plot_rigorous_tier_check(
     projection the mode is then scored against, and tau_S/tau_B are
     literally the min/max of this exact population (see
     src.calibrate.derive_stretch_bend_thresholds) -- NOT an independent
-    accuracy claim clearing a floor. Precision/recall are 1.000 for all 4
+    accuracy claim clearing a floor. Precision/recall are 1.000 for all
     categories by construction; this table exists to show that
     computationally rather than merely asserting it, not to argue it proves
     anything about the harder non-ideal cases (that is fig:confusion's job).
+
+    EXPANDED this session: the reference/predicted categories are now the 6
+    individual axes (Tx..Rz), not the 2 coarse translation/rotation buckets
+    -- this table already joined external+internal categories before this
+    change (unlike fig:confusion/fig:benzeneconfusion, which needed a
+    separate restructure to become joint); widening its own external side
+    from 2 buckets to 6 axes is a smaller, more contained extension of an
+    already-joint table.
 
     Renders BOTH a compact table-style PDF/PNG (drop-in
     ``\\includegraphics``, matching this module's existing figure-asset
@@ -991,32 +1157,22 @@ def plot_rigorous_tier_check(
     an existing one) is lead-author's call, not invented here.
     """
     _style()
-    from src.calibrate import confusion_matrix_stats
+    from src.calibrate import confusion_matrix_stats, filter_single_centre_library
 
     lib_df = pd.read_csv(library_csv)
+    lib_df = filter_single_centre_library(lib_df)
     thresholds = Thresholds.calibrated()
 
     rigorous_df = lib_df[(lib_df["kind"] == "external") | (lib_df["ideal"] == "yes")]
+    # Still used for acceptance_floor/floor_met (the coarse 4-bucket
+    # construction check) -- unaffected by the axis-level table expansion
+    # below, since that check was never about per-axis granularity.
     stats_r = confusion_matrix_stats(rigorous_df, thresholds)
 
-    cats_r = ["translation", "rotation", "stretch", "bend"]
-    table_r = stats_r["confusion_table"]
-    pred_cols_r = [c for c in cats_r if c in table_r.columns] + \
-                  [c for c in table_r.columns if c not in cats_r]
-    tbl_r = table_r.reindex(index=cats_r, columns=pred_cols_r, fill_value=0)
+    cats_r = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "stretch", "bend"]
+    tbl_r = _joint_confusion_table(rigorous_df, cats_r, cats_r)
     n_rigorous = int(tbl_r.values.sum())
-
-    rows = []
-    for c in cats_r:
-        n_ref = stats_r["per_category"][c]["n_ref"]
-        n_correct = int(tbl_r.loc[c, c]) if c in tbl_r.columns else 0
-        precision = stats_r["per_category"][c]["precision"]
-        recall = stats_r["per_category"][c]["recall"]
-        rows.append({
-            "category": CATEGORY_LABEL[c], "n_reference": n_ref,
-            "n_predicted_correct": n_correct, "precision": precision,
-            "recall": recall,
-        })
+    rows = _per_category_from_table(tbl_r, cats_r)
     table_df = pd.DataFrame(rows)
 
     csv_path = os.path.join("data", "results", "rigorous_tier_consistency_table.csv")
@@ -1033,8 +1189,11 @@ def plot_rigorous_tier_check(
     # illegible smear. Explicit, hand-tuned `colWidths` (summing to 1.0,
     # proportional to each header's rendered length) plus a wider figure
     # (4.6in -> 7.0in) fixes this -- verified by rendering the regenerated
-    # PNG below.
-    fig, ax = plt.subplots(figsize=(7.0, 1.9))
+    # PNG below. Height increased (1.9 -> 3.2) this session for the
+    # expansion from 4 rows (translation/rotation/stretch/bend) to 8
+    # (Tx..Rz/stretch/bend) -- column widths themselves are unaffected by
+    # row count, only re-tuned if a header changes.
+    fig, ax = plt.subplots(figsize=(7.0, 3.2))
     ax.axis("off")
     col_labels = ["Category", "n (reference)", "n (predicted\ncorrectly)",
                   "Precision", "Recall"]
@@ -1074,8 +1233,8 @@ def plot_rigorous_tier_check(
                      "validation is fig:confusion's non-ideal tier."),
         "n_rigorous": n_rigorous,
         "confusion_table": tbl_r.to_dict(),
-        "precision": {c: stats_r["per_category"][c]["precision"] for c in cats_r},
-        "recall": {c: stats_r["per_category"][c]["recall"] for c in cats_r},
+        "precision": {r["category"]: r["precision"] for r in rows},
+        "recall": {r["category"]: r["recall"] for r in rows},
         "acceptance_floor": stats_r["acceptance_floor"],
         "floor_met": stats_r["floor_met"],
     }
@@ -1091,68 +1250,68 @@ def plot_rigorous_tier_check(
 # --------------------------------------------------------------------------
 
 def plot_benzene_internal_confusion(
-    matrix_csv="data/results/benzene_internal_confusion_matrix.csv",
     out_dir="data/figures",
     label="fig_benzene_confusion",
 ):
-    """Build fig:benzeneconfusion: benzene's (C6H6) 3x3 internal-mode
-    confusion matrix ONLY -- reference bend/stretch/SB (literal literature
-    label, modes 21/22, an E1u degenerate pair at 1532.85 cm-1) x predicted
-    bend/stretch/mixed bucket. Data comes from
-    ``src.benzene_validation.benzene_internal_confusion_matrix``'s output CSV
-    (never recomputed here); this figure is presentation-only, exactly like
-    every other function in this module.
+    """Build fig:benzeneconfusion: benzene's (C6H6) JOINT confusion matrix --
+    the 6 external (Tx..Rz) normal modes together with the 30 internal
+    modes' reference bend/stretch/SB (literal literature label, modes 21/22,
+    an E1u degenerate pair at 1532.85 cm-1) x predicted bend/stretch/mixed
+    bucket, in ONE crosstab (restructured this session; was internal-only
+    3x3 before).
 
-    RESTRUCTURED 2026-07-05 (later the same day, author decision -- tone/
-    framing only, see this module's header comment above): this figure used
-    to be a 1x2 layout with a companion precision/recall bar panel. That
-    panel is NOT dropped for the circularity reason that motivated the
-    fig:confusion/plot_rigorous_tier_check split above -- benzene's
-    literature stretch/bend/SB ground truth (Shi 1972) is genuine, external,
-    non-circular ground truth. It is moved to the Supporting Information
-    (``plot_benzene_confusion_precision_recall`` below) purely because a
-    formal precision/recall bar chart reads as an accuracy-metric claim that
-    sits awkwardly next to this section's own deliberate hedging language
-    ("calling a mode 'mixed' by eye is a convention, not an exact
-    measurement" -- see the prose immediately following this figure in the
-    main text). The heatmap alone is the more honest main-text figure: it
-    shows where modes landed without asserting a formal metric. The
-    underlying numbers are UNCHANGED and still reported -- in prose in the
-    main text, and in full via the SI figure -- only the bar-chart
-    visualization moved.
+    Why joint (same rationale as fig:confusion's identical restructure this
+    session): the manuscript prose already states benzene's 6 external
+    modes are "recovered exactly (6/6)," but that was only ever a sentence,
+    not a checked matrix cell. Building the joint matrix turns it into one:
+    the off-diagonal blocks between the 6 external rows/columns and the
+    internal rows/columns are computed and reported (see
+    ``crossover_ext_ref_to_internal_pred``/``crossover_internal_ref_to_ext_pred``)
+    rather than assumed zero.
 
-    Layout (1x1, was 1x2): the 3x3 heatmap via the shared
-    ``_confusion_heatmap`` renderer (reusing ``CATEGORY_COLOR``/
-    ``CATEGORY_LABEL`` -- the literal "SB" reference row is routed to the
-    "mixed" category color/label via the
-    ``REF_LABEL_TO_CATEGORY["SB"] = "mixed"`` addition, see that dict's
-    comment).
+    Data source: ``src.benzene_validation.benzene_normal_reference_detail()``,
+    which already returns all 36 rows (6 external + 30 internal) with
+    ``mode_index``/``kind``/``ref_label``/``predicted_label`` -- exactly the
+    columns ``_joint_confusion_table`` needs. Not recomputed here; this
+    figure remains presentation-only. The old pre-built 3x3
+    ``benzene_internal_confusion_matrix.csv`` is no longer read by this
+    function (``plot_benzene_confusion_precision_recall`` below still reads
+    it independently, unaffected).
 
     Distinct from ``fig:confusion`` (``plot_confusion_matrix``): that figure
-    is the whole-hydride-library (69-molecule) ideal/non-ideal validation;
-    this one is benzene's own internal 30 modes only, using benzene's
-    genuine literature 3-class ground truth (bend/stretch/SB) rather than
-    the library-wide binary stretch/bend reference. Companion per-bond
-    numerical detail for the two flagged contrast cases (modes 21/22 --
-    literature SB, predicted clean "B", both below tau_B; modes 23/24 --
-    literature stretch, predicted "SB"/mixed) lives in
+    is the whole-hydride-library (non-ideal-tier) validation; this one is
+    benzene's own 36 modes only, using benzene's genuine literature 3-class
+    internal ground truth (bend/stretch/SB) plus its own 6 exact-by-
+    construction external references. Companion per-bond numerical detail
+    for the two flagged contrast cases (modes 21/22 -- literature SB,
+    predicted clean "B", both below tau_B; modes 23/24 -- literature
+    stretch, predicted "SB"/mixed) lives in
     ``data/results/benzene_sb_vs_stretch_bond_diagnostic.csv`` for a
     companion LaTeX table -- not re-plotted inside this heatmap figure.
     """
     _style()
-    tbl = pd.read_csv(matrix_csv, index_col=0)
+    from src.benzene_validation import benzene_normal_reference_detail
 
-    ref_order = ["bend", "stretch", "SB"]
-    pred_order = ["bend", "stretch", "mixed"]
-    tbl = tbl.reindex(index=ref_order, columns=pred_order, fill_value=0)
+    detail = benzene_normal_reference_detail()
+
+    _CONFUSION_LABEL = dict(CATEGORY_LABEL)
+    _CONFUSION_LABEL["mixed_external"] = "T/R*"
+
+    ref_order = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "bend", "stretch", "SB"]
+    pred_order = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "mixed_external",
+                  "bend", "stretch", "mixed"]
+    tbl = _joint_confusion_table(detail, ref_order, pred_order)
     n_total = int(tbl.values.sum())
 
-    fig, ax_h = plt.subplots(figsize=(3.9, 3.4))
-
-    # No "(a)" panel-letter prefix any more -- single-panel figure now that
-    # the precision/recall bar panel has moved to its own SI figure below.
+    fig, ax_h = plt.subplots(figsize=(6.2, 5.6))
     _confusion_heatmap(ax_h, fig, tbl, ref_order,
-                        f"Benzene internal modes (n={n_total})")
+                        f"Benzene modes ({n_total} modes)",
+                        label_map=_CONFUSION_LABEL, divider=(6, 7))
+
+    ext_rows, int_rows = ref_order[:6], ref_order[6:]
+    ext_cols, int_cols = pred_order[:7], pred_order[7:]
+    crossover_ext_ref_to_internal_pred = int(tbl.loc[ext_rows, int_cols].values.sum())
+    crossover_internal_ref_to_ext_pred = int(tbl.loc[int_rows, ext_cols].values.sum())
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -1163,18 +1322,24 @@ def plot_benzene_internal_confusion(
         "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL/"
                                "_confusion_heatmap from plot_confusion_matrix "
                                "(fig:confusion) via the new "
-                               "REF_LABEL_TO_CATEGORY['SB']='mixed' routing -- "
-                               "does not modify fig:confusion itself."),
+                               "REF_LABEL_TO_CATEGORY['SB']='mixed' routing "
+                               "and this session's 6 individual-axis entries "
+                               "-- does not modify fig:confusion itself."),
         "n_total": n_total,
         "confusion_table": tbl.to_dict(),
-        "note": ("Precision/recall bar panel RESTRUCTURED OUT 2026-07-05 to "
-                 "plot_benzene_confusion_precision_recall (SI, not main "
-                 "text) -- tone/framing decision, not a circularity concern "
-                 "(this ground truth is genuinely external). Companion "
-                 "per-bond evidence for the 21/22 (SB->bend blind spot) vs. "
-                 "23/24 (stretch->mixed) contrast lives in "
-                 "data/results/benzene_sb_vs_stretch_bond_diagnostic.csv "
-                 "for a separate LaTeX table -- not plotted here."),
+        "crossover_ext_ref_to_internal_pred": crossover_ext_ref_to_internal_pred,
+        "crossover_internal_ref_to_ext_pred": crossover_internal_ref_to_ext_pred,
+        "note": ("Restructured this session from internal-only 3x3 to a "
+                 "joint 9x10 matrix including benzene's 6 external T/R "
+                 "modes, turning the prose's '6/6 recovered exactly' claim "
+                 "into an actual checked matrix cell. Precision/recall bar "
+                 "panel remains split out to plot_benzene_confusion_"
+                 "precision_recall (SI, not main text; unaffected by this "
+                 "change). Companion per-bond evidence for the 21/22 "
+                 "(SB->bend blind spot) vs. 23/24 (stretch->mixed) contrast "
+                 "lives in data/results/benzene_sb_vs_stretch_bond_"
+                 "diagnostic.csv for a separate LaTeX table -- not plotted "
+                 "here."),
     }
     return summary_dict
 
@@ -1312,7 +1477,13 @@ def plot_bond_scores(
     bonds = bonds[bonds["ref_label"].isin(("stretch", "bend")) & bonds["ideal"].isin(("yes", "no"))]
     bonds["abs_rel_db"] = bonds["rel_db"].abs()
 
-    fig, ax = plt.subplots(figsize=(3.6, 3.4))
+    # Widened this session (3.6 -> 7.2in, ~2:1 aspect): the manuscript's
+    # \includegraphics[width=0.95\columnwidth] already rescales this to
+    # near-full page width regardless of source aspect ratio (single-column
+    # article class), so the wider aspect exists to leave the author room to
+    # manually composite depicted-mode panel images beside/onto the plot
+    # afterward -- not a change to the printed page width itself.
+    fig, ax = plt.subplots(figsize=(7.2, 3.4))
     for ideal_flag in ("no", "yes"):  # non-ideal first (background), ideal on top
         for ref in ("bend", "stretch"):
             cat = REF_LABEL_TO_CATEGORY[ref]
@@ -1320,11 +1491,18 @@ def plot_bond_scores(
             if sub.empty:
                 continue
             kw = _marker_kwargs(cat, ideal_flag, marker="o")
-            ax.scatter(sub["abs_rel_db"], sub["s_AB"], s=14,
+            ax.scatter(sub["abs_rel_db"], sub["s_AB"], s=7,
                        zorder=3 if ideal_flag == "yes" else 2, **kw)
 
-    ax.set_xlabel(r"$|\Delta|\mathbf{b}|\,/\,|\mathbf{b}|\,|$ (relative bond-length change)")
-    ax.set_ylabel(r"Bond score $s_{AB}$")
+    # Bond-vector symbol approximated as bold-upright (\mathbf), not true
+    # bold-italic (\boldsymbol): matplotlib's default mathtext renderer
+    # (text.usetex is not set anywhere in this module) does not support the
+    # amsmath \boldsymbol macro. This is the closest available rendering
+    # without adding a text.usetex dependency; escalate only if this
+    # visibly doesn't match the manuscript's own \boldsymbol{b}^{AB} prose
+    # closely enough once rendered.
+    ax.set_xlabel(r"$|\Delta\mathbf{b}^{AB}|\,/\,|\mathbf{b}^{AB}|$")
+    ax.set_ylabel(r"Bond score $s^{AB}$")
     ax.set_xlim(-0.03, bonds["abs_rel_db"].max() * 1.05)
     ax.set_ylim(-0.03, 1.05)
 

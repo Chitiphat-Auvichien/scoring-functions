@@ -8,12 +8,19 @@ Run from ``Github/scoring-functions/``:
 to Gaussian-direct -- see IMPLEMENTATION_PLAN.md's RESUME HERE and
 src/library_ingest.py's module docstring). The old dual-source
 ("source=excel"/"source=gaussian") architecture and its xlsx-workbook ingest
-path are gone entirely; every one of ``data/mol_list_method.csv``'s 72
-roster molecules now has a verified on-disk ``.log``/``.gjf`` pair, and
+path are gone entirely; every one of ``data/mol_list_method.csv``'s roster
+molecules now has a verified on-disk ``.log``/``.gjf`` pair, and
 ``library_scores.csv`` is built by iterating that roster directly. Tests
 that used to check ``source="excel"``-specific behavior (the full-library
 overlay, ``EXCEL_TO_LOG``/``resolve_excel_molecule_name``) are deleted
 outright rather than adapted -- there is no equivalent concept left to test.
+
+**2026-07-09: OH4/OF4 excluded from the roster** (72 -> 70 molecules).
+Neither is a genuine stationary point at this project's MP2/3-21G level
+(imaginary/negative frequencies -- e.g. OH4 mode 1 was -303.26 cm^-1), so
+their "normal modes" are not physically meaningful vibrations of a real
+minimum and cannot be validly compared to the TeH4 ideal see-saw template.
+Every roster-count assertion in this file reflects 70, not 72.
 
 Design note: most tests here read the already-committed, already-regenerated
 ``data/results/library_scores.csv`` golden (fast, plain pandas) rather than
@@ -61,10 +68,14 @@ def _load():
 # registry.
 # ---------------------------------------------------------------------------
 
-def test_load_mol_roster_reads_all_72_with_basename_column():
+def test_load_mol_roster_reads_all_70_with_basename_column():
+    """70, not 72 -- OH4/OF4 were removed from the roster 2026-07-09 (not
+    genuine stationary points at this project's MP2/3-21G level, so their
+    normal modes cannot be validly compared to the TeH4 ideal see-saw
+    template)."""
     roster = load_mol_roster(DATA_DIR)
     assert {"molecule", "basename"}.issubset(roster.columns)
-    assert len(roster) == 72
+    assert len(roster) == 70
     assert roster["molecule"].is_unique
     assert roster["basename"].notna().all()
 
@@ -123,8 +134,9 @@ def test_check_roster_disk_consistency_detects_orphaned_basename():
 
 
 def test_discover_geometry_molecules_matches_roster_exactly():
-    """The safety-net directory scan and the roster agree exactly (72
-    basenames each) now that Phase A's coverage is complete."""
+    """The safety-net directory scan and the roster agree exactly (70
+    basenames each, 2026-07-09: OH4/OF4 excluded) now that Phase A's
+    coverage is complete."""
     bases = discover_geometry_molecules(DATA_DIR)
     assert bases == sorted(bases)
     assert len(bases) == len(set(bases))
@@ -151,7 +163,7 @@ def test_build_library_scores_raises_filenotfounderror_on_missing_basename():
 
 def test_build_library_scores_warns_on_orphaned_disk_basename_and_still_builds():
     """Restrict the roster to just water (fast: 9 modes) while leaving the
-    real 72-basename disk listing plus one extra fake basename -- missing
+    real 70-basename disk listing plus one extra fake basename -- missing
     stays empty (every roster row -- just water here -- resolves fine) but
     the fake basename (and every other real-but-unreferenced-by-this-
     reduced-roster basename) is reported as orphaned and warned about,
@@ -180,7 +192,7 @@ def test_build_library_scores_warns_on_orphaned_disk_basename_and_still_builds()
 
 def test_library_excludes_gramicidin_fragment():
     """Gly5 (Decision 5, gramicidin fragment) must not appear -- it is
-    simply absent from mol_list_method.csv's 72-row roster now, not an
+    simply absent from mol_list_method.csv's 70-row roster now, not an
     explicit ingest-time exclusion list."""
     df = _load()
     assert not (df["molecule"] == "Gly5").any()
@@ -189,7 +201,7 @@ def test_library_excludes_gramicidin_fragment():
 def test_full_population_has_geometry_for_every_row():
     """Every row in the checked-in golden is geometry-backed (has_geometry
     unconditionally True) -- the whole point of the roster-driven flip.
-    Population may be 71 or 72 molecules depending on whether every roster
+    Population may be 69 or 70 molecules depending on whether every roster
     row's files happen to parse/score cleanly (a molecule with files present
     but unusable connectivity is warned-and-skipped, not fabricated)."""
     df = _load()
@@ -359,7 +371,8 @@ def test_multi_centre_molecules_tags_c6h6_and_nothing_else_in_the_real_roster():
     """multi_centre_molecules() (roster-driven, repoints
     src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE) must reproduce the real
     mol_list_method.csv's mol_type=='multi-centre' rows exactly -- as of the
-    72-molecule roster, that is C6H6 alone (verified, not assumed)."""
+    70-molecule roster (2026-07-09: OH4/OF4 excluded), that is C6H6 alone
+    (verified, not assumed)."""
 
     result = multi_centre_molecules(DATA_DIR)
     assert result == frozenset({"C6H6"})
@@ -506,50 +519,49 @@ def test_attach_ideal_tags_is_unconditional_even_without_a_ref_label():
 # ---------------------------------------------------------------------------
 # resync_reference_metadata() (2026-07-08, Phase 2 of the "Gaussian-direct
 # intermediate file" plan) -- fixes attach_labels()'s stale-freq gate at the
-# source by resyncing data_score.csv/characterised_modes.csv's freq/k(/mu)
-# from the SAME on-disk log the engine scores.
+# source by resyncing characterised_modes.csv's freq/k(/mu) from the SAME
+# on-disk log the engine scores. (Also resynced data_score.csv until that
+# file was deleted from disk 2026-07-09 -- see the function's docstring.)
 # ---------------------------------------------------------------------------
 
 def test_resync_reference_metadata_real_roster_has_no_mismatches_or_missing_logs():
     """Live, read-only (write=False) check against the real, already-fixed
-    data/ tree. **Updated 2026-07-08** (data_score.csv retirement session):
-    ``regenerate_characterised_modes()`` now gives every one of the 72
-    roster molecules a characterised_modes.csv row (previously only 48 did
-    -- the other 24 -- the 23 T-shaped/see-saw/BBr3/OCl2 molecules plus SnO2,
-    which had a data_score.csv row but no characterised_modes.csv row, see
-    ``tests/test_calibrate.py``'s docstrings -- had none at all), so
-    resync_reference_metadata()'s ``if not ds_idx and not cm_idx: skip``
-    condition is never true anymore for a real roster row (data_score.csv
-    itself is untouched, still only 63 molecules -- but characterised_modes
-    alone is now enough to avoid the skip). 0 mode-count mismatches, 0
-    unresolvable logs, 0 skipped_no_rows, all 72 resynced."""
+    data/ tree. **Updated 2026-07-09** (OH4/OF4 exclusion session):
+    ``resync_reference_metadata()`` now resyncs ``characterised_modes.csv``
+    only -- ``data/data_score.csv`` was deleted from disk this session (an
+    unrelated cleanup of an already-retired file) and the function was
+    updated to stop reading/writing it. The roster shrank from 72 to 70
+    molecules (OH4/OF4 removed: not genuine stationary points at this
+    project's MP2/3-21G level, so their normal modes cannot be validly
+    compared to the TeH4 ideal see-saw template). Every one of the 70
+    roster molecules has a characterised_modes.csv row (unaffected by the
+    OH4/OF4 removal -- their rows were removed along with them), so
+    resync_reference_metadata()'s ``if not cm_idx: skip`` condition is never
+    true for a real roster row. 0 mode-count mismatches, 0 unresolvable
+    logs, 0 skipped_no_rows, all 70 resynced."""
     from src.library_ingest import resync_reference_metadata
 
     report = resync_reference_metadata(DATA_DIR, write=False)
     assert report["skipped_mode_count_mismatch"] == []
     assert report["skipped_no_log"] == []
     assert report["skipped_no_rows"] == []
-    assert len(report["resynced"]) == 72
+    assert len(report["resynced"]) == 70
 
 
 def test_resync_reference_metadata_is_a_true_dry_run_when_write_false():
-    """write=False must not touch either CSV on disk -- a live safety check,
-    not just a docstring promise (this test would fail loudly, corrupting
-    the real tracked CSVs, if resync_reference_metadata ever stopped
-    honoring write=False)."""
+    """write=False must not touch characterised_modes.csv on disk -- a live
+    safety check, not just a docstring promise (this test would fail
+    loudly, corrupting the real tracked CSV, if resync_reference_metadata
+    ever stopped honoring write=False). data_score.csv is no longer part of
+    this function's scope (deleted from disk 2026-07-09)."""
     from src.library_ingest import resync_reference_metadata
 
-    ds_path = os.path.join(DATA_DIR, "data_score.csv")
     cm_path = os.path.join(DATA_DIR, "characterised_modes.csv")
-    with open(ds_path, "rb") as f:
-        ds_before = f.read()
     with open(cm_path, "rb") as f:
         cm_before = f.read()
 
     resync_reference_metadata(DATA_DIR, write=False)
 
-    with open(ds_path, "rb") as f:
-        assert f.read() == ds_before
     with open(cm_path, "rb") as f:
         assert f.read() == cm_before
 
@@ -564,8 +576,15 @@ def test_resync_reference_metadata_synthetic_fixture():
     though it disagrees with the engine's raw ASCII token (A1 vs 'A₁' --
     see src/library_ingest.py's module comment on why irrep resync is
     deliberately out of scope), a mode-count-mismatch molecule is skipped
-    and reported (not guessed), and a molecule with zero rows in either CSV
-    is reported under skipped_no_rows, not silently ignored or fabricated."""
+    and reported (not guessed), and a molecule with zero rows in
+    characterised_modes.csv is reported under skipped_no_rows, not silently
+    ignored or fabricated.
+
+    **2026-07-09 (OH4/OF4 exclusion session):** `resync_reference_metadata`
+    no longer reads/writes `data_score.csv` (deleted from disk this session,
+    an already-retired file) -- this fixture was rewritten to put all the
+    stale/mismatch fixture rows in `characterised_modes.csv` directly
+    instead of `data_score.csv`."""
     import shutil
     from src.library_ingest import resync_reference_metadata
 
@@ -580,7 +599,7 @@ def test_resync_reference_metadata_synthetic_fixture():
         # Roster: STALEMOL (real water log/gjf, stale CSV values to fix),
         # MISMATCHMOL (same log, but the CSV claims a 4th mode that doesn't
         # exist -- 3 engine modes vs. 4 claimed), NOROWSMOL (no CSV row at
-        # all for either table -- not an error, just nothing to resync).
+        # all -- not an error, just nothing to resync).
         roster = pd.DataFrame([
             {"molecule": "STALEMOL", "basename": "H2O-MP2-321G"},
             {"molecule": "MISMATCHMOL", "basename": "H2O-MP2-321G"},
@@ -588,30 +607,27 @@ def test_resync_reference_metadata_synthetic_fixture():
         ])
         roster.to_csv(os.path.join(tmp_dir, "mol_list_method.csv"), index=False)
 
-        ds_cols = ["molecule", "mode", "freq", "type", "irrep", "ideal", "k"]
-        ds_rows = [
+        cm_cols = ["molecule", "mode", "freq", "μ", "k", "irrep"]
+        cm_rows = [
             # STALEMOL: mode 1 deliberately stale (engine says 1722.457), mode
             # 2/3 already exact -- proves per-mode-only-when-changed reporting.
-            {"molecule": "STALEMOL", "mode": 1, "freq": 1700.0, "type": "bend",
-             "irrep": "A₁", "ideal": "yes", "k": 1.0},
-            {"molecule": "STALEMOL", "mode": 2, "freq": 3501.5073, "type": "stretch",
-             "irrep": "A₁", "ideal": "yes", "k": 7.4906},
-            {"molecule": "STALEMOL", "mode": 3, "freq": 3660.7973, "type": "stretch",
-             "irrep": "B₂", "ideal": "yes", "k": 8.5478},
+            {"molecule": "STALEMOL", "mode": 1, "freq": 1700.0, "μ": 1.0,
+             "k": 1.0, "irrep": "A₁"},
+            {"molecule": "STALEMOL", "mode": 2, "freq": 3501.5073, "μ": 1.0,
+             "k": 7.4906, "irrep": "A₁"},
+            {"molecule": "STALEMOL", "mode": 3, "freq": 3660.7973, "μ": 1.0,
+             "k": 8.5478, "irrep": "B₂"},
             # MISMATCHMOL: 4 rows claimed, engine (same water log) has only 3.
-            {"molecule": "MISMATCHMOL", "mode": 1, "freq": 1700.0, "type": "bend",
-             "irrep": "A₁", "ideal": "yes", "k": 1.0},
-            {"molecule": "MISMATCHMOL", "mode": 2, "freq": 3501.0, "type": "stretch",
-             "irrep": "A₁", "ideal": "yes", "k": 7.5},
-            {"molecule": "MISMATCHMOL", "mode": 3, "freq": 3660.0, "type": "stretch",
-             "irrep": "B₂", "ideal": "yes", "k": 8.5},
-            {"molecule": "MISMATCHMOL", "mode": 4, "freq": 9999.0, "type": "stretch",
-             "irrep": "X", "ideal": "yes", "k": 9.9},
+            {"molecule": "MISMATCHMOL", "mode": 1, "freq": 1700.0, "μ": 1.0,
+             "k": 1.0, "irrep": "A₁"},
+            {"molecule": "MISMATCHMOL", "mode": 2, "freq": 3501.0, "μ": 1.0,
+             "k": 7.5, "irrep": "A₁"},
+            {"molecule": "MISMATCHMOL", "mode": 3, "freq": 3660.0, "μ": 1.0,
+             "k": 8.5, "irrep": "B₂"},
+            {"molecule": "MISMATCHMOL", "mode": 4, "freq": 9999.0, "μ": 1.0,
+             "k": 9.9, "irrep": "X"},
         ]
-        _write_csv_utf8sig(os.path.join(tmp_dir, "data_score.csv"), ds_rows, ds_cols)
-
-        cm_cols = ["molecule", "mode", "freq", "μ", "k", "irrep"]
-        _write_csv_utf8sig(os.path.join(tmp_dir, "characterised_modes.csv"), [], cm_cols)
+        _write_csv_utf8sig(os.path.join(tmp_dir, "characterised_modes.csv"), cm_rows, cm_cols)
 
         report = resync_reference_metadata(tmp_dir, write=True)
 
@@ -629,8 +645,8 @@ def test_resync_reference_metadata_synthetic_fixture():
         assert freq_changes[0]["old"] == "1700.0"
         assert freq_changes[0]["new"] == "1722.457"
 
-        ds_after = pd.read_csv(os.path.join(tmp_dir, "data_score.csv"), dtype=str)
-        stale_after = ds_after[ds_after["molecule"] == "STALEMOL"].set_index("mode")
+        cm_after = pd.read_csv(os.path.join(tmp_dir, "characterised_modes.csv"), dtype=str)
+        stale_after = cm_after[cm_after["molecule"] == "STALEMOL"].set_index("mode")
         assert stale_after.loc["1", "freq"] == "1722.457"
         assert stale_after.loc["2", "freq"] == "3501.5073"
         assert stale_after.loc["3", "freq"] == "3660.7973"
@@ -639,8 +655,8 @@ def test_resync_reference_metadata_synthetic_fixture():
 
         # MISMATCHMOL's row was left completely untouched (still the stale,
         # never-corrected values) -- a real structural problem, not guessed.
-        ds_mismatch_after = ds_after[ds_after["molecule"] == "MISMATCHMOL"].set_index("mode")
-        assert ds_mismatch_after.loc["2", "freq"] == "3501.0"
+        cm_mismatch_after = cm_after[cm_after["molecule"] == "MISMATCHMOL"].set_index("mode")
+        assert cm_mismatch_after.loc["2", "freq"] == "3501.0"
 
 
 # ---------------------------------------------------------------------------
@@ -659,20 +675,28 @@ def test_basename_to_molecule_map_translates_known_roster_basenames():
 
 def test_regenerate_characterised_modes_dry_run_against_real_tree():
     """Live, read-only (write=False) check against the real data/ tree,
-    which as of 2026-07-08 (this session's own regeneration, already
+    which as of 2026-07-08 (that session's own regeneration, already
     committed) is IDEMPOTENT under regenerate_characterised_modes(): the
-    file already covers all 72 on-disk basenames, so a fresh dry run
-    reports 72 old == 72 new molecules, nothing dropped, nothing added.
-    (The one-time 63->72 transition -- 15 molecules losing their on-disk
+    file already covers all on-disk basenames, so a fresh dry run reports
+    old == new molecule counts, nothing dropped, nothing added. (The
+    one-time 63->72 transition -- 15 molecules losing their on-disk
     log+gjf pair, e.g. CCl4/CF4/CH4/Cl2O/NO2/SO2/..., while SnO2/BBr3/the
     T-shaped/see-saw families gained their first-ever blank-labeled rows --
     is exercised by the isolated synthetic fixture below instead, since the
     real tree no longer reproduces that one-time transition after this
-    session.)"""
+    session.)
+
+    **2026-07-09 (OH4/OF4 exclusion session):** OH4/OF4's log/gjf/
+    characterised_modes.csv rows were all removed together (not genuine
+    stationary points at this project's MP2/3-21G level, so their normal
+    modes cannot be validly compared to the TeH4 ideal see-saw template),
+    so the disk scan and the characterised_modes.csv file shrank in lockstep
+    -- 72 -> 70, still idempotent (nothing dropped, nothing added, by
+    construction of this session's edit)."""
     report = regenerate_characterised_modes(DATA_DIR, write=False)
-    assert report["n_disk_basenames"] == 72
-    assert report["n_old_molecules"] == 72
-    assert report["n_new_molecules"] == 72
+    assert report["n_disk_basenames"] == 70
+    assert report["n_old_molecules"] == 70
+    assert report["n_new_molecules"] == 70
     assert report["dropped_molecules"] == []
     assert report["added_molecules"] == []
     assert report["parse_failures"] == []

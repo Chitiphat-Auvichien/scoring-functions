@@ -12,7 +12,9 @@ anyway -- only the displayed cm^-1 column would change. Reported
 frequencies are Gaussian's own computed (unscaled) harmonic values.
 
 Requires: vibfreq.npy, PED_group_pct.npy, cats.txt
+Output: benzene_PED_table.csv, benzene_PED_table.txt
 """
+import csv
 import os
 import numpy as np
 
@@ -43,8 +45,8 @@ while i < len(rows):
         i += 1
 
 hdr = f"{'#':>3} {'freq(cm-1)':>10} {'deg':>4}  {'CHstr':>6} {'CCstr':>6} {'CCCbend':>8} {'CCHbend':>8} {'out-of-plane':>13}  dominant character"
-print(hdr)
-print("-" * len(hdr))
+lines = [hdr, "-" * len(hdr)]
+csv_rows = []
 for n, (row, isdeg) in enumerate(grouped, 1):
     freq, cc, ch, ccc, cch, oop = row
     vals = {'CH stretch': ch, 'CC stretch': cc, 'CCC bend': ccc,
@@ -52,9 +54,37 @@ for n, (row, isdeg) in enumerate(grouped, 1):
     dom = sorted(vals.items(), key=lambda x: -x[1])
     domstr = " + ".join(f"{v:.0f}% {k}" for k, v in dom if v > 5)
     degstr = "(x2)" if isdeg else ""
-    print(f"{n:3d} {freq:10.1f} {degstr:>4}  {ch:6.1f} {cc:6.1f} "
-          f"{ccc:8.1f} {cch:8.1f} {oop:13.1f}  {domstr}")
+    lines.append(f"{n:3d} {freq:10.1f} {degstr:>4}  {ch:6.1f} {cc:6.1f} "
+                  f"{ccc:8.1f} {cch:8.1f} {oop:13.1f}  {domstr}")
+    csv_rows.append({
+        'mode': n, 'freq_cm-1': round(freq, 1), 'degenerate': isdeg,
+        'CH_stretch_pct': round(ch, 1), 'CC_stretch_pct': round(cc, 1),
+        'CCC_bend_pct': round(ccc, 1), 'CCH_bend_pct': round(cch, 1),
+        'out_of_plane_pct': round(oop, 1), 'dominant_character': domstr,
+    })
 
-print(f"\n{len(grouped)} unique lines representing all 30 vibrational modes "
-      f"(degenerate e-type pairs shown once, marked (x2)).")
-print("\nFrequencies are Gaussian's own computed harmonic values (unscaled).")
+footer = [
+    f"\n{len(grouped)} unique lines representing all 30 vibrational modes "
+    f"(degenerate e-type pairs shown once, marked (x2)).",
+    "\nFrequencies are Gaussian's own computed harmonic values (unscaled), "
+    "from data/logs/C6H6_MP2_3-21G_D6h.log (MP2/3-21G, D6h, freq=hpmodes) "
+    "-- the same benzene calculation used throughout the JCC manuscript.",
+    "\nOut-of-plane category = ring_torsion + CH_wag_oop merged (non-orthogonal "
+    "internal coordinates for a planar ring -- see README.md).",
+]
+
+for line in lines + footer:
+    print(line)
+
+txt_path = os.path.join(HERE, 'benzene_PED_table.txt')
+with open(txt_path, 'w') as f:
+    f.write("\n".join(lines + footer) + "\n")
+
+csv_path = os.path.join(HERE, 'benzene_PED_table.csv')
+with open(csv_path, 'w', newline='') as f:
+    writer = csv.DictWriter(f, fieldnames=list(csv_rows[0].keys()))
+    writer.writeheader()
+    writer.writerows(csv_rows)
+
+print(f"\nSaved: {txt_path}")
+print(f"Saved: {csv_path}")

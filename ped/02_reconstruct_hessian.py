@@ -72,8 +72,15 @@ print(f"Mass-weighted orthonormality check (L^T M L vs I): "
 
 # --- Informational cross-check against Gaussian's own printed reduced mass
 #     (not required for correctness -- just an independent consistency check
-#     against the documented "unit-Euclidean-norm displacement" convention) ---
-mu_candidate = 1.0 / np.einsum('i,ik->k', 1.0 / masses.repeat(3), L_flat ** 2)
+#     against the documented "unit-Euclidean-norm displacement" convention).
+#     mu_k = sum_i m_i * l_i,k^2 (a mass-weighted SUM, not sum(l^2/m)'s
+#     reciprocal): from T_k = (1/2) sum_i m_i xdot_i^2 = (1/2) mu_k qdot_k^2
+#     with Delta-x_i = l_i,k * q_k and l Euclidean-unit-normalized (as
+#     Gaussian prints it, sum_i l_i,k^2 = 1) -- verified against Gaussian's
+#     printed reduced_mass to <0.1% (previously inverted here, which
+#     produced a spurious ~35% mean "error" against a diagnostic that was
+#     itself correct). ---
+mu_candidate = np.einsum('i,ik->k', masses.repeat(3), L_flat ** 2)
 rel_err = np.abs(mu_candidate - reduced_mass) / reduced_mass
 print(f"\nReduced-mass cross-check (informational only, not required):")
 print(f"  max relative error vs Gaussian's printed reduced_mass: "

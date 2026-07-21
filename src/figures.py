@@ -122,13 +122,17 @@ from src.classifier import (
 # Shared house style
 # --------------------------------------------------------------------------
 
-# Okabe-Ito colorblind-safe palette.
+# ColorBrewer Set1 red/blue/purple for S/B/SB (2026-07-21: replaced the
+# Okabe-Ito vermillion/blue/teal trio at the user's request for a more
+# conventional red=stretch/blue=bend/purple=mixed scheme; Set1 was chosen
+# because its hues are published together as a set for pairwise qualitative
+# distinguishability, rather than picked independently).
 COLORS = {
     "external": "#999999",   # gray      -- CLEAN_TRANSLATION / CLEAN_ROTATION
-    "bending": "#0072B2",    # blue      -- BENDING
-    "stretching": "#D55E00", # vermillion-- STRETCHING
-    "mixed": "#009E73",      # teal      -- MIXED_STRETCH_BEND
-    "mixed_ext": "#CC79A7",  # purple    -- MIXED_EXTERNAL_WITH_VIBRATION
+    "bending": "#377EB8",    # blue      -- BENDING
+    "stretching": "#E41A1C", # red       -- STRETCHING
+    "mixed": "#984EA3",      # purple    -- MIXED_STRETCH_BEND
+    "mixed_ext": "#CC79A7",  # pink      -- MIXED_EXTERNAL_WITH_VIBRATION
     "background": "#BBBBBB", # light gray-- unhighlighted context points
     # highlight_r/highlight_t (fixed 2026-07-02 consistency pass): the
     # previous values (#E69F00 orange -- too close to stretching's #D55E00

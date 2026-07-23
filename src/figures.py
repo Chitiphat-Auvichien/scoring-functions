@@ -1709,7 +1709,7 @@ def plot_boxplots(
 
     panels = [
         ("freq", r"Frequency (cm$^{-1}$)", "(a) Frequency"),
-        ("delta_b_mean", r"Averaged $|\Delta|\mathbf{b}|\,/\,|\mathbf{b}|\,|$", "(b) Bond-length change"),
+        ("delta_b_mean", r"Averaged $|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$", "(b) Bond-length change"),
         ("V_Stretch", r"$s[\mathrm{V_S}]$", "(c) Vibrational score"),
     ]
 
@@ -1840,7 +1840,7 @@ def plot_mode_mixing(
                        label=CATEGORY_LABEL[cat], **kw)
         ax.axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
         ax.axhline(th.tau_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-        ax.set_xlabel(r"Averaged $|\Delta|\mathbf{b}|\,/\,|\mathbf{b}|\,|$")
+        ax.set_xlabel(r"Averaged $|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$")
         ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
         ax.set_xlim(-0.03, internal["delta_b_mean"].max() * 1.08)
 

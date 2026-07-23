@@ -174,7 +174,14 @@ COLORS = {
     "sens_accuracy": "#56B4E9",   # sky blue  -- accuracy curve, fig:sensitivity
     "sens_change": "#000000",     # black     -- label-change-fraction curve, fig:sensitivity
     "plateau_band": "#56B4E9",    # sky blue @ low alpha -- tau_TR plateau shading, fig:sensitivity
-    "confusion_cmap": "Blues",    # sequential, colorblind-safe -- fig:confusion heatmap
+    # sequential, colorblind-safe -- fig:confusion/fig:benzeneconfusion heatmap.
+    # CHANGED 2026-07-23 (author request) from "Blues": that map's high-value
+    # end (~#2070b4/#08306b) reads as nearly the same blue as the "bending"
+    # category color used for this SAME heatmap's tick labels, risking a cell
+    # shaded dark for a high COUNT (any category) being misread as "about
+    # bending." Green is not claimed by any category color (bend=blue,
+    # stretch=red/vermillion, mixed=purple, external=gray), so it can't collide.
+    "confusion_cmap": "Greens",
 }
 
 # Reference-label (library ground truth) / predicted-bucket -> shared
@@ -961,9 +968,17 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL,
         n_ref_ext, n_pred_ext = divider
         ax.axhline(n_ref_ext - 0.5, color="black", lw=1.6, zorder=4)
         ax.axvline(n_pred_ext - 0.5, color="black", lw=1.6, zorder=4)
+    # Borders removed (author request, 2026-07-23): imshow's own cell grid
+    # already delineates the matrix, so the outer axes frame is redundant --
+    # same for the colorbar's outline rectangle. `_style()`'s global
+    # top/right-spine removal doesn't reach bottom/left, so all 4 are turned
+    # off explicitly here rather than relying on that shared setting.
+    for spine in ax.spines.values():
+        spine.set_visible(False)
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cb.set_label("Number of modes", fontsize=8)
     cb.ax.tick_params(labelsize=7.5)
+    cb.outline.set_visible(False)
     return im
 
 

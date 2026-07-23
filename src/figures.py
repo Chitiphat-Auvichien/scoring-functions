@@ -127,11 +127,33 @@ from src.classifier import (
 # conventional red=stretch/blue=bend/purple=mixed scheme; Set1 was chosen
 # because its hues are published together as a set for pairwise qualitative
 # distinguishability, rather than picked independently).
+#
+# "bending" REDEFINED (2026-07-23, author request): Set1's #377EB8 was judged
+# "not the real blue colour -- a little bit lighter." Replaced with #1A5DE4,
+# the true colorimetric complement of the "stretching" red #E41A1C (HSL hue
+# rotated 180 deg, same saturation/lightness as the red) but hue-shifted from
+# the literal complement's cyan/turquoise (~180 deg) to a real blue (220 deg,
+# author-chosen) since red's exact hue-wheel complement is cyan, not blue.
+# Scope (author instruction): this NEW blue is for CLASSIFICATION-ALGORITHM
+# mode labels ONLY (CATEGORY_COLOR, below) -- i.e. wherever a color encodes
+# what the classifier itself predicted for a mode. Reference/ground-truth
+# (literature) classifications keep the OLD Okabe-Ito blue/vermillion pair --
+# see "bending_ref"/"stretching_ref" below and REF_CATEGORY_COLOR.
 COLORS = {
     "external": "#999999",   # gray      -- CLEAN_TRANSLATION / CLEAN_ROTATION
-    "bending": "#377EB8",    # blue      -- BENDING
+    "bending": "#1A5DE4",    # blue      -- BENDING (classification-algorithm labels only)
     "stretching": "#E41A1C", # red       -- STRETCHING
     "mixed": "#984EA3",      # purple    -- MIXED_STRETCH_BEND
+    # Reference/ground-truth (literature) stretch/bend colors -- the OLD,
+    # original Okabe-Ito pair, kept distinct from the classification
+    # algorithm's own "bending"/"stretching" hues above (2026-07-23 split).
+    # Used by every figure whose color encodes a REFERENCE/literature label
+    # rather than the classifier's predicted label (fig:bondscores,
+    # fig:boxplots, fig:modemixing, fig:irrep_coupling, the retention/
+    # migration SI panel, and the reference-axis half of any confusion
+    # matrix) -- see REF_CATEGORY_COLOR below.
+    "bending_ref": "#0072B2",    # Okabe-Ito blue
+    "stretching_ref": "#D55E00", # Okabe-Ito vermillion
     "mixed_ext": "#CC79A7",  # pink      -- MIXED_EXTERNAL_WITH_VIBRATION
     "background": "#BBBBBB", # light gray-- unhighlighted context points
     # highlight_r/highlight_t (fixed 2026-07-02 consistency pass): the
@@ -240,6 +262,20 @@ CATEGORY_COLOR = {
     "T/R": COLORS["external"],
 }
 
+# Reference/ground-truth (literature) counterpart of CATEGORY_COLOR (2026-07-
+# 23 split, author instruction): identical except "bend"/"stretch" use the
+# OLD, original Okabe-Ito blue/vermillion pair ("bending_ref"/"stretching_ref"
+# in COLORS) instead of the classification algorithm's own hues. Used
+# wherever a color encodes a REFERENCE/literature label -- fig:bondscores,
+# fig:boxplots, fig:modemixing, fig:irrep_coupling, the retention/migration SI
+# panel, and the "Reference label" axis of any confusion-matrix heatmap.
+# Never used for a classifier-PREDICTED label -- those keep CATEGORY_COLOR.
+REF_CATEGORY_COLOR = dict(CATEGORY_COLOR)
+REF_CATEGORY_COLOR.update({
+    "bend": COLORS["bending_ref"],
+    "stretch": COLORS["stretching_ref"],
+})
+
 CATEGORY_MARKER = {
     "translation": "X",
     "rotation": "X",
@@ -337,12 +373,18 @@ def _savefig(fig, out_dir, label):
     return pdf_path, png_path
 
 
-def _marker_kwargs(category, ideal_flag=None, marker=None):
+def _marker_kwargs(category, ideal_flag=None, marker=None, color_map=None):
     """Shared per-point marker styling for a classification `category`
     (key into CATEGORY_COLOR/CATEGORY_MARKER), optionally faceted by
     `ideal_flag` ('yes'/'no'/None) via the shared IDEAL_STYLE encoding
     (filled = ideal, hollow = non-ideal). Returns a dict ready to splat into
     ax.scatter(...).
+
+    `color_map` defaults to CATEGORY_COLOR (the classification-algorithm's
+    own predicted-label colors). Callers coloring a REFERENCE/literature
+    label instead (fig:bondscores, fig:modemixing) pass ``REF_CATEGORY_COLOR``
+    explicitly so "bend"/"stretch" render in the old Okabe-Ito blue/vermillion
+    pair rather than the classifier's own hues (2026-07-23 split).
 
     `marker` optionally overrides the category's own CATEGORY_MARKER shape.
     Used by fig:bondscores/fig:modemixing, where stretch-vs-bend is already
@@ -355,7 +397,7 @@ def _marker_kwargs(category, ideal_flag=None, marker=None):
     and fig:confusion still legitimately vary marker shape by category there,
     since they distinguish >2 mutually-exclusive buckets in one figure.
     """
-    color = CATEGORY_COLOR[category]
+    color = (color_map or CATEGORY_COLOR)[category]
     if marker is None:
         marker = CATEGORY_MARKER[category]
     if ideal_flag is None:
@@ -902,8 +944,12 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL,
     ax.set_yticks(range(len(tbl.index)))
     ax.set_yticklabels([label_map[REF_LABEL_TO_CATEGORY[r]] for r in tbl.index],
                         fontsize=9)
+    # Row ticks ("Reference label" axis) use REF_CATEGORY_COLOR (old Okabe-Ito
+    # blue/vermillion); column ticks ("Classification algorithm label" axis)
+    # use CATEGORY_COLOR (new blue) -- the 2026-07-23 ref/predicted color
+    # split, precisely the two axes this heatmap already labels below.
     for tick, r in zip(ax.get_yticklabels(), tbl.index):
-        tick.set_color(CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[r]])
+        tick.set_color(REF_CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[r]])
     for tick, c in zip(ax.get_xticklabels(), tbl.columns):
         cat = PRED_BUCKET_TO_CATEGORY.get(c)
         if cat is not None:
@@ -992,7 +1038,7 @@ def plot_confusion_matrix(
     # and its caption share one page.
     fig, ax_hb = plt.subplots(figsize=(6.2, 4.8))
     _confusion_heatmap(ax_hb, fig, tbl_n, ref_order_n,
-                        f"Non-ideal internal + external classification ({n_nonideal} modes)")
+                        f"{n_nonideal} normal modes of non-ideal molecules")
 
     # Internal-only opposite-category crossing (bend<->stretch), same
     # computation as before the joint-matrix restructure -- these row/column
@@ -1093,7 +1139,9 @@ def plot_confusion_retention_migration(
 
     fig, ax_pb = plt.subplots(figsize=(3.6, 3.4))
     x_n = np.arange(len(cats_n))
-    bar_colors_n = [CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[c]] for c in cats_n]
+    # Reference-category bars ("retained" as bend/stretch, the true class),
+    # not the classifier's predicted-label axis -- old blue/vermillion pair.
+    bar_colors_n = [REF_CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[c]] for c in cats_n]
     ax_pb.bar(x_n, retention_n, 0.5, color=bar_colors_n,
               edgecolor="black", linewidth=0.5)
     ax_pb.bar(x_n, migration_n, 0.5, bottom=retention_n,
@@ -1331,7 +1379,7 @@ def plot_benzene_internal_confusion(
 
     fig, ax_h = plt.subplots(figsize=(4.6, 4.2))
     _confusion_heatmap(ax_h, fig, tbl, ref_order,
-                        f"Benzene modes ({n_total} modes)")
+                        f"{n_total} normal modes of benzene")
 
     ext_rows, int_rows = ref_order[:1], ref_order[1:]
     ext_cols, int_cols = pred_order[:1], pred_order[1:]
@@ -1521,7 +1569,7 @@ def plot_bond_scores(
             sub = bonds[(bonds["ideal"] == ideal_flag) & (bonds["ref_label"] == ref)]
             if sub.empty:
                 continue
-            kw = _marker_kwargs(cat, ideal_flag, marker="o")
+            kw = _marker_kwargs(cat, ideal_flag, marker="o", color_map=REF_CATEGORY_COLOR)
             ax.scatter(sub["abs_rel_db"], sub["s_AB"], s=13,
                        zorder=3 if ideal_flag == "yes" else 2, **kw)
 
@@ -1547,16 +1595,16 @@ def plot_bond_scores(
     # non-ideal), so the same bare wording is applied by hand here.
     legend_elems = [
         Line2D([0], [0], marker="o", color="none",
-               markerfacecolor=COLORS["stretching"], markeredgecolor=COLORS["stretching"],
+               markerfacecolor=COLORS["stretching_ref"], markeredgecolor=COLORS["stretching_ref"],
                markersize=8, label="S, ideal"),
         Line2D([0], [0], marker="o", color="none",
-               markerfacecolor="none", markeredgecolor=COLORS["stretching"],
+               markerfacecolor="none", markeredgecolor=COLORS["stretching_ref"],
                markersize=8, label="S, non-ideal"),
         Line2D([0], [0], marker="o", color="none",
-               markerfacecolor=COLORS["bending"], markeredgecolor=COLORS["bending"],
+               markerfacecolor=COLORS["bending_ref"], markeredgecolor=COLORS["bending_ref"],
                markersize=8, label="B, ideal"),
         Line2D([0], [0], marker="o", color="none",
-               markerfacecolor="none", markeredgecolor=COLORS["bending"],
+               markerfacecolor="none", markeredgecolor=COLORS["bending_ref"],
                markersize=8, label="B, non-ideal"),
     ]
     ax.legend(handles=legend_elems, loc="upper left", frameon=False, fontsize=6.8,
@@ -1568,7 +1616,9 @@ def plot_bond_scores(
 
     summary = {
         "pdf": pdf_path, "png": png_path,
-        "shared_categories": ("reuses CATEGORY_COLOR for STRETCHING "
+        "shared_categories": ("reuses REF_CATEGORY_COLOR (old Okabe-Ito "
+                               "reference-label hues, not the classification "
+                               "algorithm's own colors) for STRETCHING "
                                "(vermillion)/BENDING (blue); ONE marker shape "
                                "(circle) for all points (color already "
                                "distinguishes stretch/bend, so shape is not "
@@ -1660,7 +1710,7 @@ def plot_boxplots(
                          medianprops=dict(color="black", linewidth=1.0))
         for (ref, ideal_flag), box in zip(groups, bp["boxes"]):
             cat = REF_LABEL_TO_CATEGORY[ref]
-            color = CATEGORY_COLOR[cat]
+            color = REF_CATEGORY_COLOR[cat]
             style = IDEAL_STYLE[ideal_flag]
             box.set_edgecolor(color)
             box.set_linewidth(1.1)
@@ -1671,7 +1721,7 @@ def plot_boxplots(
         for cap in bp["caps"]:
             cap.set_color("#555555")
         for flier, (ref, ideal_flag) in zip(bp["fliers"], groups):
-            color = CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[ref]]
+            color = REF_CATEGORY_COLOR[REF_LABEL_TO_CATEGORY[ref]]
             flier.set_markerfacecolor(color if IDEAL_STYLE[ideal_flag]["filled"] else "none")
             flier.set_markeredgecolor(color)
 
@@ -1701,7 +1751,8 @@ def plot_boxplots(
 
     summary = {
         "pdf": pdf_path, "png": png_path,
-        "shared_categories": ("reuses CATEGORY_COLOR for STRETCHING/BENDING "
+        "shared_categories": ("reuses REF_CATEGORY_COLOR (old Okabe-Ito "
+                               "reference-label hues) for STRETCHING/BENDING "
                                "(box edge/fill color) and the shared "
                                "IDEAL_STYLE filled=ideal/hollow=non-ideal "
                                "encoding -- same mapping as fig:benzene / "
@@ -1769,7 +1820,7 @@ def plot_mode_mixing(
             sub = internal[(internal.ideal == ideal_flag) & (internal.ref_label == ref)]
             if sub.empty:
                 continue
-            kw = _marker_kwargs(cat, ideal_flag, marker="o")
+            kw = _marker_kwargs(cat, ideal_flag, marker="o", color_map=REF_CATEGORY_COLOR)
             ax.scatter(sub["delta_b_mean"], sub["V_Stretch"], s=20,
                        label=CATEGORY_LABEL[cat], **kw)
         ax.axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
@@ -1795,7 +1846,8 @@ def plot_mode_mixing(
     n_nonideal = int((internal.ideal == "no").sum())
     summary = {
         "pdf": pdf_path, "png": png_path,
-        "shared_categories": ("reuses CATEGORY_COLOR for STRETCHING/BENDING; "
+        "shared_categories": ("reuses REF_CATEGORY_COLOR (old Okabe-Ito "
+                               "reference-label hues) for STRETCHING/BENDING; "
                                "ONE marker shape (circle) for all points "
                                "(color already distinguishes stretch/bend) "
                                "and the shared IDEAL_STYLE filled=ideal/"
@@ -1862,8 +1914,11 @@ def plot_mode_mixing(
 
 def _hollow_marker_kwargs(color_key, marker):
     """Marker styling for one (type, irrep) category in fig_irrep_coupling:
-    color encodes bend/stretch (CATEGORY_COLOR's 'bending'/'stretching' hue,
-    via `color_key`); marker SHAPE encodes irrep identity, with the SAME
+    color encodes the literal literature bend/stretch label (COLORS'
+    'bending_ref'/'stretching_ref' old Okabe-Ito hue, via `color_key` --
+    this is a REFERENCE label, not a classifier prediction, so it uses the
+    "_ref" entries rather than the classification algorithm's own "bending"/
+    "stretching"); marker SHAPE encodes irrep identity, with the SAME
     shape reused for the same irrep symbol across the bend/stretch color
     split whenever that irrep is shared (coupling-capable) between the two
     categories -- so shape-matching across a color change is itself the
@@ -1893,8 +1948,11 @@ def plot_irrep_coupling(
     ``library_scores.csv`` -- a genuine engine-derived quantity now, see the
     data-source comment above this function), faceted by (type, irrep): ALL
     markers are unfilled/hollow (author revision 2026-07-06); color is bend
-    (blue)/stretch (vermillion), the same CATEGORY_COLOR hues used
-    everywhere else in this module, and marker SHAPE encodes irrep identity,
+    (blue)/stretch (vermillion), the OLD reference-label hues
+    (REF_CATEGORY_COLOR / "_ref" entries -- this is the literal literature
+    type, not a classifier prediction, so it deliberately does NOT use the
+    classification-algorithm's own "bending"/"stretching" colors), and
+    marker SHAPE encodes irrep identity,
     with the SAME shape reused for the same irrep symbol whenever it appears
     in BOTH a bend and a stretch category (the shared/coupling-capable
     case) -- e.g. panel (a)'s E' is a triangle in both "bend E'" and
@@ -1985,16 +2043,19 @@ def plot_irrep_coupling(
     # in both its bend and stretch appearances -- circle/triangle/square/
     # diamond chosen for clear distinction even hollow and small; no
     # plus/x (easily lost against gridlines).
+    # "type" here is the literal literature/reference label (not a
+    # classifier prediction) -- color_key uses the "_ref" old-blue/vermillion
+    # entries, not the classification-algorithm's own "bending"/"stretching".
     ab3_categories = [
-        ("bend", "A₂\"", "bending", "o", "bend A2″ (unique irrep)"),
-        ("bend", "E'", "bending", "^", "bend E′ (shared irrep -- same shape as stretch E′)"),
-        ("stretch", "A₁'", "stretching", "s", "stretch A1′ (unique irrep)"),
-        ("stretch", "E'", "stretching", "^", "stretch E′ (shared irrep -- same shape as bend E′)"),
+        ("bend", "A₂\"", "bending_ref", "o", "bend A2″ (unique irrep)"),
+        ("bend", "E'", "bending_ref", "^", "bend E′ (shared irrep -- same shape as stretch E′)"),
+        ("stretch", "A₁'", "stretching_ref", "s", "stretch A1′ (unique irrep)"),
+        ("stretch", "E'", "stretching_ref", "^", "stretch E′ (shared irrep -- same shape as bend E′)"),
     ]
     ab2_categories = [
-        ("bend", "A₁", "bending", "D", "bend A1 (shared irrep -- same shape as stretch A1)"),
-        ("stretch", "A₁", "stretching", "D", "stretch A1 (shared irrep -- same shape as bend A1)"),
-        ("stretch", "B₂", "stretching", "o", "stretch B2 (unique irrep)"),
+        ("bend", "A₁", "bending_ref", "D", "bend A1 (shared irrep -- same shape as stretch A1)"),
+        ("stretch", "A₁", "stretching_ref", "D", "stretch A1 (shared irrep -- same shape as bend A1)"),
+        ("stretch", "B₂", "stretching_ref", "o", "stretch B2 (unique irrep)"),
     ]
 
     fig, (ax_3, ax_2) = plt.subplots(1, 2, figsize=(7.2, 3.4))

@@ -359,7 +359,7 @@ def _style():
         "axes.titlesize": 14,
         "xtick.labelsize": 10,
         "ytick.labelsize": 10,
-        "legend.fontsize": 11,
+        "legend.fontsize": 10,
         "axes.linewidth": 0.8,
         "xtick.major.width": 0.8,
         "ytick.major.width": 0.8,
@@ -1599,7 +1599,7 @@ def plot_bond_scores(
     # quantity actually plotted (the per-bond |Delta|b||/|b| ratio, same
     # notation fig:boxplots panel (b) already uses for its averaged version).
     ax.set_xlabel(r"$|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$")
-    ax.set_ylabel(r"Bond score $s^{AB}$")
+    ax.set_ylabel(r"$s^{AB}$")
     ax.set_xlim(-0.03, bonds["abs_rel_db"].max() * 1.05)
     ax.set_ylim(-0.03, 1.05)
 
@@ -1847,8 +1847,13 @@ def plot_mode_mixing(
             if sub.empty:
                 continue
             kw = _marker_kwargs(cat, ideal_flag, marker="o", color_map=REF_CATEGORY_COLOR)
+            # Panel (b)'s hollow markers get an explicit "non-ideal" suffix
+            # (2026-07-23, author request) since, unlike panel (a), it has no
+            # legend of its own yet to disambiguate the unfilled circles from
+            # panel (a)'s filled ones.
+            point_label = CATEGORY_LABEL[cat] if ideal_flag == "yes" else f"{CATEGORY_LABEL[cat]}, non-ideal"
             ax.scatter(sub["delta_b_mean"], sub["V_Stretch"], s=20,
-                       label=CATEGORY_LABEL[cat], **kw)
+                       label=point_label, **kw)
         ax.axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
         ax.axhline(th.tau_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
         ax.set_xlabel(r"Averaged $|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$")
@@ -1859,9 +1864,11 @@ def plot_mode_mixing(
     ax_i.set_ylim(-0.05, 1.08)
     ax_i.legend(loc="center right", frameon=False,
                 handletextpad=0.4, labelspacing=0.4)
-    ax_i.text(0.98, th.tau_S, r"$\tau_S$", ha="right", va="bottom",
+    ax_n.legend(loc="center right", frameon=False,
+                handletextpad=0.4, labelspacing=0.4)
+    ax_i.text(0.98, th.tau_S, r"$\tau_\text{S}$", ha="right", va="bottom",
               color=COLORS["threshold"], transform=ax_i.get_yaxis_transform())
-    ax_i.text(0.98, th.tau_B, r"$\tau_B$", ha="right", va="top",
+    ax_i.text(0.98, th.tau_B, r"$\tau_\text{B}$", ha="right", va="top",
               color=COLORS["threshold"], transform=ax_i.get_yaxis_transform())
 
     fig.tight_layout()

@@ -1847,11 +1847,11 @@ def plot_mode_mixing(
             if sub.empty:
                 continue
             kw = _marker_kwargs(cat, ideal_flag, marker="o", color_map=REF_CATEGORY_COLOR)
-            # Panel (b)'s hollow markers get an explicit "non-ideal" suffix
-            # (2026-07-23, author request) since, unlike panel (a), it has no
-            # legend of its own yet to disambiguate the unfilled circles from
-            # panel (a)'s filled ones.
-            point_label = CATEGORY_LABEL[cat] if ideal_flag == "yes" else f"{CATEGORY_LABEL[cat]}, non-ideal"
+            # Each panel's own point label spells out ideal/non-ideal
+            # explicitly (2026-07-23, author request) rather than leaving it
+            # to be inferred from the panel letter alone.
+            ideal_suffix = "ideal" if ideal_flag == "yes" else "non-ideal"
+            point_label = f"{CATEGORY_LABEL[cat]}, {ideal_suffix}"
             ax.scatter(sub["delta_b_mean"], sub["V_Stretch"], s=20,
                        label=point_label, **kw)
         ax.axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
@@ -1862,9 +1862,16 @@ def plot_mode_mixing(
 
     ax_i.set_ylabel(r"$s[\mathrm{V_S}]$")
     ax_i.set_ylim(-0.05, 1.08)
-    ax_i.legend(loc="center right", frameon=False,
+    # Bordered legends (2026-07-23, author request): both panels' legend
+    # boxes sit directly on top of scattered data points, so a frame (plus an
+    # opaque white face) is needed to keep the swatches/text from reading as
+    # more data -- every OTHER legend in this module stays frameon=False
+    # since none of them overlap data the same way.
+    ax_i.legend(loc="center right", frameon=True, edgecolor="black",
+                facecolor="white", framealpha=1.0,
                 handletextpad=0.4, labelspacing=0.4)
-    ax_n.legend(loc="center right", frameon=False,
+    ax_n.legend(loc="center right", frameon=True, edgecolor="black",
+                facecolor="white", framealpha=1.0,
                 handletextpad=0.4, labelspacing=0.4)
     ax_i.text(0.98, th.tau_S, r"$\tau_\text{S}$", ha="right", va="bottom",
               color=COLORS["threshold"], transform=ax_i.get_yaxis_transform())

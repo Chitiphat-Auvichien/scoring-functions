@@ -337,6 +337,17 @@ _TAU = Thresholds.calibrated()
 TAU_S = _TAU.tau_S
 TAU_B = _TAU.tau_B
 
+# Named font-size overrides (2026-07-23): every plot element inherits
+# _style()'s rcParams defaults unless listed here. These two constants are
+# the ONLY permitted exceptions -- used solely where the default size,
+# verified by rendering, collides with data/other text in a specific dense
+# panel (a multi-entry legend crowding a plot area, or an in-plot value
+# label that no longer fits inside a thin bar segment). Do not add a bare
+# `fontsize=<number>` anywhere else; if a new collision turns up, reuse one
+# of these two rather than inventing another magic number.
+LEGEND_FONTSIZE = 9
+ANNOTATION_FONTSIZE = 9
+
 
 def _style():
     """Apply the shared print-ready matplotlib style. Call once per figure."""
@@ -538,9 +549,9 @@ def plot_benzene_stress_test(
     # collide) to (-8,12) (upper-left, clear of the arrow's approach
     # direction) -- verified by rendering (2026-07-02 consistency pass).
     ax_b.annotate("EMIT 2", (e2["C2_Ry"], abs(e2["Ry"])),
-                  xytext=(6, 6), textcoords="offset points", fontsize=7)
+                  xytext=(6, 6), textcoords="offset points")
     ax_b.annotate("EMIT 9", (e9["C2_Ry"], abs(e9["Ry"])),
-                  xytext=(-6, 8), textcoords="offset points", fontsize=7,
+                  xytext=(-6, 8), textcoords="offset points",
                   ha="right")
 
     # -- Highlight 2: flagged external modes, EMIT 34/35/36. By symmetry
@@ -571,7 +582,7 @@ def plot_benzene_stress_test(
         f"  {mode.split()[1]}: " + r"$s[\mathrm{V_S}]$" + f"={vs:.3f}"
         for (mode, _), vs in zip(flagged, fvs)
     )
-    ax_b.text(callout_xy[0], callout_xy[1], callout_text, fontsize=6.7,
+    ax_b.text(callout_xy[0], callout_xy[1], callout_text,
               ha="center", va="center",
               bbox=dict(boxstyle="round,pad=0.35", fc="white",
                          ec=COLORS["highlight_t"], lw=0.8), zorder=6)
@@ -581,7 +592,7 @@ def plot_benzene_stress_test(
     ax_b.set_xlim(-0.03, 1.05)
     ax_b.set_ylim(-0.03, 1.15)
     ax_b.legend(loc="upper left", frameon=False, handletextpad=0.3,
-                labelspacing=0.35, borderaxespad=0.1, fontsize=6.7)
+                labelspacing=0.35, borderaxespad=0.1, fontsize=LEGEND_FONTSIZE)
     # FIXED 2026-07-02 (same readability fix as fig:confusion's footer,
     # IMPLEMENTATION_PLAN.md queued item 1): this prose note used to be
     # drawn in-image via `ax_b.text()` at 6.3pt on this 3.8x3.6in canvas --
@@ -740,10 +751,10 @@ def plot_benzene_normal_modes(
     # label is anchored there instead.
     y_offset = 0.045
     ax.text(0.02, TAU_S + y_offset, r"$\tau_\text{S}=$" + f"{TAU_S:.2f}", ha="left",
-            va="bottom", fontsize=7, color=COLORS["threshold"],
+            va="bottom", color=COLORS["threshold"],
             transform=ax.get_yaxis_transform())
     ax.text(0.98, TAU_B - y_offset, r"$\tau_\text{B}=$" + f"{TAU_B:.2f}", ha="right",
-            va="top", fontsize=7, color=COLORS["threshold"],
+            va="top", color=COLORS["threshold"],
             transform=ax.get_yaxis_transform())
 
     ax.set_xlabel(r"Frequency (cm$^{-1}$)")
@@ -757,7 +768,7 @@ def plot_benzene_normal_modes(
     # this frequency range's low-freq bending cluster leaves that band empty
     # on the left.
     ax.legend(loc="center left", bbox_to_anchor=(0.0, 0.52), frameon=False,
-              handletextpad=0.3, labelspacing=0.3, borderaxespad=0.2, fontsize=7)
+              handletextpad=0.3, labelspacing=0.3, borderaxespad=0.2)
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -933,7 +944,7 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL,
         for j in range(tbl.shape[1]):
             v = int(tbl.values[i, j])
             txt_color = "white" if v > 0.6 * vmax else "black"
-            ax.text(j, i, str(v), ha="center", va="center", fontsize=8,
+            ax.text(j, i, str(v), ha="center", va="center",
                      color=txt_color)
 
     # Rotation/right-alignment used to be needed to fit the long "clean
@@ -947,10 +958,9 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL,
     ax.set_xticks(range(len(tbl.columns)))
     ax.set_xticklabels([label_map[PRED_BUCKET_TO_CATEGORY[c]] if c in
                          PRED_BUCKET_TO_CATEGORY else c for c in tbl.columns],
-                        rotation=0, ha="center", fontsize=9)
+                        rotation=0, ha="center")
     ax.set_yticks(range(len(tbl.index)))
-    ax.set_yticklabels([label_map[REF_LABEL_TO_CATEGORY[r]] for r in tbl.index],
-                        fontsize=9)
+    ax.set_yticklabels([label_map[REF_LABEL_TO_CATEGORY[r]] for r in tbl.index])
     # Row ticks ("Reference label" axis) use REF_CATEGORY_COLOR (old Okabe-Ito
     # blue/vermillion); column ticks ("Classification algorithm label" axis)
     # use CATEGORY_COLOR (new blue) -- the 2026-07-23 ref/predicted color
@@ -963,7 +973,7 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL,
             tick.set_color(CATEGORY_COLOR[cat])
     ax.set_xlabel("Classification algorithm label")
     ax.set_ylabel("Reference label")
-    ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
+    ax.set_title(title, loc="left", fontweight="bold")
     if divider is not None:
         n_ref_ext, n_pred_ext = divider
         ax.axhline(n_ref_ext - 0.5, color="black", lw=1.6, zorder=4)
@@ -976,8 +986,7 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL,
     for spine in ax.spines.values():
         spine.set_visible(False)
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cb.set_label("Number of modes", fontsize=8)
-    cb.ax.tick_params(labelsize=7.5)
+    cb.set_label("Number of modes")
     cb.outline.set_visible(False)
     return im
 
@@ -1164,22 +1173,22 @@ def plot_confusion_retention_migration(
     THIN = 0.08  # segments shorter than this (axis fraction) get an outside label
     for xi, ret, mig in zip(x_n, retention_n, migration_n):
         ax_pb.text(xi, ret / 2, f"retained\n{ret:.3f}", ha="center", va="center",
-                   fontsize=7, color="white", fontweight="bold")
+                   color="white", fontweight="bold", fontsize=ANNOTATION_FONTSIZE)
         if mig >= THIN:
             ax_pb.text(xi, ret + mig / 2, f"mixed\n{mig:.3f}", ha="center",
-                       va="center", fontsize=7, color="white", fontweight="bold")
+                       va="center", color="white", fontweight="bold",
+                       fontsize=ANNOTATION_FONTSIZE)
         else:
             ax_pb.text(xi, ret + mig + 0.015, f"mixed: {mig:.3f}", ha="center",
-                       va="bottom", fontsize=7, color=COLORS["mixed"],
-                       fontweight="bold")
+                       va="bottom", color=COLORS["mixed"],
+                       fontweight="bold", fontsize=ANNOTATION_FONTSIZE)
     ax_pb.set_xticks(x_n)
-    ax_pb.set_xticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_n],
-                          fontsize=9)
+    ax_pb.set_xticklabels([CATEGORY_LABEL[REF_LABEL_TO_CATEGORY[c]] for c in cats_n])
     ax_pb.set_xlim(-0.55, 1.55)
     ax_pb.set_ylim(0, 1.12)
     ax_pb.set_ylabel("Fraction of modes")
     ax_pb.set_title(f"Non-ideal tier retention and migration (n={n_nonideal})",
-                     loc="left", fontweight="bold", fontsize=9)
+                     loc="left", fontweight="bold")
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -1301,7 +1310,7 @@ def plot_rigorous_tier_check(
     ax.set_title(
         f"Rigorous-tier self-consistency check (n={n_rigorous})\n"
         "sanity check, not an independent accuracy claim -- see caption",
-        fontsize=8.5, loc="center", pad=10)
+        loc="center", pad=10)
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -1496,16 +1505,18 @@ def plot_benzene_confusion_precision_recall(
     ax_p.bar(x + width / 2, recalls, width, color=bar_colors,
              edgecolor="black", linewidth=0.5, hatch="///", label="recall")
     ax_p.set_xticks(x)
-    ax_p.set_xticklabels([CATEGORY_LABEL[c] for c in cats], fontsize=9)
+    ax_p.set_xticklabels([CATEGORY_LABEL[c] for c in cats])
     ax_p.set_ylim(0, 1.18)
     ax_p.set_ylabel("Precision / recall")
     ax_p.set_title("Benzene internal-mode precision/recall\n"
                     "(companion to the main-text confusion matrix -- "
-                    "see caption)", fontsize=8.5, loc="center")
-    ax_p.legend(loc="upper left", frameon=False, fontsize=8)
+                    "see caption)", loc="center")
+    ax_p.legend(loc="upper left", frameon=False, fontsize=LEGEND_FONTSIZE)
     for xi, p, r in zip(x, precisions, recalls):
-        ax_p.text(xi - width / 2, p + 0.02, f"{p:.3f}", ha="center", va="bottom", fontsize=6.5)
-        ax_p.text(xi + width / 2, r + 0.02, f"{r:.3f}", ha="center", va="bottom", fontsize=6.5)
+        ax_p.text(xi - width / 2, p + 0.02, f"{p:.3f}", ha="center", va="bottom",
+                  fontsize=ANNOTATION_FONTSIZE)
+        ax_p.text(xi + width / 2, r + 0.02, f"{r:.3f}", ha="center", va="bottom",
+                  fontsize=ANNOTATION_FONTSIZE)
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -1622,7 +1633,7 @@ def plot_bond_scores(
                markerfacecolor="none", markeredgecolor=COLORS["bending_ref"],
                markersize=8, label="B, non-ideal"),
     ]
-    ax.legend(handles=legend_elems, loc="upper left", frameon=False, fontsize=6.8,
+    ax.legend(handles=legend_elems, loc="upper left", frameon=False,
               handletextpad=0.4, labelspacing=0.4, borderaxespad=0.2)
 
     fig.tight_layout()
@@ -1747,10 +1758,10 @@ def plot_boxplots(
         # labels; bare single-character "S"/"B" labels have no collision
         # risk at this position spacing and read cleaner flat, verified by
         # rendering.
-        ax.set_xticklabels(group_labels, fontsize=6.5)
+        ax.set_xticklabels(group_labels)
         ax.set_xlim(positions[0] - 0.7, positions[-1] + 0.7)
         ax.set_ylabel(ylabel)
-        ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
+        ax.set_title(title, loc="left", fontweight="bold")
 
     # tau_S/tau_B are no longer drawn on panel (c) (author decision,
     # 2026-07-09: threshold lines removed as visual clutter -- the values
@@ -1841,16 +1852,16 @@ def plot_mode_mixing(
         ax.axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
         ax.axhline(th.tau_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
         ax.set_xlabel(r"Averaged $|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$")
-        ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
+        ax.set_title(title, loc="left", fontweight="bold")
         ax.set_xlim(-0.03, internal["delta_b_mean"].max() * 1.08)
 
     ax_i.set_ylabel(r"$s[\mathrm{V_S}]$")
     ax_i.set_ylim(-0.05, 1.08)
-    ax_i.legend(loc="center right", frameon=False, fontsize=7.5,
+    ax_i.legend(loc="center right", frameon=False,
                 handletextpad=0.4, labelspacing=0.4)
-    ax_i.text(0.98, th.tau_S, r"$\tau_S$", ha="right", va="bottom", fontsize=7,
+    ax_i.text(0.98, th.tau_S, r"$\tau_S$", ha="right", va="bottom",
               color=COLORS["threshold"], transform=ax_i.get_yaxis_transform())
-    ax_i.text(0.98, th.tau_B, r"$\tau_B$", ha="right", va="top", fontsize=7,
+    ax_i.text(0.98, th.tau_B, r"$\tau_B$", ha="right", va="top",
               color=COLORS["threshold"], transform=ax_i.get_yaxis_transform())
 
     fig.tight_layout()
@@ -2073,7 +2084,16 @@ def plot_irrep_coupling(
         ("stretch", "B₂", "stretching_ref", "o", "stretch B2 (unique irrep)"),
     ]
 
-    fig, (ax_3, ax_2) = plt.subplots(1, 2, figsize=(7.2, 3.4))
+    # Widened 7.2->9.0in (2026-07-23, alongside the font-size bump): at the
+    # larger rcParams sizes, the per-panel legend text and the shared x-axis
+    # label no longer fit inside the original 7.2in width -- the legend
+    # overflowed into the neighboring panel and the x-label clipped at the
+    # canvas edge (verified by rendering). This is a layout fix, not a font
+    # override -- the extra width is what these labels now need at the
+    # default size, matching every OTHER figure's rule of leaving fontsize
+    # alone (LEGEND_FONTSIZE is still applied on this SI figure's legend
+    # only because its entries are unusually long irrep-coupling captions).
+    fig, (ax_3, ax_2) = plt.subplots(1, 2, figsize=(9.0, 3.4))
 
     def _plot_panel(ax, sub_df, categories, title):
         n_plotted = 0
@@ -2088,10 +2108,10 @@ def plot_irrep_coupling(
             n_plotted += len(pts)
             plotted_molecules.update(pts["molecule"].unique().tolist())
         ax.set_xlabel(r"$|\mathbf{d}_{CA}|$ (central-atom displacement amplitude)")
-        ax.set_title(title, loc="left", fontweight="bold", fontsize=9)
+        ax.set_title(title, loc="left", fontweight="bold")
         ax.set_xlim(-0.03, sub_df["|d_CA|"].max() * 1.08)
         ax.set_ylim(-0.05, 1.08)
-        ax.legend(loc="center left", frameon=False, fontsize=6.8,
+        ax.legend(loc="center left", frameon=False, fontsize=LEGEND_FONTSIZE,
                    handletextpad=0.4, labelspacing=0.4, borderaxespad=0.2)
         return n_plotted, plotted_molecules
 
@@ -2173,7 +2193,14 @@ def plot_sensitivity(
     tau_TR_frozen = result["tau_TR"]
     lo, hi = result["plateau_tau_TR_range"]
 
-    fig, ax1 = plt.subplots(figsize=(4.6, 3.4))
+    # Enlarged 4.6x3.4 -> 5.6x4.6in (2026-07-23, alongside the font-size
+    # bump): both y-axis labels are long strings rendered ROTATED 90 deg, so
+    # what they need is figure HEIGHT, not width -- a first attempt that only
+    # widened the figure (to 5.6x3.4) left them clipping at the top/bottom of
+    # the canvas exactly as before (verified by rendering); tight_layout does
+    # not reliably reserve space for a twinx() secondary label either way.
+    # Layout fix, not a font override.
+    fig, ax1 = plt.subplots(figsize=(5.6, 4.6))
     ax1.axvspan(lo, hi, color=COLORS["plateau_band"], alpha=0.18, lw=0, zorder=0,
                 label=f"plateau [{lo:g}, {hi:g}]")
     ax1.axvline(tau_TR_frozen, color=COLORS["threshold"], ls="--", lw=1.0, zorder=2,
@@ -2196,7 +2223,7 @@ def plot_sensitivity(
                Patch(facecolor=COLORS["plateau_band"], alpha=0.18, label=f"plateau [{lo:g}, {hi:g}]"),
                Line2D([0], [0], color=COLORS["threshold"], ls="--",
                       label=r"frozen $\tau_{\mathrm{TR}}$" + f"={tau_TR_frozen:g}")]
-    ax1.legend(handles=handles, loc="center left", frameon=False, fontsize=7,
+    ax1.legend(handles=handles, loc="center left", frameon=False,
                handletextpad=0.5, labelspacing=0.4)
 
     fig.tight_layout()

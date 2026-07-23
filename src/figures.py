@@ -343,19 +343,19 @@ def _style():
     plt.rcParams.update({
         "font.family": "sans-serif",
         "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
-        "font.size": 9,
-        "axes.labelsize": 9,
-        "axes.titlesize": 9,
-        "xtick.labelsize": 8,
-        "ytick.labelsize": 8,
-        "legend.fontsize": 7.5,
+        "font.size": 11,
+        "axes.labelsize": 12,
+        "axes.titlesize": 14,
+        "xtick.labelsize": 10,
+        "ytick.labelsize": 10,
+        "legend.fontsize": 11,
         "axes.linewidth": 0.8,
         "xtick.major.width": 0.8,
         "ytick.major.width": 0.8,
         "lines.linewidth": 1.0,
         "lines.markersize": 5,
-        "figure.dpi": 150,
-        "savefig.dpi": 300,
+        "figure.dpi": 300,
+        "savefig.dpi": 600,
         "pdf.fonttype": 42,   # embed as real fonts, not Type-3 bitmaps
         "ps.fonttype": 42,
         "axes.spines.top": False,
@@ -373,7 +373,7 @@ def _savefig(fig, out_dir, label):
     pdf_path = os.path.join(out_dir, f"{label}.pdf")
     png_path = os.path.join(out_dir, f"{label}.png")
     fig.savefig(pdf_path, bbox_inches="tight")
-    fig.savefig(png_path, bbox_inches="tight", dpi=300)
+    fig.savefig(png_path, bbox_inches="tight", dpi=600)
     for p in (pdf_path, png_path):
         if not os.path.exists(p) or os.path.getsize(p) == 0:
             raise RuntimeError(f"figure save failed or produced an empty file: {p}")

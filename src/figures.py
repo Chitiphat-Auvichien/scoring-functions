@@ -2277,17 +2277,23 @@ def regenerate_all(verbose=True):
     already-computed ``data/results/*.csv`` inputs with their own defaults;
     this function takes no molecule-specific arguments.
 
-    Returns a dict {tex_label: result_dict} for all 11 figures (6 labeled
-    fig:* + the standalone benzene-normal-modes gallery + the SI rigorous-
-    tier consistency check + fig:benzeneconfusion + its SI precision/recall
-    companion + the SI irrep-degeneracy coupling figure), in the same order
-    they are built. Raises whatever the underlying plot_* function raises
-    (e.g. a missing input CSV) -- fail loud, no silent partial regeneration.
+    Returns a dict {tex_label: result_dict} for all 12 figures (6 labeled
+    fig:* + the standalone benzene-normal-modes gallery + the SI confusion
+    retention/migration panel + the SI rigorous-tier consistency check +
+    fig:benzeneconfusion + its SI precision/recall companion + the SI
+    irrep-degeneracy coupling figure), in the same order they are built.
+    FIXED 2026-07-23: plot_confusion_retention_migration was missing from
+    this list entirely (an orchestrator gap, unrelated to any dataset
+    change) -- it now runs like every other figure here instead of only
+    when called directly. Raises whatever the underlying plot_* function
+    raises (e.g. a missing input CSV) -- fail loud, no silent partial
+    regeneration.
     """
     fns = [
         ("fig:benzene", plot_benzene_stress_test),
         ("benzene-normal-modes gallery (no fig: label yet)", plot_benzene_normal_modes),
         ("fig:confusion", plot_confusion_matrix),
+        ("SI confusion retention/migration (no fig: label yet)", plot_confusion_retention_migration),
         ("SI rigorous-tier consistency check (no fig: label yet)", plot_rigorous_tier_check),
         ("fig:benzeneconfusion", plot_benzene_internal_confusion),
         ("SI benzene precision/recall (no fig: label yet)", plot_benzene_confusion_precision_recall),

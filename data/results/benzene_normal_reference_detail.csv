@@ -1,4 +1,10 @@
 mode_index,kind,freq,ref_label,predicted_label,predicted_bucket,correct,crossed_opposite,migrated_to_mixed
+Tx,external,0.0,translation,Tx,translation,True,False,False
+Ty,external,0.0,translation,Ty,translation,True,False,False
+Tz,external,0.0,translation,Tz,translation,True,False,False
+Rx,external,0.0,rotation,Rx,rotation,True,False,False
+Ry,external,0.0,rotation,Ry,rotation,True,False,False
+Rz,external,0.0,rotation,Rz,rotation,True,False,False
 1,internal,411.9847,bend,B,bend,True,False,False
 2,internal,411.9847,bend,B,bend,True,False,False
 3,internal,645.8926,bend,B,bend,True,False,False
@@ -29,9 +35,3 @@ mode_index,kind,freq,ref_label,predicted_label,predicted_bucket,correct,crossed_
 28,internal,3209.6325,stretch,S,stretch,True,False,False
 29,internal,3209.6325,stretch,S,stretch,True,False,False
 30,internal,3223.1696,stretch,S,stretch,True,False,False
-Tx,external,0.0,translation,Tx,translation,True,False,False
-Ty,external,0.0,translation,Ty,translation,True,False,False
-Tz,external,0.0,translation,Tz,translation,True,False,False
-Rx,external,0.0,rotation,Rx,rotation,True,False,False
-Ry,external,0.0,rotation,Ry,rotation,True,False,False
-Rz,external,0.0,rotation,Rz,rotation,True,False,False

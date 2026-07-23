@@ -290,10 +290,6 @@ tetrahedral,SnH4,6,1928.0926,1.0178,2.2293,T₂,stretch,as,antisym. stretch,ν�
 tetrahedral,SnH4,7,1928.0926,1.0178,2.2293,T₂,stretch,as,antisym. stretch,ν₃,Nis2002,
 tetrahedral,SnH4,8,1928.0926,1.0178,2.2293,T₂,stretch,as,antisym. stretch,ν₃,Nis2002,
 tetrahedral,SnH4,9,1945.6114,1.0078,2.2477,A₁,stretch,s,sym. stretch,ν₁,Nis2002,
-linear,SnO2,1,-4.0941,19.6128,0.0002,PIU,bend,-,bend,ν₂,Shi1972,negative freq
-linear,SnO2,2,-4.094,19.6128,0.0002,PIU,bend,-,bend,ν₂,Shi1972,negative freq
-linear,SnO2,3,858.3411,15.9949,6.9431,SGG,stretch,s,sym. stretch,ν₁,Shi1972,negative freq
-linear,SnO2,4,1096.8998,19.6128,13.9035,SGU,stretch,as,antisym. stretch,ν₃,Shi1972,negative freq
 bend,TeH2,1,892.9572,1.016,0.4773,A₁,bend,-,bend,ν₂,Shi1972,
 bend,TeH2,2,2062.3274,1.015,2.5436,A₁,stretch,s,sym. stretch,ν₁,Shi1972,
 bend,TeH2,3,2070.5516,1.0157,2.5657,B₂,stretch,as,antisym. stretch,ν₃,Shi1972,
@@ -394,12 +390,6 @@ T-shape,FCl3,3,180.3555,20.429,0.3915,B1,bend,-,,ν₆,,
 T-shape,FCl3,4,271.4758,34.6767,1.5057,A1,stretch,-,,ν₁,,
 T-shape,FCl3,5,271.931,20.6178,0.8983,B2,stretch,asym,,ν₄,,
 T-shape,FCl3,6,272.6751,20.7249,0.9079,A1,stretch,s,,ν₂,,
-T-shape,FH3,1,-895.9665,1.1142,0.527,B2,bend,-,,ν₆,,
-T-shape,FH3,2,623.5951,1.0911,0.25,A1,bend,-,,ν₆,,
-T-shape,FH3,3,652.7984,1.107,0.278,B1,bend,-,,ν₆,,
-T-shape,FH3,4,1156.4237,1.0361,0.8163,B2,stretch,asym,,ν₄,,
-T-shape,FH3,5,1358.9652,1.0118,1.1009,A1,stretch,-,,ν₁,,
-T-shape,FH3,6,3034.2042,1.0606,5.7531,A1,stretch,s,,ν₂,,
 trigonal pyramidal,NH3,1,927.7814,1.1933,0.6052,A₁,bend,s,,ν₂,,
 trigonal pyramidal,NH3,2,1796.4124,1.076,2.0458,E,bend,asym,,ν₄,,
 trigonal pyramidal,NH3,3,1796.4124,1.076,2.0458,E,bend,asym,,ν₄,,

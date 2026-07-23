@@ -1,6 +1,5 @@
 mol_type,shape,point_group,CN_shape,E,CN_geom,N_atom,molecule,molecule_ss,MP2_3-21G,current_method,note,basename
 ideal,bend,C2v,2,2,4,3,TeH2,TeH₂,TRUE,,,TeH2
-ideal,linear,Dinfh,2,0,2,3,SnO2,SnO₂,TRUE,,2 negative frequencies,SnO2
 ideal,T-shape,C2v,3,2,5,4,IH3,IH₃,TRUE,,,IH3
 ideal,trigonal pyramidal,C3v,3,1,4,4,SbH3,SbH₃,TRUE,,,SbH3_MP2_3-21G
 ideal,trigonal planar,D3h,3,0,3,4,InH3,InH₃,TRUE,,,InH3
@@ -22,11 +21,10 @@ non-ideal,bend,C2v,2,2,4,3,H2Se,H₂Se,TRUE,,,H2Se
 non-ideal,bend,C2v,2,2,4,3,SeF2,SeF₂,TRUE,,,SeF2
 non-ideal,bend,C2v,2,2,4,3,SeCl2,SeCl₂,TRUE,,,SeCl2
 non-ideal,bend,C2v,2,2,4,3,SeBr2,SeBr₂,TRUE,,,SeBr2
-non-ideal,linear,Dinfh,2,0,2,3,CO2,CO₂,TRUE,,,co2_mp2_3-21g
+ideal,linear,Dinfh,2,0,2,3,CO2,CO₂,TRUE,,,co2_mp2_3-21g
 non-ideal,linear,Dinfh,2,0,2,3,CS2,CS₂,TRUE,,,CS2
 non-ideal,linear,Dinfh,2,0,2,3,CSe2,CSe₂,TRUE,,,CSe2
 non-ideal,linear,Dinfh,2,0,2,3,CTe2,CTe₂,TRUE,,,CTe2
-non-ideal,T-shape,C2v,3,2,5,4,FH3,FH₃,FALSE,B3LYP/3-21G,"unstable (MP2: becomes HF), 1 negative freq",fh3_dft
 non-ideal,T-shape,C2v,3,2,5,4,F4,F₄,FALSE,B3LYP/3-21G,convergence issue,f4_dft
 non-ideal,T-shape,C2v,3,2,5,4,FCl3,FCl₃,TRUE,,,fcl3
 non-ideal,T-shape,C2v,3,2,5,4,FBr3,FBr₃,TRUE,,,fbr3

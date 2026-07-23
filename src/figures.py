@@ -917,13 +917,18 @@ def _per_category_from_table(tbl, cats):
     return rows
 
 
-def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL,
+def _confusion_heatmap(ax, fig, tbl, ref_order, label_map=CATEGORY_LABEL,
                         divider=None):
     """Shared heatmap renderer for one confusion-matrix tier. `tbl` must
     already be reindexed to `ref_order` rows (columns are whatever buckets
     are present for that tier -- rigorous and non-ideal tiers populate
     different bucket sets, so no forced union of columns across tiers).
     Returns the imshow handle (caller attaches its own colorbar).
+
+    No in-figure title (2026-07-23, author request): the mode-count context
+    it used to carry (e.g. "675 normal modes of non-ideal molecules") now
+    lives in the LaTeX caption only -- this is a single-panel heatmap, so no
+    (a)/(b)/(c) label is needed either.
 
     `label_map` defaults to the shared `CATEGORY_LABEL` dict but
     `plot_confusion_matrix` passes a figure-local override (see that
@@ -973,7 +978,6 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, title, label_map=CATEGORY_LABEL,
             tick.set_color(CATEGORY_COLOR[cat])
     ax.set_xlabel("Classification algorithm label")
     ax.set_ylabel("Reference label")
-    ax.set_title(title, loc="left", fontweight="bold")
     if divider is not None:
         n_ref_ext, n_pred_ext = divider
         ax.axhline(n_ref_ext - 0.5, color="black", lw=1.6, zorder=4)
@@ -1061,8 +1065,7 @@ def plot_confusion_matrix(
     # page and leaving a mostly-blank page behind -- 4.8in lets the figure
     # and its caption share one page.
     fig, ax_hb = plt.subplots(figsize=(6.2, 4.8))
-    _confusion_heatmap(ax_hb, fig, tbl_n, ref_order_n,
-                        f"{n_nonideal} normal modes of non-ideal molecules")
+    _confusion_heatmap(ax_hb, fig, tbl_n, ref_order_n)
 
     # Internal-only opposite-category crossing (bend<->stretch), same
     # computation as before the joint-matrix restructure -- these row/column
@@ -1187,8 +1190,6 @@ def plot_confusion_retention_migration(
     ax_pb.set_xlim(-0.55, 1.55)
     ax_pb.set_ylim(0, 1.12)
     ax_pb.set_ylabel("Fraction of modes")
-    ax_pb.set_title(f"Non-ideal tier retention and migration (n={n_nonideal})",
-                     loc="left", fontweight="bold")
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -1307,10 +1308,6 @@ def plot_rigorous_tier_check(
         if row == 0:
             cell.set_facecolor("#EEEEEE")
             cell.set_text_props(fontweight="bold")
-    ax.set_title(
-        f"Rigorous-tier self-consistency check (n={n_rigorous})\n"
-        "sanity check, not an independent accuracy claim -- see caption",
-        loc="center", pad=10)
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -1402,8 +1399,7 @@ def plot_benzene_internal_confusion(
     n_total = int(tbl.values.sum())
 
     fig, ax_h = plt.subplots(figsize=(4.6, 4.2))
-    _confusion_heatmap(ax_h, fig, tbl, ref_order,
-                        f"{n_total} normal modes of benzene")
+    _confusion_heatmap(ax_h, fig, tbl, ref_order)
 
     ext_rows, int_rows = ref_order[:1], ref_order[1:]
     ext_cols, int_cols = pred_order[:1], pred_order[1:]
@@ -1508,9 +1504,6 @@ def plot_benzene_confusion_precision_recall(
     ax_p.set_xticklabels([CATEGORY_LABEL[c] for c in cats])
     ax_p.set_ylim(0, 1.18)
     ax_p.set_ylabel("Precision / recall")
-    ax_p.set_title("Benzene internal-mode precision/recall\n"
-                    "(companion to the main-text confusion matrix -- "
-                    "see caption)", loc="center")
     ax_p.legend(loc="upper left", frameon=False, fontsize=LEGEND_FONTSIZE)
     for xi, p, r in zip(x, precisions, recalls):
         ax_p.text(xi - width / 2, p + 0.02, f"{p:.3f}", ha="center", va="bottom",
@@ -1718,10 +1711,14 @@ def plot_boxplots(
     # "non-ideal" bracket labels below them collide, verified by rendering.
     positions = [1.0, 2.3, 3.9, 5.2]
 
+    # Bare (a)/(b)/(c) labels only (2026-07-23, author request): the
+    # descriptive title text ("Frequency", "Bond-length change", "Vibrational
+    # score") is dropped -- each panel's own y-axis label already carries
+    # that information -- and the panel letter is centered, not left-aligned.
     panels = [
-        ("freq", r"Frequency (cm$^{-1}$)", "(a) Frequency"),
-        ("delta_b_mean", r"Averaged $|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$", "(b) Bond-length change"),
-        ("V_Stretch", r"$s[\mathrm{V_S}]$", "(c) Vibrational score"),
+        ("freq", r"Frequency (cm$^{-1}$)", "(a)"),
+        ("delta_b_mean", r"Averaged $|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$", "(b)"),
+        ("V_Stretch", r"$s[\mathrm{V_S}]$", "(c)"),
     ]
 
     fig, axes = plt.subplots(1, 3, figsize=(7.4, 3.3))
@@ -1761,7 +1758,7 @@ def plot_boxplots(
         ax.set_xticklabels(group_labels)
         ax.set_xlim(positions[0] - 0.7, positions[-1] + 0.7)
         ax.set_ylabel(ylabel)
-        ax.set_title(title, loc="left", fontweight="bold")
+        ax.set_title(title, loc="center", fontweight="bold")
 
     # tau_S/tau_B are no longer drawn on panel (c) (author decision,
     # 2026-07-09: threshold lines removed as visual clutter -- the values
@@ -1839,8 +1836,11 @@ def plot_mode_mixing(
     th = Thresholds.calibrated()
     fig, (ax_i, ax_n) = plt.subplots(1, 2, figsize=(7.2, 3.3), sharex=True, sharey=True)
 
-    for ax, ideal_flag, title in ((ax_i, "yes", "(a) Ideal molecules"),
-                                   (ax_n, "no", "(b) Non-ideal molecules")):
+    # Bare (a)/(b) labels only (2026-07-23, author request): "Ideal
+    # molecules"/"Non-ideal molecules" is dropped from the in-figure title
+    # (it's stated in the caption) and the panel letter is centered.
+    for ax, ideal_flag, title in ((ax_i, "yes", "(a)"),
+                                   (ax_n, "no", "(b)")):
         for ref in ("bend", "stretch"):
             cat = REF_LABEL_TO_CATEGORY[ref]
             sub = internal[(internal.ideal == ideal_flag) & (internal.ref_label == ref)]
@@ -1852,7 +1852,7 @@ def plot_mode_mixing(
         ax.axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
         ax.axhline(th.tau_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
         ax.set_xlabel(r"Averaged $|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$")
-        ax.set_title(title, loc="left", fontweight="bold")
+        ax.set_title(title, loc="center", fontweight="bold")
         ax.set_xlim(-0.03, internal["delta_b_mean"].max() * 1.08)
 
     ax_i.set_ylabel(r"$s[\mathrm{V_S}]$")
@@ -2108,17 +2108,18 @@ def plot_irrep_coupling(
             n_plotted += len(pts)
             plotted_molecules.update(pts["molecule"].unique().tolist())
         ax.set_xlabel(r"$|\mathbf{d}_{CA}|$ (central-atom displacement amplitude)")
-        ax.set_title(title, loc="left", fontweight="bold")
+        ax.set_title(title, loc="center", fontweight="bold")
         ax.set_xlim(-0.03, sub_df["|d_CA|"].max() * 1.08)
         ax.set_ylim(-0.05, 1.08)
         ax.legend(loc="center left", frameon=False, fontsize=LEGEND_FONTSIZE,
                    handletextpad=0.4, labelspacing=0.4, borderaxespad=0.2)
         return n_plotted, plotted_molecules
 
-    n_ab3, ab3_plotted = _plot_panel(ax_3, ab3, ab3_categories,
-                                      "(a) Trigonal-planar AB$_3$ (non-ideal)")
-    n_ab2, ab2_plotted = _plot_panel(ax_2, ab2, ab2_categories,
-                                      "(b) Bent AB$_2$ (non-ideal)")
+    # Bare (a)/(b) labels only (2026-07-23, author request): "Trigonal-planar
+    # AB3 (non-ideal)"/"Bent AB2 (non-ideal)" is dropped from the in-figure
+    # title (stated in the caption instead) and the panel letter is centered.
+    n_ab3, ab3_plotted = _plot_panel(ax_3, ab3, ab3_categories, "(a)")
+    n_ab2, ab2_plotted = _plot_panel(ax_2, ab2, ab2_categories, "(b)")
     ax_3.set_ylabel(r"Mode score $s[\mathrm{V}]$")
 
     # Molecules whose `shape` matched the panel but that contributed ZERO

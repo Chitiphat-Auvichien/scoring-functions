@@ -696,7 +696,13 @@ def plot_benzene_normal_modes(
     _style()
     normal = pd.read_csv(normal_csv)
 
-    fig, ax = plt.subplots(figsize=(3.8, 3.6))
+    # Widened 3.8->7.2in (2026-07-23, author request): leaves horizontal room
+    # to manually composite depicted normal-mode panel images beside the
+    # scatter (matching the group's earlier undergraduate report's layout),
+    # same rationale/target width as plot_bond_scores' own 2026-07-09 note on
+    # widening for this exact purpose. Height (3.6in) unchanged -- the plot
+    # itself doesn't need more vertical room, only more width alongside it.
+    fig, ax = plt.subplots(figsize=(7.2, 3.6))
 
     # Legend dedup: translation/rotation share the identical gray color
     # (CATEGORY_COLOR maps both to the same gray -- see that dict's comment

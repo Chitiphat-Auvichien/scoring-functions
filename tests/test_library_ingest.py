@@ -69,13 +69,17 @@ def _load():
 # ---------------------------------------------------------------------------
 
 def test_load_mol_roster_reads_all_70_with_basename_column():
-    """70, not 72 -- OH4/OF4 were removed from the roster 2026-07-09 (not
+    """68, not 72 -- two roster shrinks: OH4/OF4 removed 2026-07-09 (not
     genuine stationary points at this project's MP2/3-21G level, so their
     normal modes cannot be validly compared to the TeH4 ideal see-saw
-    template)."""
+    template; 72 -> 70), then SnO2/FH3 removed 2026-07-23 for the same
+    reason (70 -> 68; that session also re-tagged CO2 `ideal`, corrected
+    back to `non-ideal` 2026-07-24 -- a tag flip, not a roster-count change).
+    (Test name kept for history/grep-ability; the docstring is the source of
+    truth for the current count.)"""
     roster = load_mol_roster(DATA_DIR)
     assert {"molecule", "basename"}.issubset(roster.columns)
-    assert len(roster) == 70
+    assert len(roster) == 68
     assert roster["molecule"].is_unique
     assert roster["basename"].notna().all()
 
@@ -538,14 +542,21 @@ def test_resync_reference_metadata_real_roster_has_no_mismatches_or_missing_logs
     OH4/OF4 removal -- their rows were removed along with them), so
     resync_reference_metadata()'s ``if not cm_idx: skip`` condition is never
     true for a real roster row. 0 mode-count mismatches, 0 unresolvable
-    logs, 0 skipped_no_rows, all 70 resynced."""
+    logs, 0 skipped_no_rows.
+
+    **Updated again 2026-07-23** (commit `8a12c32`): SnO2/FH3 removed from
+    the roster for the same reason (not genuine stationary points at this
+    level), 70 -> 68 molecules, still all resynced with 0 mismatches/skips.
+    (2026-07-24's CO2 ideal -> non-ideal retag is a `mol_type` tag flip in
+    `mol_list_method.csv`, not a roster-membership or log-count change, so
+    it does not affect this test.)"""
     from src.library_ingest import resync_reference_metadata
 
     report = resync_reference_metadata(DATA_DIR, write=False)
     assert report["skipped_mode_count_mismatch"] == []
     assert report["skipped_no_log"] == []
     assert report["skipped_no_rows"] == []
-    assert len(report["resynced"]) == 70
+    assert len(report["resynced"]) == 68
 
 
 def test_resync_reference_metadata_is_a_true_dry_run_when_write_false():
@@ -692,11 +703,19 @@ def test_regenerate_characterised_modes_dry_run_against_real_tree():
     modes cannot be validly compared to the TeH4 ideal see-saw template),
     so the disk scan and the characterised_modes.csv file shrank in lockstep
     -- 72 -> 70, still idempotent (nothing dropped, nothing added, by
-    construction of this session's edit)."""
+    construction of this session's edit).
+
+    **2026-07-23 (commit `8a12c32`):** SnO2/FH3 removed from the roster and
+    on-disk logs/gjf/intermediate files for the same reason (not genuine
+    stationary points at this level), 70 -> 68, still idempotent. (2026-07-24's
+    CO2 ideal -> non-ideal `mol_type` retag touches only
+    `mol_list_method.csv`'s tag column, not any on-disk log/gjf file or
+    `characterised_modes.csv` row, so it does not change this disk-scan
+    count.)"""
     report = regenerate_characterised_modes(DATA_DIR, write=False)
-    assert report["n_disk_basenames"] == 70
-    assert report["n_old_molecules"] == 70
-    assert report["n_new_molecules"] == 70
+    assert report["n_disk_basenames"] == 68
+    assert report["n_old_molecules"] == 68
+    assert report["n_new_molecules"] == 68
     assert report["dropped_molecules"] == []
     assert report["added_molecules"] == []
     assert report["parse_failures"] == []

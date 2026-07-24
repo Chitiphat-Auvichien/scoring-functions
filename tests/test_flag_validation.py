@@ -111,24 +111,37 @@ def test_ground_truth_label_thresholds():
 
 
 def test_library_external_references_never_false_positive():
-    """The 70 geometry-backed library molecules' (2026-07-09: OH4/OF4 removed
-    from the roster -- both are not genuine stationary points at this
-    project's MP2/3-21G level (imaginary/negative frequencies), so their
-    normal modes cannot be validly compared to the TeH4 ideal see-saw
-    template; was 72 molecules/427 rows before removal, -12 external rows
-    for OH4+OF4's 2x(n_T=3+n_R=3) non-linear-AB4 references) REAL normal-mode
-    T/R references (415 rows total) are exact-by-construction Eckart-Sayvetz
+    """The 68 geometry-backed library molecules' REAL normal-mode T/R
+    references (404 rows total) are exact-by-construction Eckart-Sayvetz
     references (ground truth always CLEAN); this checks -- rather than
     assumes -- that the classifier never flags a single one of them
     MIXED_EXTERNAL_WITH_VIBRATION (FP=0), the much easier degenerate case
-    named in the task's parenthetical."""
+    named in the task's parenthetical.
+
+    Roster history behind 68/404 (2026-07-09: OH4/OF4 removed -- neither is
+    a genuine stationary point at this project's MP2/3-21G level
+    (imaginary/negative frequencies), so their normal modes cannot be
+    validly compared to the TeH4 ideal see-saw template; 72 -> 70 molecules,
+    427 -> 415 external rows, -12 for OH4+OF4's 2x(n_T=3+n_R=3) non-linear-
+    AB4 references). 2026-07-23 (commit `8a12c32`) removed `SnO2` (linear,
+    n_T=3+n_R=2=5 external rows) and `FH3` (T-shape, non-linear, 6 external
+    rows) from the roster entirely (both had negative/imaginary
+    frequencies), and separately re-tagged `CO2` `ideal`: 70 -> 68
+    molecules, 415 -> 404 external rows (-11, not -12, since SnO2 is linear
+    and only loses 5 rows, not 6). The CO2 ideal/non-ideal tag has no effect
+    on this count -- `library_external_flag_confusion()` filters on
+    `kind == 'external'` only, not on the `ideal` column -- so 2026-07-24's
+    CO2 -> non-ideal correction (this session, undoing 8a12c32's re-tag to
+    match linear siblings CS2/CSe2/CTe2) leaves 68/404 unchanged; verified
+    directly against the regenerated `library_scores.csv` rather than
+    assumed."""
     ext, stats = library_external_flag_confusion()
-    assert stats["n"] == 415
-    assert stats["n_molecules"] == 70
+    assert stats["n"] == 404
+    assert stats["n_molecules"] == 68
     assert stats["FP"] == 0
     assert stats["TP"] == 0
     assert stats["FN"] == 0
-    assert stats["TN"] == 415
+    assert stats["TN"] == 404
 
 
 if __name__ == "__main__":

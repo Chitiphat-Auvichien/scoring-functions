@@ -10,15 +10,62 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-09 (**OH4/OF4 excluded from the hydride library entirely** — neither is a
-> genuine stationary point at this project's MP2/3-21G level (imaginary/negative frequencies), so their
-> normal modes cannot be validly compared to the TeH4 ideal see-saw template; roster 72→70 (60→58
-> non-ideal single-centre), `--library`/`--calibrate`/`--figures` regenerated, the population's only
-> opposite-category stretch/bend crossings (found in the 2026-07-08 entry below) are gone with them —
-> confusion-matrix precision for stretch/bend is back to exactly 1.0; see RESUME HERE below. Full
-> `pytest` green (105/105).)
+> Last updated: 2026-07-24 (**CO2 re-tagged `non-ideal`** — corrects an inconsistency with its linear
+> siblings CS2/CSe2/CTe2 (already `non-ideal`); `--library`/`--calibrate`/`--figures` regenerated,
+> `tau_S`/`tau_B` unchanged bit-for-bit, `pytest` re-pinned and green (105/105). See RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-07-24 (CO2 ideal → non-ideal retag session):** `data/mol_list_method.csv` tagged CO2
+> `mol_type=ideal` since the 2026-07-23 session below (commit `8a12c32`, which removed `SnO2`/`FH3`
+> from the roster and separately re-tagged CO2 `ideal` in the same edit) — but CO2's linear-triatomic
+> siblings CS2/CSe2/CTe2 were already `non-ideal`, leaving CO2 as an unexplained odd one out with no
+> ideal linear representative reasoning recorded anywhere. Corrected by re-tagging CO2 `non-ideal`
+> (`data/mol_list_method.csv`) so all 4 linear-shape library molecules share one tier (no ideal-tier
+> "linear" shape remains — a real, intended consequence of this fix, not an oversight).
+> Reran `python main.py --library --calibrate --figures` (PowerShell/cmd users: no special handling
+> needed; on this Windows box under a non-UTF-8 console codepage, `--figures` crashed with
+> `UnicodeEncodeError` on an irrep-symbol character (`″`, U+2033) mid-print in `regenerate_all()`'s
+> verbose summary loop — **not** caused by this change, reproducible on any `--figures` run from a
+> cp1252 console; worked around this session with `PYTHONIOENCODING=utf-8`, not yet fixed at the
+> source in `src/figures.py`; flagged here as a follow-up, not silently patched).
+> **`tau_S`/`tau_B` UNCHANGED bit-for-bit** (0.9036817451504533 / 0.17326891344050538, confirmed from
+> the regenerated `thresholds.json`, not assumed) — CO2's stretch V_Stretch=1.0/bend V_Stretch=0.0 are
+> nowhere near either boundary in the smaller ideal population. `ideal_stretch_n`/`ideal_bend_n`:
+> 41/50 → 39/48 (CO2's 2 stretch + 2 bend modes move to the non-ideal tier). Roster: still 68 molecules
+> (10 ideal + 57 non-ideal + benzene; was 11 ideal + 56 non-ideal + benzene) — a tag flip, not a
+> roster-size change.
+> **Also discovered and fixed in this session:** the 2026-07-23 SnO2/FH3-removal + CO2→ideal commit
+> (`8a12c32`) had regenerated `data/results/*` and `data/figures/*` correctly but never updated
+> `tests/`'s pinned numbers or added its own session-log entry here — so `pytest` was already red
+> (roster-count pins stuck at 70, confusion-matrix pooled tp/n_ref stuck at pre-`8a12c32` values) before
+> this session's CO2 edit. Both this session's CO2 retag AND that backlog are repinned together now:
+> `tests/test_calibrate.py` (pooled stretch/bend tp/n_ref/recall/mixed_fraction — from `8a12c32`'s
+> SnO2/FH3 removal, not from today's CO2 retag — plus `n_ref_ideal`/`n_ref_nonideal`/`recall_nonideal`
+> — from today's CO2 retag specifically), `tests/test_flag_validation.py` (68 molecules/404 external
+> rows, was pinned at 70/415), `tests/test_library_ingest.py` (roster/disk-scan/resync counts 70 → 68
+> in three tests). `pytest`: 105/105 green. See `tests/test_calibrate.py`'s two updated docstrings for
+> the full before/after numbers and which change caused which delta.
+>
+> **2026-07-09 (figure-styling PRs merged on GitHub, picked up locally via `git pull --ff-only`):**
+> Two commits landed on `origin/main` through GitHub-web PRs (not a local agent session) and were
+> fast-forwarded into the local clone: (1) `5749aaf` "Simplify fig:confusion and fig:benzeneconfusion
+> heatmaps" — drops the empty `mixed_external`/"T/R*" column (confirmed 0 on both populations, not
+> assumed) and the divider line between external/internal blocks from both joint confusion matrices;
+> `fig:benzeneconfusion` additionally collapses its 6 individual external axis rows/columns (Tx..Rz)
+> into one "T/R" row/column since the per-axis detail is redundant with `fig:confusion`'s non-ideal
+> matrix (a new `_joint_confusion_table(..., collapse_external=True)` path + `"T/R"` entries added to
+> `REF_LABEL_TO_CATEGORY`/`CATEGORY_COLOR`/`CATEGORY_LABEL` in `src/figures.py`); `fig:confusion` itself
+> keeps all 6 individual axes. (2) `b5f3919` "Adjust fig:bondscores and fig:boxplots styling" —
+> `fig:bondscores` xlabel now uses `\boldsymbol` (mathtext supports it), width reduced 7.2in→~6.2in to
+> match the other main-text figures' A4 single-column target, scatter markers enlarged (s=7→13);
+> `fig:boxplots` panel (c) threshold-line/title renamed "Vibrational score", the ideal/non-ideal bracket
+> annotation below each panel removed (left to the caption), non-ideal outlier points now hollow
+> (border-only) to match the ideal/non-ideal fill convention used elsewhere. **Action needed:** these 4
+> regenerated PDFs/PNGs in `data/figures/` were confirmed (byte-`cmp`) to differ from their manually-
+> copied counterparts in `JCC/JCC_man_scoring/images/` — per [[feedback_manuscript-images-are-a-separate-copy]]
+> those manuscript copies are now stale and must be re-copied (and the manuscript recompiled) before
+> the next figure-accuracy check or submission pass; not yet done as of this pull.
+>
 > **2026-07-09 (OH4/OF4 exclusion session):** Author determined `OH4` and `OF4` — the two
 > lightest-ligand members of the see-saw AB4 family — are not genuine stationary points at the
 > MP2/3-21G level used throughout this project: Gaussian's output shows negative/imaginary frequencies

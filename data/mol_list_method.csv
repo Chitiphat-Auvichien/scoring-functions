@@ -21,7 +21,7 @@ non-ideal,bend,C2v,2,2,4,3,H2Se,H₂Se,TRUE,,,H2Se
 non-ideal,bend,C2v,2,2,4,3,SeF2,SeF₂,TRUE,,,SeF2
 non-ideal,bend,C2v,2,2,4,3,SeCl2,SeCl₂,TRUE,,,SeCl2
 non-ideal,bend,C2v,2,2,4,3,SeBr2,SeBr₂,TRUE,,,SeBr2
-ideal,linear,Dinfh,2,0,2,3,CO2,CO₂,TRUE,,,co2_mp2_3-21g
+non-ideal,linear,Dinfh,2,0,2,3,CO2,CO₂,TRUE,,,co2_mp2_3-21g
 non-ideal,linear,Dinfh,2,0,2,3,CS2,CS₂,TRUE,,,CS2
 non-ideal,linear,Dinfh,2,0,2,3,CSe2,CSe₂,TRUE,,,CSe2
 non-ideal,linear,Dinfh,2,0,2,3,CTe2,CTe₂,TRUE,,,CTe2

@@ -123,7 +123,7 @@ def benzene_emit_flag_confusion(data_dir="data", thresholds=None,
     thresholds = thresholds or Thresholds.calibrated()
 
     # Resolve benzene's canonical roster name (C6H6) to its actual on-disk
-    # basename (e.g. 'C6H6_MP2_3-21G_D6h') rather than hardcoding the old,
+    # basename (e.g. 'C6H6') rather than hardcoding the old,
     # now-renamed literal 'benzene' -- data/EMIT/*_EMIT.txt is keyed by the
     # same basename (2026-07-07 rename), so this resolves log/gjf/EMIT
     # consistently.

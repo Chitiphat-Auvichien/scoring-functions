@@ -11,11 +11,11 @@ These freeze the engine's numerical behaviour so regressions are caught immediat
 **2026-07-07 basename update:** the old `data/logs/water.log`/`data/gjf/water.gjf`
 and `data/logs/benzene.log`/`data/gjf/benzene.com` were replaced (not just
 renamed) by the author when `data/mol_list_method.csv`'s 72-molecule roster
-was finalized -- `H2O-MP2-321G` and `C6H6_MP2_3-21G_D6h` are the new,
+was finalized -- `H2O` and `C6H6` are the new,
 finalized on-disk basenames (`data/EMIT/*_EMIT.txt` renamed to match, same
 session). Benzene's EMIT-derived numbers below are numerically UNCHANGED
 (re-verified against a live run) -- the rename there was content-preserving.
-Water's numbers DID change: `H2O-MP2-321G.log` is a genuinely different
+Water's numbers DID change: `H2O.log` is a genuinely different
 (corrected) calculation from the old `water.log`, not the same water calc
 under a new name (confirmed: old `water.log`'s engine-parsed frequencies
 were 1628.029/3887.192/4005.506 cm-1, mismatching even the literature/
@@ -74,12 +74,12 @@ def _emit_table(mol):
 
 def test_water_tab_water():
     """Score-level water golden values from the finalized roster basename
-    H2O-MP2-321G (consensus s[R]). Re-derived from a live run against the
+    H2O (consensus s[R]). Re-derived from a live run against the
     new file -- these are NOT the manuscript's currently-typeset tab:water
     numbers (see module docstring: the old water.log was a different,
     mismatched calculation); manuscript reconciliation is separate,
     downstream work."""
-    _, t = _normal_table("H2O-MP2-321G")
+    _, t = _normal_table("H2O")
     for ext in ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"]:
         assert abs(t[ext][ext] - 1.0) < TOL, f"external {ext} should be 1.000"
     assert abs(t["Tx"]["Rz"] - 0.0411) < TOL
@@ -93,7 +93,7 @@ def test_water_tab_water():
 
 def test_co2_linear():
     """Linear molecule: molecular-axis rotation = 0 (n_R=2), no crash; 2 stretches, 2 bends."""
-    _, t = _normal_table("co2_mp2_3-21g")
+    _, t = _normal_table("CO2")
     diag = sorted(round(t[ax][ax], 3) for ax in ["Rx", "Ry", "Rz"])
     assert diag == [0.0, 1.0, 1.0], f"expected one zero R-external (axis), got {diag}"
     vibs = sorted(round(t[k]["V"], 3) for k in t if k.startswith("Vib"))
@@ -102,9 +102,9 @@ def test_co2_linear():
 
 def test_benzene_emit_targets():
     """Score-level benzene-EMIT targets from the manuscript. Numbers
-    unchanged vs. the pre-2026-07-07 basename (benzene -> C6H6_MP2_3-21G_D6h
+    unchanged vs. the pre-2026-07-07 basename (benzene -> C6H6
     was a content-preserving rename; re-verified against a live run)."""
-    _, t = _emit_table("C6H6_MP2_3-21G_D6h")
+    _, t = _emit_table("C6H6")
     assert abs(t["EMIT 34"]["V"] - 0.6667) < TOL
     assert abs(t["EMIT 35"]["V"] - 0.5774) < TOL
     assert abs(t["EMIT 36"]["V"] - 0.0) < TOL
@@ -148,7 +148,7 @@ def test_tscore_ignores_subthreshold_noise():
 
 def test_score_ranges():
     """s[T],s[R] in [-1,1]; s[V_S] in [0,1] across all modes of water and benzene."""
-    for mol in ["H2O-MP2-321G", "C6H6_MP2_3-21G_D6h"]:
+    for mol in ["H2O", "C6H6"]:
         _, t = _normal_table(mol)
         for lbl, row in t.items():
             for k in ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"]:
@@ -158,7 +158,7 @@ def test_score_ranges():
 
 def test_bond_decomposition_sums_to_vscore():
     """Sum of per-bond s_AB equals s[V_S] for every mode (water + benzene)."""
-    for mol in ["H2O-MP2-321G", "C6H6_MP2_3-21G_D6h"]:
+    for mol in ["H2O", "C6H6"]:
         gp = GaussianParser(os.path.join(ROOT, "data", "logs", f"{mol}.log"))
         data = gp.parse(parse_modes=True)
         scorer = ModeScorer(data["atoms"], data["coords"], data["bonds"])
@@ -170,7 +170,7 @@ def test_bond_decomposition_sums_to_vscore():
 
 def test_parser_fails_loud_on_bad_emit():
     """EMITParser raises on a malformed (too-short) matrix rather than scoring garbage."""
-    gp = GaussianParser(os.path.join(ROOT, "data", "logs", "H2O-MP2-321G.log"))
+    gp = GaussianParser(os.path.join(ROOT, "data", "logs", "H2O.log"))
     natoms = len(gp.parse(parse_modes=False)["atoms"])
     bad = tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False)
     bad.write("CART EMIT modes\n0.1 0.2 0.3\nEigenvalues:\n1.0\n")

@@ -1,17 +1,17 @@
 mol_type,shape,point_group,CN_shape,E,CN_geom,N_atom,molecule,molecule_ss,MP2_3-21G,current_method,note,basename
 ideal,bend,C2v,2,2,4,3,TeH2,TeH₂,TRUE,,,TeH2
 ideal,T-shape,C2v,3,2,5,4,IH3,IH₃,TRUE,,,IH3
-ideal,trigonal pyramidal,C3v,3,1,4,4,SbH3,SbH₃,TRUE,,,SbH3_MP2_3-21G
+ideal,trigonal pyramidal,C3v,3,1,4,4,SbH3,SbH₃,TRUE,,,SbH3
 ideal,trigonal planar,D3h,3,0,3,4,InH3,InH₃,TRUE,,,InH3
 ideal,see-saw,C2v,4,1,5,5,TeH4,TeH₄,TRUE,,,TeH4
-ideal,square planar,D4h,4,2,6,5,XeH4,XeH₄,FALSE,B3LYP/3-21G,convergence issue,XeH4_B3LYP_3-21G
+ideal,square planar,D4h,4,2,6,5,XeH4,XeH₄,FALSE,B3LYP/3-21G,convergence issue,XeH4
 ideal,tetrahedral,Td,4,0,4,5,SnH4,SnH₄,TRUE,,,SnH4
-ideal,trigonal bipyramidal,D3h,5,0,5,6,SbH5,SbH₅,TRUE,,,SbH5_MP2_3-21G
+ideal,trigonal bipyramidal,D3h,5,0,5,6,SbH5,SbH₅,TRUE,,,SbH5
 ideal,square pyramidal,C4v,5,1,6,6,XeOH4,XeOH₄,FALSE,HF/STO-3G,convergence issue,XeOH4
 ideal,octahedral,Oh,6,0,6,7,TeH6,TeH₆,TRUE,,,TeH6
-non-ideal,bend,C2v,2,2,4,3,H2O,H₂O,TRUE,,,H2O-MP2-321G
-non-ideal,bend,C2v,2,2,4,3,OF2,OF₂,TRUE,,,OF2_MP2_3-21G
-non-ideal,bend,C2v,2,2,4,3,OCl2,OCl₂,TRUE,,,OCl2_MP2_3-21G
+non-ideal,bend,C2v,2,2,4,3,H2O,H₂O,TRUE,,,H2O
+non-ideal,bend,C2v,2,2,4,3,OF2,OF₂,TRUE,,,OF2
+non-ideal,bend,C2v,2,2,4,3,OCl2,OCl₂,TRUE,,,OCl2
 non-ideal,bend,C2v,2,2,4,3,Br2O,Br₂O,TRUE,,,Br2O
 non-ideal,bend,C2v,2,2,4,3,H2S,H₂S,TRUE,,,H2S
 non-ideal,bend,C2v,2,2,4,3,SF2,SF₂,TRUE,,,SF2
@@ -21,35 +21,35 @@ non-ideal,bend,C2v,2,2,4,3,H2Se,H₂Se,TRUE,,,H2Se
 non-ideal,bend,C2v,2,2,4,3,SeF2,SeF₂,TRUE,,,SeF2
 non-ideal,bend,C2v,2,2,4,3,SeCl2,SeCl₂,TRUE,,,SeCl2
 non-ideal,bend,C2v,2,2,4,3,SeBr2,SeBr₂,TRUE,,,SeBr2
-non-ideal,linear,Dinfh,2,0,2,3,CO2,CO₂,TRUE,,,co2_mp2_3-21g
+non-ideal,linear,Dinfh,2,0,2,3,CO2,CO₂,TRUE,,,CO2
 non-ideal,linear,Dinfh,2,0,2,3,CS2,CS₂,TRUE,,,CS2
 non-ideal,linear,Dinfh,2,0,2,3,CSe2,CSe₂,TRUE,,,CSe2
 non-ideal,linear,Dinfh,2,0,2,3,CTe2,CTe₂,TRUE,,,CTe2
-non-ideal,T-shape,C2v,3,2,5,4,F4,F₄,FALSE,B3LYP/3-21G,convergence issue,f4_dft
-non-ideal,T-shape,C2v,3,2,5,4,FCl3,FCl₃,TRUE,,,fcl3
-non-ideal,T-shape,C2v,3,2,5,4,FBr3,FBr₃,TRUE,,,fbr3
-non-ideal,T-shape,C2v,3,2,5,4,ClH3,ClH₃,FALSE,B3LYP/3-21G,convergence issue,clh3_dft
-non-ideal,T-shape,C2v,3,2,5,4,ClF3,ClF₃,TRUE,,,clf3
-non-ideal,T-shape,C2v,3,2,5,4,ClBr3,ClBr₃,TRUE,,,clbr3
-non-ideal,T-shape,C2v,3,2,5,4,BrH3,BrH₃,TRUE,,,brh3
-non-ideal,T-shape,C2v,3,2,5,4,BrF3,BrF₃,TRUE,,,brf3
-non-ideal,T-shape,C2v,3,2,5,4,BrCl3,BrCl₃,FALSE,MP2/cc-pVDZ,logic error with 3-21G,BrCl3_MP2_cc
-non-ideal,trigonal pyramidal,C3v,3,1,4,4,NH3,NH₃,TRUE,,,nh3-mp2
+non-ideal,T-shape,C2v,3,2,5,4,F4,F₄,FALSE,B3LYP/3-21G,convergence issue,F4
+non-ideal,T-shape,C2v,3,2,5,4,FCl3,FCl₃,TRUE,,,FCl3
+non-ideal,T-shape,C2v,3,2,5,4,FBr3,FBr₃,TRUE,,,FBr3
+non-ideal,T-shape,C2v,3,2,5,4,ClH3,ClH₃,FALSE,B3LYP/3-21G,convergence issue,ClH3
+non-ideal,T-shape,C2v,3,2,5,4,ClF3,ClF₃,TRUE,,,ClF3
+non-ideal,T-shape,C2v,3,2,5,4,ClBr3,ClBr₃,TRUE,,,ClBr3
+non-ideal,T-shape,C2v,3,2,5,4,BrH3,BrH₃,TRUE,,,BrH3
+non-ideal,T-shape,C2v,3,2,5,4,BrF3,BrF₃,TRUE,,,BrF3
+non-ideal,T-shape,C2v,3,2,5,4,BrCl3,BrCl₃,FALSE,MP2/cc-pVDZ,logic error with 3-21G,BrCl3
+non-ideal,trigonal pyramidal,C3v,3,1,4,4,NH3,NH₃,TRUE,,,NH3
 non-ideal,trigonal pyramidal,C3v,3,1,4,4,NF3,NF₃,TRUE,,,NF3
-non-ideal,trigonal pyramidal,C3v,3,1,4,4,NCl3,NCl₃,FALSE,MP2/aug-cc-pVDZ,,NCl3-MP2-augcc
-non-ideal,trigonal pyramidal,C3v,3,1,4,4,NBr3,NBr₃,FALSE,MP2/6-31G,logic error with 3-21G,NBr3-MP2-631G
+non-ideal,trigonal pyramidal,C3v,3,1,4,4,NCl3,NCl₃,FALSE,MP2/aug-cc-pVDZ,,NCl3
+non-ideal,trigonal pyramidal,C3v,3,1,4,4,NBr3,NBr₃,FALSE,MP2/6-31G,logic error with 3-21G,NBr3
 non-ideal,trigonal pyramidal,C3v,3,1,4,4,PH3,PH₃,TRUE,,,PH3
-non-ideal,trigonal pyramidal,C3v,3,1,4,4,PF3,PF₃,FALSE,MP2/6-31G,logic error with 3-21G,PF3-6-31g
-non-ideal,trigonal pyramidal,C3v,3,1,4,4,PCl3,PCl₃,FALSE,MP2/6-311G,logic error with 3-21G,PCl3-6-311g
-non-ideal,trigonal pyramidal,C3v,3,1,4,4,PBr3,PBr₃,FALSE,MP2/6-311G,logic error with 3-21G,PBr3-6-311g
+non-ideal,trigonal pyramidal,C3v,3,1,4,4,PF3,PF₃,FALSE,MP2/6-31G,logic error with 3-21G,PF3
+non-ideal,trigonal pyramidal,C3v,3,1,4,4,PCl3,PCl₃,FALSE,MP2/6-311G,logic error with 3-21G,PCl3
+non-ideal,trigonal pyramidal,C3v,3,1,4,4,PBr3,PBr₃,FALSE,MP2/6-311G,logic error with 3-21G,PBr3
 non-ideal,trigonal pyramidal,C3v,3,1,4,4,AsH3,AsH₃,TRUE,,,AsH3
 non-ideal,trigonal pyramidal,C3v,3,1,4,4,AsF3,AsF₃,TRUE,,,AsF3
-non-ideal,trigonal pyramidal,C3v,3,1,4,4,AsCl3,AsCl₃,FALSE,MP2/cc-pVDZ,logic error with 3-21G,AsCl3-MP2-cc
-non-ideal,trigonal pyramidal,C3v,3,1,4,4,AsBr3,AsBr₃,FALSE,MP2/6-311G,logic error with 3-21G,AsBr3-MP2-6311G
+non-ideal,trigonal pyramidal,C3v,3,1,4,4,AsCl3,AsCl₃,FALSE,MP2/cc-pVDZ,logic error with 3-21G,AsCl3
+non-ideal,trigonal pyramidal,C3v,3,1,4,4,AsBr3,AsBr₃,FALSE,MP2/6-311G,logic error with 3-21G,AsBr3
 non-ideal,trigonal planar,D3h,3,0,3,4,BH3,BH₃,TRUE,,,BH3
 non-ideal,trigonal planar,D3h,3,0,3,4,BF3,BF₃,TRUE,,,BF3
 non-ideal,trigonal planar,D3h,3,0,3,4,BCl3,BCl₃,TRUE,,,BCl3
-non-ideal,trigonal planar,D3h,3,0,3,4,BBr3,BBr₃,FALSE,MP2/6-31G,logic error with 3-21G,BBr3_MP2_6-31G
+non-ideal,trigonal planar,D3h,3,0,3,4,BBr3,BBr₃,FALSE,MP2/6-31G,logic error with 3-21G,BBr3
 non-ideal,trigonal planar,D3h,3,0,3,4,AlH3,AlH₃,TRUE,,,AlH3
 non-ideal,trigonal planar,D3h,3,0,3,4,AlF3,AlF₃,TRUE,,,AlF3
 non-ideal,trigonal planar,D3h,3,0,3,4,AlCl3,AlCl₃,TRUE,,some mode irreps are error,AlCl3
@@ -57,13 +57,13 @@ non-ideal,trigonal planar,D3h,3,0,3,4,AlBr3,AlBr₃,TRUE,,,AlBr3
 non-ideal,trigonal planar,D3h,3,0,3,4,GaH3,GaH₃,TRUE,,,GaH3
 non-ideal,trigonal planar,D3h,3,0,3,4,GaF3,GaF₃,TRUE,,,GaF3
 non-ideal,trigonal planar,D3h,3,0,3,4,GaCl3,GaCl₃,TRUE,,some mode irreps are error,GaCl3
-non-ideal,see-saw,C2v,4,1,5,5,OCl4,OCl₄,TRUE,,,ocl4
-non-ideal,see-saw,C2v,4,1,5,5,OBr4,OBr₄,FALSE,MP2/cc-pVDZ,symmetry broken with 3-21G,OBr4_MP2_cc-pVDZ
-non-ideal,see-saw,C2v,4,1,5,5,SH4,SH₄,TRUE,,,sh4
-non-ideal,see-saw,C2v,4,1,5,5,SF4,SF₄,TRUE,,,sf4
-non-ideal,see-saw,C2v,4,1,5,5,SCl4,SCl₄,FALSE,MP2/cc-pVDZ,logic error with 3-21G,SCl4_MP2_cc-pVDZ
-non-ideal,see-saw,C2v,4,1,5,5,SBr4,SBr₄,FALSE,MP2/cc-pVDZ,logic error with 3-21G,SBr4_MP2_cc-pVDZ
-non-ideal,see-saw,C2v,4,1,5,5,SeH4,SeH₄,TRUE,,,seh4
-non-ideal,see-saw,C2v,4,1,5,5,SeF4,SeF₄,FALSE,MP2/aug-cc-pVDZ,,SeF4_MP2_aug-cc-pVDZ
-non-ideal,see-saw,C2v,4,1,5,5,SeCl4,SeCl₄,FALSE,MP2/STO-3G,unstable in gas phase (becomes Td with 3-21G),secl4_C2v
-multi-centre,hexagonal,D6h,-,-,-,12,C6H6,C₆H₆,TRUE,,,C6H6_MP2_3-21G_D6h
+non-ideal,see-saw,C2v,4,1,5,5,OCl4,OCl₄,TRUE,,,OCl4
+non-ideal,see-saw,C2v,4,1,5,5,OBr4,OBr₄,FALSE,MP2/cc-pVDZ,symmetry broken with 3-21G,OBr4
+non-ideal,see-saw,C2v,4,1,5,5,SH4,SH₄,TRUE,,,SH4
+non-ideal,see-saw,C2v,4,1,5,5,SF4,SF₄,TRUE,,,SF4
+non-ideal,see-saw,C2v,4,1,5,5,SCl4,SCl₄,FALSE,MP2/cc-pVDZ,logic error with 3-21G,SCl4
+non-ideal,see-saw,C2v,4,1,5,5,SBr4,SBr₄,FALSE,MP2/cc-pVDZ,logic error with 3-21G,SBr4
+non-ideal,see-saw,C2v,4,1,5,5,SeH4,SeH₄,TRUE,,,SeH4
+non-ideal,see-saw,C2v,4,1,5,5,SeF4,SeF₄,FALSE,MP2/aug-cc-pVDZ,,SeF4
+non-ideal,see-saw,C2v,4,1,5,5,SeCl4,SeCl₄,FALSE,MP2/STO-3G,unstable in gas phase (becomes Td with 3-21G),SeCl4
+multi-centre,hexagonal,D6h,-,-,-,12,C6H6,C₆H₆,TRUE,,,C6H6

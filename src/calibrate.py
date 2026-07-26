@@ -210,7 +210,7 @@ def _load_geometry_pool(lib_df, data_dir="data"):
 
 def _load_benzene_emit(data_dir="data"):
     """Load benzene's EMIT modes via its roster-resolved basename (C6H6 ->
-    e.g. 'C6H6_MP2_3-21G_D6h') rather than a hardcoded literal 'benzene' --
+    e.g. 'C6H6') rather than a hardcoded literal 'benzene' --
     the log/gjf files were renamed to the finalized roster basename, but
     data/EMIT/*_EMIT.txt is keyed by the SAME basename (also renamed,
     2026-07-07), so this still resolves all three file types consistently."""

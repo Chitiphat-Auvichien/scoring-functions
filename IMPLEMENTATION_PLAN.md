@@ -496,7 +496,7 @@
 > *different* legacy file's irrep/bond-length columns; this TODO is about the *label* columns
 > `attach_labels()` uses).
 > **2026-07-07 (OBr4 connectivity gap fixed — full 72/72 roster coverage reached):**
-> `data/gjf/OBr4_MP2_cc-pVDZ.com`'s `geom=connectivity` block had bare atom
+> `data/gjf/OBr4.com`'s `geom=connectivity` block had bare atom
 > indices with no bond-pair lines; added the missing O-Br×4 bond lines (bond
 > order 1.0, matching its see-saw AB4 structure) and regenerated
 > `library_scores.csv`/`thresholds.json`/`tau_sensitivity_sweep.csv`/figures
@@ -515,7 +515,7 @@
 > being committed; nothing from that violation shipped un-reviewed.
 > **2026-07-07 (manuscript scope reconciliation — Table~\ref{tab:library} rebuilt from the finalized
 > roster, all stale library-population counts replaced with live-verified numbers, `tab:water`
-> refreshed from the new `H2O-MP2-321G.log`, two broken SI cross-references fixed): DEFERRED, known
+> refreshed from the new `H2O.log`, two broken SI cross-references fixed): DEFERRED, known
 > TODO:** SI Figure S2 (`fig:irrep_coupling`, `JCC_SI_irrep_coupling.tex`) still reads from a separate,
 > older `data/data_score.csv` that predates `mol_list_method.csv`'s roster finalization — it is missing
 > `BBr3` (now in the roster) and includes 5 molecules (`Cl2O`, `NO2`, `O3`, `SO2`, `TeF2`) that are not
@@ -551,7 +551,7 @@
 >
 > **Regeneration results:** `python main.py --library` succeeded: 71/72 roster molecules scored
 > (`data/results/library_scores.csv`, 882 rows, `has_geometry==True` for every row). The 1 exception —
-> **`OBr4`** (basename `OBr4_MP2_cc-pVDZ`) — is warned-and-skipped, NOT a silent drop: its `.com` file's
+> **`OBr4`** (basename `OBr4`) — is warned-and-skipped, NOT a silent drop: its `.com` file's
 > `geom=connectivity` block lists atom indices with no actual bond-pair lines, so the parser correctly
 > finds zero bonds and `build_scorer_and_final` raises `ValueError` per its documented fail-loud
 > contract. This is a genuine source-file data gap (the `.gjf` needs bond lines added), not a
@@ -573,7 +573,7 @@
 > `data_score.csv` needs regenerating from the roster before Figure S2's molecule-count/series claims
 > can be trusted. All other stale roster-count numbers in the main `.tex` and the other four SI files
 > WERE reconciled this session against the regenerated `data/results/library_scores.csv`/
-> `thresholds.json`/`rigorous_tier_consistency_table.csv`/`H2O-MP2-321G_normal_classified.csv`.
+> `thresholds.json`/`rigorous_tier_consistency_table.csv`/`H2O_normal_classified.csv`.
 >
 > `src.calibrate.sweep_tau_tr` hard-requires `data/logs/benzene.log` (benzene EMIT is baked into the
 > tau_TR evaluation set, not optional), so `--calibrate` cannot run at all right now —
@@ -590,7 +590,7 @@
 > data/logs/of2.log data/gjf/of2.gjf` — pure restoration of committed content, does not touch any new
 > roster file) but this session's tooling explicitly denied that action (flagged as an irreversible,
 > unauthorized destructive op on files never named this session) — **needs the author's explicit
-> go-ahead**, not a workaround. IMPORTANT finding while diagnosing this: `data/logs/H2O-MP2-321G.log`
+> go-ahead**, not a workaround. IMPORTANT finding while diagnosing this: `data/logs/H2O.log`
 > (the NEW roster basename for H2O) is NOT a drop-in replacement for the old `water.log` — its
 > score-level numbers differ substantively (e.g. Vib1 bend `V_Stretch` 0.134 vs. tab:water's pinned
 > 0.061), confirming it's a genuinely different calculation serving the library-scale statistics, not
@@ -605,26 +605,26 @@
 > **2026-07-07 (RESOLVED — coordinator correction, do NOT restore old files):** the blocker above was
 > mis-diagnosed as an accidental deletion. It was the author's own deliberate local edit finalizing the
 > 72-molecule roster (old `benzene.log`/`water.log`/`SbH3.log`/etc. replaced by the new method-suffixed
-> basenames, e.g. `C6H6_MP2_3-21G_D6h`, `H2O-MP2-321G`) — restoring them would have reintroduced stale,
+> basenames, e.g. `C6H6`, `H2O`) — restoring them would have reintroduced stale,
 > superseded data. The actual bug: exactly two production call sites still hardcoded a literal
 > `"benzene"` mol_name (`src/calibrate.py::_load_benzene_emit`, `src/flag_validation.py`'s two
 > `load_inputs`/`run_projection_pipeline` calls) instead of resolving it through the roster, and
 > `data/EMIT/benzene_EMIT.txt`/`water_EMIT.txt` hadn't been renamed to match the new log/gjf basenames —
 > so `load_inputs(base, "emit", ...)` had no single basename under which all three file types (log, gjf,
-> EMIT) existed. Fix: renamed the two EMIT files (`C6H6_MP2_3-21G_D6h_EMIT.txt`,
-> `H2O-MP2-321G_EMIT.txt`) and repointed both call sites through
+> EMIT) existed. Fix: renamed the two EMIT files (`C6H6_EMIT.txt`,
+> `H2O_EMIT.txt`) and repointed both call sites through
 > `library_ingest.resolve_log_basename("C6H6", data_dir)` — the same pattern already used everywhere
 > else in the roster-driven code. `--calibrate`/`--figures` now succeed end-to-end with genuinely fresh
 > output (`thresholds.json`: `tau_S` 0.90368→0.9036817451504533, `tau_B` 0.17327→0.17326891344050538,
 > `plateau_criterion` prose now says "71 geometry-backed library molecules" — computed via
 > `_geometry_pool_molecules()`, confirming that helper's own fix from earlier this session works). All
-> 79 tests pass (was 50/79). Test fixture basenames repointed (`water`→`H2O-MP2-321G`,
-> `benzene`→`C6H6_MP2_3-21G_D6h`) across `test_calibrate.py`/`test_classifier.py`/
+> 79 tests pass (was 50/79). Test fixture basenames repointed (`water`→`H2O`,
+> `benzene`→`C6H6`) across `test_calibrate.py`/`test_classifier.py`/
 > `test_flag_validation.py`/`test_intermediate_cache.py`/`test_projection.py`/`test_scores.py`.
 > Confirmed (diagnostic re-verified, not assumed): benzene's rename is content-preserving — every
 > benzene-referencing numeric assertion is UNCHANGED across all 6 files. Water's is NOT — `tab:water`'s
 > pinned values in `test_scores.py::test_water_tab_water` were re-derived from a live run against
-> `H2O-MP2-321G.log` (a genuinely different/corrected calculation): `Tx`→`Rz` 0.049→0.0411,
+> `H2O.log` (a genuinely different/corrected calculation): `Tx`→`Rz` 0.049→0.0411,
 > Vib1(bend) `V` 0.061→0.1343, Vib2(ν_s) `V` 1.000→0.9966, Vib3(ν_as) `V` 0.998→0.9984 (~unchanged),
 > Vib3 `Tx` −0.190→−0.1963, Vib3 `Rz` −0.295→−0.2959 — flagged for `lead-author`/manuscript
 > reconciliation (Phase D), not fixed here. Confusion-matrix population numbers in `test_calibrate.py`
@@ -1000,7 +1000,7 @@
 > **Final library size:** 25 molecules, 303 rows (157 internal + 146 external) — down from the prior
 > Excel-driven baseline's ~69 molecules / 659 rows, a real and disclosed shrinkage until the author drops
 > in more `.log`/`.gjf` pairs (not a bug; `discover_geometry_molecules()` currently returns exactly
-> `water, benzene, co2_mp2_3-21g` + 22 hydride-library molecules, matching `data/logs/`+`data/gjf/` as of
+> `water, benzene, CO2` + 22 hydride-library molecules, matching `data/logs/`+`data/gjf/` as of
 > this session). Recalibrated end-to-end against this new population: `python main.py --calibrate` froze
 > `tau_TR=0.95, tau_S=0.9036817451504533, tau_B=0.17326891344050538` (barely shifted in the 5th decimal
 > from the stale pre-session values; `tau_sensitivity_sweep.csv` came back BYTE-IDENTICAL, a nice
@@ -1796,9 +1796,9 @@ library scores from the Excel file.
       (down-weights non-tangential in-plane motion). I briefly switched to the ω-form (÷`|ω|`) and reverted;
       code is byte-identical to the original. Externals ±1; ranges hold; EMIT 2-vs-9 inversion `|Ry| 0.143
       vs 0.215`. JCC `eq:rscore` rewritten to the separate-normalization form + new `sin φ` paragraph.
-- [x] **Linear-molecule guard — VERIFIED on CO₂ (2026-06-30).** `co2_mp2_3-21g` runs cleanly: molecular-axis
+- [x] **Linear-molecule guard — VERIFIED on CO₂ (2026-06-30).** `CO2` runs cleanly: molecular-axis
       rotation `s[Rx]=0` (n_R=2), `Ry=Rz=1.000`, no divide-by-zero; 2 stretches `V_S=1.000`, 2 degenerate
-      bends `V_S=0`. Result in `data/results/co2_mp2_3-21g_normal_scores.csv`. Automated regression → harness below.
+      bends `V_S=0`. Result in `data/results/CO2_normal_scores.csv`. Automated regression → harness below.
 - [x] `src/scoring.py`: added `score_bonds()` exposing per-bond `s_AB` (factored `Vscore` loop into
       `_bond_contributions()`); asserts `Σ s_AB == s[V_S]` (tol 1e-6; observed err ≤2.2e-16). Vscore value unchanged.
 - [x] **Range-invariant asserts:** `s[T],s[R] ∈ [−1,1]`; `s[V_S] ∈ [0,1]` — enforced in `calculate_scores`.
@@ -1808,7 +1808,7 @@ library scores from the Excel file.
 - [ ] **Remaining fail-loud (deferred to headless refactor):** raise on missing bonds rather than silently
       scoring wrong `V`; replace the catch-all `except` swallow in `main` with explicit errors.
 - [x] **Add a linear molecule (CO₂)** to exercise the `n_R=2` / `N_Q` branch (otherwise unexercised by
-      water/benzene). Done — `co2_mp2_3-21g` log+com in repo, runs clean (see Linear-molecule guard above).
+      water/benzene). Done — `CO2` log+com in repo, runs clean (see Linear-molecule guard above).
 - [x] **Golden-reference regression harness — DONE 2026-06-30.** `tests/test_scores.py` (pytest +
       standalone runner; `pytest` in `requirements-dev.txt`). 6 tests, all green: `tab:water` to 3 dp,
       `Σ s_AB == s[V_S]`, score ranges, CO₂ linear (n_R=2), benzene-EMIT targets, parser fail-loud. Run
@@ -1866,7 +1866,7 @@ library scores from the Excel file.
 - [x] Output `data/results/<mol>_classified.csv` (scores + label + annotations + `s_AB`) — **DONE for all
       4 required combos:** `water_normal_classified.csv`, `water_EMIT_classified.csv`,
       `benzene_normal_classified.csv`, `benzene_EMIT_classified.csv` (also verified for
-      `co2_mp2_3-21g_normal` as an extra linear-molecule check — see Changelog bug/fix). Columns: Mode,
+      `CO2_normal` as an extra linear-molecule check — see Changelog bug/fix). Columns: Mode,
       Freq/Eigenvalue, Tx,Ty,Tz,Rx,Ry,Rz,V_Stretch, label, annotation, s_AB (semicolon-joined
       `i-j:value`, 1-based atom indices, blank when not attached).
 - [ ] Figure `fig:benzene`: `s[V_S]` vs freq, and score vs projected NM contribution (highlight EMIT 2/9,
@@ -2639,10 +2639,10 @@ library scores from the Excel file.
   mode (`n_R=2` should exclude it). Left unfiltered, it entered the candidate pool, was never claimed by
   any Step-2 slot (`external_slots()` correctly omits Rx when linear), and fell through Step 4 to be
   mislabeled `BENDING` (`V=0≤τ_B`) — a spurious `3N+1`-mode pool with a meaningless row (confirmed on
-  `co2_mp2_3-21g`, previously unexercised since no test ran a linear molecule through the classifier).
+  `CO2`, previously unexercised since no test ran a linear molecule through the classifier).
   Fixed in `main.build_scorer_and_final()`: when `is_linear(scorer)`, drop the `"Rx"` entry from
   `scorer.construct_R()`'s output before assembling `final`, so the on-axis placeholder never enters
-  either the Step-1 scores or the classifier's pool. Verified: `co2_mp2_3-21g` now yields exactly 9
+  either the Step-1 scores or the classifier's pool. Verified: `CO2` now yields exactly 9
   rows (`3N`) with `Ry`/`Rz` clean and 2 real bends + 2 real stretches, no spurious `Rx` row; water/
   benzene (neither linear) unaffected (row counts unchanged, byte-identical scores). Added
   `test_co2_linear_no_spurious_onaxis_mode` regression test. Not yet resolved (flagged in the Phase-2

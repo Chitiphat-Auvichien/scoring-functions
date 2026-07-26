@@ -8,7 +8,7 @@ Run from ``Github/scoring-functions/``:
 
 Uses real on-disk .log files already in data/logs/ (no synthetic fixtures),
 matching the convention the rest of tests/ uses:
-  - data/logs/C6H6_MP2_3-21G_D6h.log -- clean HP-block case (real irreps).
+  - data/logs/C6H6.log -- clean HP-block case (real irreps).
   - data/logs/AlCl3.log -- HP block with placeholder irreps ('?A', '?B',
     and one real symbol 'A2"') -- must be stored as-is, not validated.
   - data/logs/TeH2.log -- has BOTH an HP block and a (redundant) Standard
@@ -42,8 +42,8 @@ def _parse(mol):
 
 def test_benzene_hp_block_mu_k_irrep():
     """Clean HP-block case: first 6 modes' mu/k/irrep match the raw .log
-    (data/logs/C6H6_MP2_3-21G_D6h.log:1789-1793) exactly."""
-    raw = _parse("C6H6_MP2_3-21G_D6h")
+    (data/logs/C6H6.log:1789-1793) exactly."""
+    raw = _parse("C6H6")
     modes = raw["modes"]
     assert len(modes) == 30  # 3*12-6
 
@@ -160,8 +160,8 @@ def _roundtrip(mol, tmp_path):
 
 
 def test_intermediate_roundtrip_water(tmp_path):
-    tmp_file = os.path.join(str(tmp_path), "H2O-MP2-321G_normal_data.txt")
-    raw, loaded = _roundtrip("H2O-MP2-321G", tmp_file)
+    tmp_file = os.path.join(str(tmp_path), "H2O_normal_data.txt")
+    raw, loaded = _roundtrip("H2O", tmp_file)
 
     assert loaded["atoms"] == raw["atoms"]
     assert sorted(loaded["bonds"]) == sorted(raw["bonds"])
@@ -180,8 +180,8 @@ def test_intermediate_roundtrip_water(tmp_path):
 def test_intermediate_roundtrip_benzene_multi_block(tmp_path):
     """30 modes -> 6 frequency blocks of 5 -- exercises the block-boundary
     logic (5-modes-per-block) end to end, not just a single block."""
-    tmp_file = os.path.join(str(tmp_path), "C6H6_MP2_3-21G_D6h_normal_data.txt")
-    raw, loaded = _roundtrip("C6H6_MP2_3-21G_D6h", tmp_file)
+    tmp_file = os.path.join(str(tmp_path), "C6H6_normal_data.txt")
+    raw, loaded = _roundtrip("C6H6", tmp_file)
 
     assert len(loaded["modes"]) == 30
     for m1, m2 in zip(raw["modes"], loaded["modes"]):
@@ -193,20 +193,20 @@ def test_intermediate_roundtrip_benzene_multi_block(tmp_path):
 
 
 def test_intermediate_header_line_matches_natoms_linear_flag(tmp_path):
-    tmp_file = os.path.join(str(tmp_path), "H2O-MP2-321G_normal_data.txt")
-    raw, _ = _roundtrip("H2O-MP2-321G", tmp_file)
+    tmp_file = os.path.join(str(tmp_path), "H2O_normal_data.txt")
+    raw, _ = _roundtrip("H2O", tmp_file)
     with open(tmp_file) as f:
         header = f.readline().split()
     assert int(header[0]) == 3          # natoms
     assert int(header[1]) == 0          # water is nonlinear
-    assert header[2] == "H2O-MP2-321G"  # molecule name derived from filename
+    assert header[2] == "H2O"  # molecule name derived from filename
 
 
 def test_intermediate_load_fails_loud_on_tampered_linear_flag(tmp_path):
     """load() must fail loud if the header's LINEAR flag disagrees with the
     actual mode count -- do not silently trust a stale/hand-edited flag."""
-    tmp_file = os.path.join(str(tmp_path), "H2O-MP2-321G_normal_data.txt")
-    raw = _parse("H2O-MP2-321G")
+    tmp_file = os.path.join(str(tmp_path), "H2O_normal_data.txt")
+    raw = _parse("H2O")
     IntermediateIO.save(raw, tmp_file)
 
     with open(tmp_file) as f:
@@ -229,8 +229,8 @@ def test_intermediate_load_accepts_bare_neighbor_pair(tmp_path):
     """A hand-edited bare 'atom neighbor' bond line (CLAUDE.md's documented
     manual bond-repair workflow, e.g. '1 2') must be accepted, defaulting
     bond order to 1.0, alongside the full 'atom neighbor order' form."""
-    tmp_file = os.path.join(str(tmp_path), "H2O-MP2-321G_normal_data.txt")
-    raw = _parse("H2O-MP2-321G")
+    tmp_file = os.path.join(str(tmp_path), "H2O_normal_data.txt")
+    raw = _parse("H2O")
     IntermediateIO.save(raw, tmp_file)
 
     with open(tmp_file) as f:

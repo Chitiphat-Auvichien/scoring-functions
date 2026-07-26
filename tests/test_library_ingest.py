@@ -98,11 +98,11 @@ def test_load_mol_roster_raises_on_missing_required_column():
 def test_resolve_log_basename_matches_roster_for_known_molecules():
     """resolve_log_basename() is now a pure roster lookup (no on-disk
     existence check) -- values must match data/mol_list_method.csv exactly."""
-    assert resolve_log_basename("SbH3", DATA_DIR) == "SbH3_MP2_3-21G"
-    assert resolve_log_basename("BrF3", DATA_DIR) == "brf3"
-    assert resolve_log_basename("H2O", DATA_DIR) == "H2O-MP2-321G"
-    assert resolve_log_basename("C6H6", DATA_DIR) == "C6H6_MP2_3-21G_D6h"
-    assert resolve_log_basename("SeCl4", DATA_DIR) == "secl4_C2v"
+    assert resolve_log_basename("SbH3", DATA_DIR) == "SbH3"
+    assert resolve_log_basename("BrF3", DATA_DIR) == "BrF3"
+    assert resolve_log_basename("H2O", DATA_DIR) == "H2O"
+    assert resolve_log_basename("C6H6", DATA_DIR) == "C6H6"
+    assert resolve_log_basename("SeCl4", DATA_DIR) == "SeCl4"
 
 
 def test_resolve_log_basename_returns_none_for_unknown_molecule():
@@ -602,19 +602,19 @@ def test_resync_reference_metadata_synthetic_fixture():
     with tempfile.TemporaryDirectory() as tmp_dir:
         os.makedirs(os.path.join(tmp_dir, "logs"))
         os.makedirs(os.path.join(tmp_dir, "gjf"))
-        shutil.copy(os.path.join(DATA_DIR, "logs", "H2O-MP2-321G.log"),
-                    os.path.join(tmp_dir, "logs", "H2O-MP2-321G.log"))
-        shutil.copy(os.path.join(DATA_DIR, "gjf", "H2O-MP2-321G.com"),
-                    os.path.join(tmp_dir, "gjf", "H2O-MP2-321G.com"))
+        shutil.copy(os.path.join(DATA_DIR, "logs", "H2O.log"),
+                    os.path.join(tmp_dir, "logs", "H2O.log"))
+        shutil.copy(os.path.join(DATA_DIR, "gjf", "H2O.com"),
+                    os.path.join(tmp_dir, "gjf", "H2O.com"))
 
         # Roster: STALEMOL (real water log/gjf, stale CSV values to fix),
         # MISMATCHMOL (same log, but the CSV claims a 4th mode that doesn't
         # exist -- 3 engine modes vs. 4 claimed), NOROWSMOL (no CSV row at
         # all -- not an error, just nothing to resync).
         roster = pd.DataFrame([
-            {"molecule": "STALEMOL", "basename": "H2O-MP2-321G"},
-            {"molecule": "MISMATCHMOL", "basename": "H2O-MP2-321G"},
-            {"molecule": "NOROWSMOL", "basename": "H2O-MP2-321G"},
+            {"molecule": "STALEMOL", "basename": "H2O"},
+            {"molecule": "MISMATCHMOL", "basename": "H2O"},
+            {"molecule": "NOROWSMOL", "basename": "H2O"},
         ])
         roster.to_csv(os.path.join(tmp_dir, "mol_list_method.csv"), index=False)
 
@@ -679,9 +679,9 @@ def test_resync_reference_metadata_synthetic_fixture():
 
 def test_basename_to_molecule_map_translates_known_roster_basenames():
     m = _basename_to_molecule_map(DATA_DIR)
-    assert m["SbH3_MP2_3-21G"] == "SbH3"
-    assert m["C6H6_MP2_3-21G_D6h"] == "C6H6"
-    assert m["H2O-MP2-321G"] == "H2O"
+    assert m["SbH3"] == "SbH3"
+    assert m["C6H6"] == "C6H6"
+    assert m["H2O"] == "H2O"
 
 
 def test_regenerate_characterised_modes_dry_run_against_real_tree():
@@ -747,10 +747,10 @@ def test_regenerate_characterised_modes_synthetic_fixture_preserves_manual_colum
     with tempfile.TemporaryDirectory() as tmp_dir:
         os.makedirs(os.path.join(tmp_dir, "logs"))
         os.makedirs(os.path.join(tmp_dir, "gjf"))
-        shutil.copy(os.path.join(DATA_DIR, "logs", "H2O-MP2-321G.log"),
-                    os.path.join(tmp_dir, "logs", "H2O-MP2-321G.log"))
-        shutil.copy(os.path.join(DATA_DIR, "gjf", "H2O-MP2-321G.com"),
-                    os.path.join(tmp_dir, "gjf", "H2O-MP2-321G.com"))
+        shutil.copy(os.path.join(DATA_DIR, "logs", "H2O.log"),
+                    os.path.join(tmp_dir, "logs", "H2O.log"))
+        shutil.copy(os.path.join(DATA_DIR, "gjf", "H2O.com"),
+                    os.path.join(tmp_dir, "gjf", "H2O.com"))
         # No roster file at all -- regenerate_characterised_modes() must not
         # need one (disk-scan only); _basename_to_molecule_map() falls back
         # to the raw basename when the roster can't be read.
@@ -761,7 +761,7 @@ def test_regenerate_characterised_modes_synthetic_fixture_preserves_manual_colum
             # Existing row for the water log's mode 1 -- manual columns +
             # a deliberately "wrong" (but author-curated) irrep that must
             # survive untouched.
-            {"shape": "bend", "molecule": "H2O-MP2-321G", "mode": "1",
+            {"shape": "bend", "molecule": "H2O", "mode": "1",
              "freq": "0", "μ": "0", "k": "0", "irrep": "HAND_RESOLVED",
              "type": "bend", "sym": "-", "description": "scissor", "νₖ": "ν2",
              "ref": "Foo1970", "Note": ""},
@@ -776,13 +776,13 @@ def test_regenerate_characterised_modes_synthetic_fixture_preserves_manual_colum
         report = regenerate_characterised_modes(tmp_dir, write=True)
 
         assert report["dropped_molecules"] == ["GONEMOL"]
-        assert report["added_molecules"] == []  # H2O-MP2-321G already had a row
+        assert report["added_molecules"] == []  # H2O already had a row
         assert report["n_rows_written"] == 3  # water: 3 internal modes
         assert report["n_rows_with_preserved_manual_labels"] == 1  # only mode 1
 
         new_df = pd.read_csv(os.path.join(tmp_dir, "characterised_modes.csv"),
                               dtype=str, keep_default_na=False)
-        assert set(new_df["molecule"]) == {"H2O-MP2-321G"}
+        assert set(new_df["molecule"]) == {"H2O"}
         row1 = new_df[new_df["mode"] == "1"].iloc[0]
         assert row1["type"] == "bend" and row1["ref"] == "Foo1970"
         assert row1["irrep"] == "HAND_RESOLVED"  # preserved, not overwritten

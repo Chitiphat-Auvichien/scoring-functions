@@ -221,9 +221,9 @@ def test_benzene_emit_34_35_36_under_calibrated_thresholds():
     V_Stretch for 34/35 (0.667/0.577) is far above the calibrated tau_B
     (0.17327) either way, so this is robust to the shift, as predicted.
     (2026-07-07: "benzene" -> the finalized roster basename
-    C6H6_MP2_3-21G_D6h -- content-preserving rename, numbers unchanged.)"""
+    C6H6 -- content-preserving rename, numbers unchanged.)"""
     calibrated = Thresholds.calibrated()
-    t = _classify("C6H6_MP2_3-21G_D6h", "emit", calibrated)
+    t = _classify("C6H6", "emit", calibrated)
     assert t["EMIT 34"]["classification"] == "Tx*"
     assert t["EMIT 34"]["annotation"] == f"vibration={MIXED_STRETCH_BEND}"
     assert t["EMIT 35"]["classification"] == "Ty*"
@@ -234,13 +234,13 @@ def test_benzene_emit_34_35_36_under_calibrated_thresholds():
 def test_water_targets_under_calibrated_thresholds():
     """Task-4 re-check of test_classifier.py's water targets, under
     Thresholds.calibrated() instead of the pinned provisional defaults.
-    (2026-07-07: "water" -> the finalized roster basename H2O-MP2-321G, a
+    (2026-07-07: "water" -> the finalized roster basename H2O, a
     genuinely different/corrected calculation from the old water.log -- see
     tests/test_scores.py's module docstring -- but its V_Stretch values land
     on the same side of tau_S/tau_B, so the classification buckets checked
     here are unaffected.)"""
     calibrated = Thresholds.calibrated()
-    t = _classify("H2O-MP2-321G", "normal", calibrated)
+    t = _classify("H2O", "normal", calibrated)
     for lbl in ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz"):
         assert t[lbl]["classification"] == lbl
     assert t["Vib 1"]["classification"] == BENDING
@@ -264,7 +264,7 @@ def test_degenerate_emit_block_sanity_check():
     over- or under-assignment caused by the degeneracy.
     """
     calibrated = Thresholds.calibrated()
-    raw, _ = load_inputs("C6H6_MP2_3-21G_D6h", "emit", os.path.join(ROOT, "data"))
+    raw, _ = load_inputs("C6H6", "emit", os.path.join(ROOT, "data"))
     scorer, final = build_scorer_and_final(raw, "emit")
 
     scored_a = classify_all_modes(scorer, final, calibrated)

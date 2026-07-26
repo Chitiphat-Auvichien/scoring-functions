@@ -12,8 +12,8 @@ scaffolding is now retired outright, not just defaulted away from: every one
 of the 72 roster molecules has a verified, on-disk ``.log``/``.gjf`` (or
 ``.com``) pair (Phase A of the 2026-07-07 plan: ``mol_list_method.csv``
 gained a ``basename`` column mapping each canonical ``molecule`` name to its
-actual on-disk file stem, e.g. ``SbH3`` -> ``SbH3_MP2_3-21G``, ``BrF3`` ->
-``brf3``). There is exactly one way to build ``library_scores.csv`` now:
+actual on-disk file stem, e.g. ``SbH3`` -> ``SbH3``, ``BrF3`` ->
+``BrF3``). There is exactly one way to build ``library_scores.csv`` now:
 iterate the roster, run the real engine (Steps 1-4, ``main.load_inputs`` ->
 ``main.build_scorer_and_final`` -> ``src.classifier.classify_all_modes``,
 ``ModeScorer.score_bonds()``) on every row's basename, and label the output
@@ -774,7 +774,7 @@ def _basename_to_molecule_map(data_dir="data"):
     """basename -> canonical mol_list_method.csv molecule name (roster-only
     lookup; empty dict if the roster can't be read for any reason). Used by
     regenerate_characterised_modes() to translate an on-disk basename (e.g.
-    'SbH3_MP2_3-21G') to the canonical short name ('SbH3') that
+    'SbH3') to the canonical short name ('SbH3') that
     characterised_modes.csv's existing rows are keyed by -- a basename with
     no roster row falls back to using the raw basename itself (no canonical
     alternative exists for it)."""

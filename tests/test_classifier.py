@@ -25,7 +25,7 @@ these labels (tau_S 0.9->0.9037, tau_B 0.2->0.1733, tau_TR unchanged at
 0.95; every target below is robust to that shift).
 
 **2026-07-07 basename update:** "water"/"benzene" -> the finalized roster
-basenames `H2O-MP2-321G`/`C6H6_MP2_3-21G_D6h` (data/mol_list_method.csv).
+basenames `H2O`/`C6H6` (data/mol_list_method.csv).
 Every assertion in this file is CLASSIFICATION-LEVEL (bucket labels like
 BENDING/STRETCHING/"Tx", bond counts), not a pinned V_Stretch/T/R number, so
 none needed updating -- water's new file's V_Stretch values differ from the
@@ -63,14 +63,14 @@ def test_water_normal_externals_clean():
     """The 6 ideal T/R reference modes classify clean (score>=tau_TR, V<=tau_B) --
     i.e. the bare slot name itself ("Tx".."Rz"), per the 2026-07-02 axis-specific
     label rename (no more generic CLEAN_TRANSLATION/CLEAN_ROTATION constants)."""
-    t = _classify("H2O-MP2-321G", "normal")
+    t = _classify("H2O", "normal")
     for lbl in ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz"):
         assert t[lbl]["classification"] == lbl, t[lbl]["classification"]
 
 
 def test_water_normal_vibrations():
     """Vib1 = bend -> BENDING; Vib2/Vib3 = stretches -> STRETCHING, with s_AB summing to V."""
-    t = _classify("H2O-MP2-321G", "normal")
+    t = _classify("H2O", "normal")
     assert t["Vib 1"]["classification"] == BENDING
     assert t["Vib 1"]["bonds"] == []  # bonds only attached for STRETCHING/MIXED_STRETCH_BEND
 
@@ -86,7 +86,7 @@ def test_benzene_emit_34_35_mixed_external():
     with the axis-specific mixed-external label ("Tx*"/"Ty*", 2026-07-02 rename); the axis
     is now IN the classification itself, so the annotation only carries the vibration
     sub-label (no more redundant "dominant_external=..." text)."""
-    t = _classify("C6H6_MP2_3-21G_D6h", "emit")
+    t = _classify("C6H6", "emit")
     assert t["EMIT 34"]["classification"] == "Tx*"
     assert is_mixed_external(t["EMIT 34"]["classification"])
     assert t["EMIT 34"]["annotation"] == f"vibration={MIXED_STRETCH_BEND}"
@@ -102,7 +102,7 @@ def test_benzene_emit_36_clean_translation_blind_spot():
     s[V_S]=0 for it too (bending, not stretching). Reproducing clean "Tz" here is
     correct -- do not "fix" this.
     """
-    t = _classify("C6H6_MP2_3-21G_D6h", "emit")
+    t = _classify("C6H6", "emit")
     assert t["EMIT 36"]["classification"] == "Tz"
     assert abs(t["EMIT 36"]["V"]) < TOL
 
@@ -119,7 +119,7 @@ def test_co2_linear_no_spurious_onaxis_mode():
     drop it before scoring, and the on-axis slot must simply be absent (not
     present-and-clean, not present-and-mislabeled).
     """
-    t = _classify("co2_mp2_3-21g", "normal")
+    t = _classify("CO2", "normal")
     assert len(t) == 9  # 3N for a 3-atom linear molecule, not 3N+1
     assert "Rx" not in t
     assert t["Ry"]["classification"] == "Ry"
@@ -134,8 +134,8 @@ def test_classify_to_rows_shape():
     """classify_to_rows() produces the documented CSV columns for both mol/mode_type combos."""
     expected_cols = {"Mode", "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_Stretch",
                      "label", "annotation", "s_AB"}
-    for mol, mode_type, freq_col in [("H2O-MP2-321G", "normal", "Freq"),
-                                      ("C6H6_MP2_3-21G_D6h", "emit", "Eigenvalue")]:
+    for mol, mode_type, freq_col in [("H2O", "normal", "Freq"),
+                                      ("C6H6", "emit", "Eigenvalue")]:
         raw, _ = load_inputs(mol, mode_type, os.path.join(ROOT, "data"))
         scorer, final = build_scorer_and_final(raw, mode_type)
         scored = classify_all_modes(scorer, final)

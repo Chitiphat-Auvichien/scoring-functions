@@ -17,7 +17,7 @@ pins the specific spot-check values IMPLEMENTATION_PLAN.md Phase 2 names:
 EMIT 34-36 approx 77% translational, EMIT 2 (39% Ry) vs EMIT 9 (14% Ry).
 
 **2026-07-07 basename update:** "benzene" -> the finalized roster basename
-`C6H6_MP2_3-21G_D6h` (data/mol_list_method.csv); the rename was
+`C6H6` (data/mol_list_method.csv); the rename was
 content-preserving (re-verified against a live run), so none of the pinned
 numbers below changed.
 """
@@ -39,7 +39,7 @@ def _rows_by_mode(df):
 def test_benzene_emit_34_35_36_translational_fraction():
     """EMIT 34/35/36 (E1u/A2u externals) project to ~77% onto their
     respective ideal translation axis -- the manuscript's headline number."""
-    df, _, _ = run_projection_pipeline("C6H6_MP2_3-21G_D6h", write=False)
+    df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
     assert abs(rows["EMIT 34"]["C2_Tx"] - 0.767349) < TOL
     assert abs(rows["EMIT 35"]["C2_Ty"] - 0.767349) < TOL
@@ -50,7 +50,7 @@ def test_benzene_emit_2_vs_9_ry_inversion():
     """EMIT 2 has more Ry projection character than EMIT 9 (39% vs 14%),
     the inverse of the |s[Ry]| score ordering -- the manuscript's
     non-monotonicity example (IMPLEMENTATION_PLAN.md Phase 2)."""
-    df, _, _ = run_projection_pipeline("C6H6_MP2_3-21G_D6h", write=False)
+    df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
     ry2 = rows["EMIT 2"]["C2_Ry"]
     ry9 = rows["EMIT 9"]["C2_Ry"]
@@ -63,7 +63,7 @@ def test_projected_fractions_sum_to_one():
     """Every EMIT mode's grouped fractions (Parseval, since Q is
     near-orthonormal) sum to ~1 -- the sanity check project_emit() itself
     asserts internally; re-checked here at the DataFrame level."""
-    df, _, _ = run_projection_pipeline("C6H6_MP2_3-21G_D6h", write=False)
+    df, _, _ = run_projection_pipeline("C6H6", write=False)
     cols = ["C2_Tx", "C2_Ty", "C2_Tz", "C2_Rx", "C2_Ry", "C2_Rz",
             "C2_VS", "C2_VB", "C2_VMix"]
     totals = df[cols].sum(axis=1)
@@ -74,7 +74,7 @@ def test_full_projection_file_has_per_mode_detail():
     """The 'full' output carries per-individual-reference-mode detail (not
     just the grouped external/internal fractions) -- the richer
     projection-coefficients data file Phase 2 calls for."""
-    df, df_full, _ = run_projection_pipeline("C6H6_MP2_3-21G_D6h", write=False)
+    df, df_full, _ = run_projection_pipeline("C6H6", write=False)
     # 6 ideal T/R slots + 30 real vibrational normal modes for benzene (3N=36).
     expected_ref_cols = {"Mode", "Eigenvalue", "Tx", "Ty", "Tz", "Rx", "Ry", "Rz"}
     assert expected_ref_cols <= set(df_full.columns)

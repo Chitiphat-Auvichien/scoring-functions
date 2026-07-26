@@ -1,73 +1,32 @@
-"""Benzene NORMAL-modes-vs-reference validation -- the manuscript's PRIMARY
-classification-vs-reference result.
+"""Benzene real-normal-modes-vs-literature-reference validation -- the
+manuscript's PRIMARY classification-vs-reference result (benzene EMIT is a
+separate, deliberately-excluded stress test; see src/flag_validation.py's
+docstring for why its "ground truth" would be circular).
 
-Per the mandated Results & Discussion structure in
-``JCC/Scoring_Manuscript_Plan_2026-07-01.pdf`` (one directory above this
-repo), "Benzene normal modes -> low-frequency stretching" is the paper's
-PRIMARY classification-vs-reference validation -- not benzene EMIT, which is
-positioned only as an extreme/rare edge-case stress test (see
-``src/flag_validation.py``'s systematic 36-mode EMIT confusion matrix, built
-and tested but EXCLUDED from the manuscript by author decision: its "ground
-truth" is a threshold cut on continuous, genuinely-mixed EMIT projection
-fractions -- circular reasoning for an accuracy claim. That decision is
-recorded, not re-litigated, here or anywhere in this module.)
+Ground truth: the literature/group-theory vibrational assignment for each of
+benzene's 30 real normal modes predates this code (e.g. Wilson's classic
+numbering) and is ingested as ``ref_label`` for molecule C6H6 in
+``library_scores.csv``. Comparing the classifier's own ``predicted_label``
+against that independent label is a genuine, non-circular accuracy check.
 
-Why benzene's real NORMAL modes are a non-circular ground truth (unlike
-EMIT): the literature/group-theory vibrational assignment for each of
-benzene's 30 real normal modes is external to this framework entirely (it
-predates this code, e.g. Wilson's classic benzene mode numbering) --
-ingested as ``ref_label`` in ``data/results/library_scores.csv`` for molecule
-``C6H6`` by ``src/library_ingest.py``. Comparing the classifier's own
-``predicted_label`` against that independent label is therefore a genuine
-accuracy check, not a threshold circularity.
+Every function here reuses already-computed ``library_scores.csv`` columns;
+no new scores/classification are computed:
+- ``benzene_normal_reference_detail``/``_summary``: per-mode and per-category
+  recall against ``ref_label``, including an explicit "crossed_opposite"
+  flag and literature "SB" (mixed) handling for modes 21/22.
+- ``benzene_internal_confusion_matrix``: 3x3 (bend/stretch/SB x
+  bend/stretch/mixed) confusion table for the 30 internal modes.
+- ``benzene_mixed_bond_diagnostic``: per-bond C-C vs. C-H breakdown for
+  MIXED_STRETCH_BEND-predicted modes, plus a near-degenerate-pair
+  correlation check.
+- ``benzene_sb_vs_stretch_bond_diagnostic``: contrasts the SB "bending blind
+  spot" modes (21/22) against the stretch modes the classifier calls mixed
+  (23/24), with the same per-bond evidence.
+- ``benzene_worked_examples``: identifies ring-breathing and representative
+  C-H-stretch modes for the manuscript's worked-example gallery.
 
-Module functions, each reusing already-computed ``library_scores.csv``
-columns -- no new scores are computed here, no classifier/thresholds are
-re-run:
-
-1. ``benzene_normal_reference_detail`` / ``_summary`` / ``run_benzene_normal_
-   validation`` (Task A): per-mode + per-category (translation/rotation/
-   stretch/bend/SB) recall against ``ref_label``, plus an explicit
-   "crossed_opposite" flag (predicted the OPPOSITE clean category, e.g. a
-   literature bend predicted STRETCHING) so the "zero crossings" claim is a
-   computed count, not an eyeballed one. "SB" (2026-07-05: a genuine
-   literature-sourced mixed reference class for benzene modes 21/22, see
-   ``src/csv_label_ingest.py``) counts as correctly classified iff the
-   predicted bucket is "mixed" (`_expected_pred_bucket`), since the engine
-   has no predicted bucket literally named "SB".
-
-1'. ``benzene_internal_confusion_matrix`` / ``run_benzene_internal_confusion``
-    (Task A', 2026-07-05): the genuine 3x3 (ref bend/stretch/SB x predicted
-    bend/stretch/mixed) confusion table for benzene's 30 internal modes,
-    enabled by the literature "SB" class -- mirrors
-    ``src/calibrate.py::confusion_matrix_stats``'s ``pd.crosstab`` pattern,
-    scoped to benzene only (that function's external-row/ideal-tier
-    assumptions don't apply here).
-
-2. ``benzene_mixed_bond_diagnostic`` / ``run_benzene_bond_diagnostic``
-   (Task B): for whichever benzene normal modes land in the MIXED_STRETCH_
-   BEND bucket (found from (1)'s own output, not hardcoded mode numbers), a
-   per-bond C-C vs. C-H breakdown (parsed from the semicolon-joined ``s_AB``
-   column) plus a computed near-degenerate-pair check: any two mixed modes
-   within ``freq_tol`` cm-1 of each other get their 6 ring-bond ``s_AB``
-   vectors correlated (Pearson r) -- a strong NEGATIVE correlation is the
-   computed signature of the "complementary alternating pattern" a D6h
-   doubly-degenerate (E-type) mode pair is expected to show, replacing an
-   eyeballed claim with a number.
-
-2'. ``benzene_sb_vs_stretch_bond_diagnostic`` / ``run_benzene_sb_vs_stretch_
-    bond_diagnostic`` (Task B', 2026-07-05): a sibling to Task B, NOT an
-    extension of it, keyed off ``ref_label`` rather than
-    ``predicted_bucket`` -- contrasts modes 21/22 (literature SB, predicted
-    a clean BENDING: the tau_B two-gate purity test's "bending blind spot")
-    against the near-degenerate pair 23/24 (literature stretch, predicted
-    MIXED_STRETCH_BEND) with the same per-bond evidence, so the manuscript
-    can explain both miss mechanisms side by side.
-
-This module is deliberately benzene-specific (single ``MOLECULE`` constant,
-hardcoded C-C ring-bond ordering) -- generalizing the bond diagnostic to
-arbitrary molecules is explicitly out of scope (task instruction); benzene is
-the manuscript's specific worked example.
+Deliberately benzene-specific (single ``MOLECULE`` constant, hardcoded C-C
+ring-bond ordering) -- not generalized to arbitrary molecules, by design.
 """
 import os
 from itertools import combinations
@@ -79,29 +38,19 @@ from src.classifier import classification_bucket
 
 MOLECULE = "C6H6"
 
-# Literature ref_label -> the predicted BUCKET that counts as a correct
-# match. Needed because the literal literature "SB" class (2026-07-05
-# relabeling of modes 21/22 -- a genuine literature-sourced mixed reference
-# label, not just the classifier's own predicted bucket) has no identically-
-# named predicted bucket: `classification_bucket()` collapses the engine's
-# own MIXED_STRETCH_BEND label to bucket "mixed", not "SB". translation/
-# rotation map to themselves (classification_bucket() already returns those
-# exact strings for external slots), so this dict only needs an explicit
-# override for "SB"; everything else falls back to ref_label unchanged via
-# `_expected_pred_bucket()`.
+# Literature ref_label -> predicted bucket that counts as a match. "SB"
+# (literature mixed) has no identically-named predicted bucket -- the
+# engine's MIXED_STRETCH_BEND collapses to bucket "mixed" -- so it needs an
+# explicit override; everything else falls back to ref_label unchanged.
 _REF_TO_EXPECTED_PRED = {"SB": "mixed"}
 
 
 def _expected_pred_bucket(ref_label):
     return _REF_TO_EXPECTED_PRED.get(ref_label, ref_label)
 
-# Ring bonds in cyclic order, matching data/gjf/benzene.com's connectivity
-# (atoms 1-6 are the ring carbons; 1-2,2-3,3-4,4-5,5-6,6-1 are the C-C bonds,
-# 1-7..6-12 the C-H bonds). Excel's own atom labels (e.g. "C1", "H7") are
-# already embedded in library_scores.csv's s_AB string (src/library_ingest.py's
-# _bond_string()), so no separate atom-type lookup is needed here.
+# Ring bonds in cyclic order, matching data/gjf/benzene.com's connectivity.
 _CC_RING_BONDS = ("C1-C2", "C2-C3", "C3-C4", "C4-C5", "C5-C6", "C1-C6")
-# C-H bonds, one per ring carbon (Ci-H(i+6), matching the same connectivity).
+# C-H bonds, one per ring carbon (Ci-H(i+6), same connectivity).
 _CH_BONDS = ("C1-H7", "C2-H8", "C3-H9", "C4-H10", "C5-H11", "C6-H12")
 
 
@@ -116,25 +65,17 @@ def _load_lib(lib_df, data_dir):
 # --------------------------------------------------------------------------
 
 def benzene_normal_reference_detail(lib_df=None, data_dir="data"):
-    """One row per benzene (C6H6) normal mode carrying a literature
-    ``ref_label`` (the 6 external T/R rows + the 30 internal
-    stretch/bend/SB rows -- ``"SB"`` is a genuine literature-sourced mixed
-    class for 2 modes, 2026-07-05 relabeling; see
-    ``src/csv_label_ingest.py``), comparing the classifier's
-    ``predicted_label`` against ``ref_label``.
-
-    ``correct`` uses ``_expected_pred_bucket(ref_label)`` rather than
-    ``ref_label`` directly, so a literature ``"SB"`` row counts as correct
-    iff the predicted bucket is ``"mixed"`` (the framework's own structural
-    equivalent -- there is no predicted bucket literally named ``"SB"``).
+    """One row per benzene normal mode with a literature ``ref_label`` (6
+    external T/R + 30 internal stretch/bend/SB), comparing
+    ``predicted_label`` against ``ref_label`` (via
+    ``_expected_pred_bucket`` so literature "SB" counts as correct iff
+    predicted bucket is "mixed").
 
     Columns: mode_index, kind, freq, ref_label, predicted_label,
     predicted_bucket, correct, crossed_opposite, migrated_to_mixed.
 
-    Raises ValueError if benzene has no ref_label rows at all (ingest not
-    run) or if any ref_label row lacks a predicted_label (the geometry
-    merge did not happen -- e.g. a frequency mismatch gate failure) --
-    fail loud rather than silently validate against an incomplete merge.
+    Raises ValueError if benzene has no ref_label rows (ingest not run) or
+    if any ref_label row lacks a predicted_label (incomplete geometry merge).
     """
     df = _load_lib(lib_df, data_dir)
     b = df[(df["molecule"] == MOLECULE) & df["ref_label"].notna()].copy()
@@ -167,15 +108,9 @@ def benzene_normal_reference_detail(lib_df=None, data_dir="data"):
 
 def benzene_normal_reference_summary(detail_df):
     """Per-category (translation/rotation/stretch/bend/SB) n / n_correct /
-    recall + crossing counts, derived from `benzene_normal_reference_detail`'s
-    output (never recomputed independently of it, so the two are always
-    self-consistent). "SB" (2026-07-05 literature relabeling, modes 21/22)
-    is included alongside the original 4 categories -- its "correct"/
-    "n_migrated_to_mixed" already use the SB-aware criterion computed in
-    `benzene_normal_reference_detail` (predicted bucket=="mixed" counts as
-    correct for ref_label=="SB", so `n_migrated_to_mixed` is always 0 for
-    "SB" by construction: being predicted "mixed" IS correct for this
-    category, not a migration away from a clean match).
+    recall + crossing counts, derived from `benzene_normal_reference_detail`
+    (never recomputed independently). `n_migrated_to_mixed` is always 0 for
+    "SB" by construction: predicted "mixed" already counts as correct there.
     """
     rows = []
     for ref in ("translation", "rotation", "stretch", "bend", "SB"):
@@ -212,12 +147,9 @@ def run_benzene_normal_validation(lib_df=None, data_dir="data", write=True):
 
 
 # --------------------------------------------------------------------------
-# Task A' (2026-07-05): genuine 3-class internal confusion matrix, enabled by
-# the literature "SB" relabeling of modes 21/22 (see src/csv_label_ingest.py).
-# Reuses src.calibrate.confusion_matrix_stats's pd.crosstab pattern, scoped
-# to benzene's 30 internal (stretch/bend/SB) modes -- NOT a copy of that
-# function, since its translation/rotation-specific assumptions (external
-# rows, ideal/non-ideal tiers) don't apply here at all.
+# Genuine 3-class internal confusion matrix, enabled by the literature "SB"
+# label. Mirrors src.calibrate.confusion_matrix_stats's crosstab pattern but
+# is not a copy -- that function's external-row/ideal-tier logic doesn't apply.
 # --------------------------------------------------------------------------
 
 INTERNAL_REF_CATEGORIES = ("bend", "stretch", "SB")
@@ -227,14 +159,8 @@ INTERNAL_PRED_CATEGORIES = ("bend", "stretch", "mixed")
 def benzene_internal_confusion_matrix(lib_df=None, data_dir="data"):
     """3x3 reference (bend/stretch/SB) x predicted-bucket (bend/stretch/
     mixed) confusion table + per-category recall for benzene's 30 internal
-    normal modes -- the first genuine 3-class ground truth in this pipeline
-    (literature "SB" is an independent literature-sourced mixed label, not
-    the classifier's own predicted bucket).
-
-    Built entirely from `benzene_normal_reference_detail`'s own ref_label/
-    predicted_bucket/correct columns (never recomputes score/classification
-    logic itself), so it is always self-consistent with Task A's per-
-    category summary.
+    normal modes. Built entirely from `benzene_normal_reference_detail`'s
+    own columns (never recomputes score/classification logic).
 
     Returns (confusion_table, per_category):
       confusion_table -- 3x3 DataFrame, index=['bend','stretch','SB'],
@@ -307,12 +233,8 @@ def _is_cc_bond(label):
 def _bond_row_stats(r):
     """Shared per-mode C-C/C-H bond-total breakdown (mode_index, freq,
     V_Stretch, cc_total, ch_total, cc_fraction_of_V, one 's_AB[<bond>]' per
-    C-C ring bond) from one `library_scores.csv` row -- used by both
-    `benzene_mixed_bond_diagnostic` (Task B, keyed off predicted_bucket==
-    'mixed') and `benzene_sb_vs_stretch_bond_diagnostic` (Task B',
-    2026-07-05, keyed off ref_label=='SB'/'stretch'), so the two diagnostics
-    can never silently drift apart in how they compute cc_total/ch_total.
-    """
+    C-C ring bond) from one `library_scores.csv` row -- shared by both bond
+    diagnostics below so they can't silently drift apart."""
     bonds = _parse_bond_string(r["s_AB"])
     cc_total = sum(v for k, v in bonds.items() if _is_cc_bond(k))
     ch_total = sum(v for k, v in bonds.items() if not _is_cc_bond(k))
@@ -408,36 +330,27 @@ def run_benzene_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0, writ
 
 
 # --------------------------------------------------------------------------
-# Task B' (2026-07-05): per-bond contrast between benzene's two "miss"
-# mechanisms exposed by the literature SB relabeling -- modes 21/22
-# (ref_label=='SB', but predicted a CLEAN "bend": the two-gate purity test's
-# tau_B bending-blind-spot, V_Stretch 0.09072/0.08119 both <= tau_B=0.17327)
-# vs. modes 23/24 (ref_label=='stretch', but predicted MIXED_STRETCH_BEND --
-# the classifier correctly flags mixed character where the literature calls
-# these pure stretches). Keyed off ref_label, NOT off predicted_bucket=='
-# mixed' (unlike Task B/benzene_mixed_bond_diagnostic): 21/22 are
-# specifically NOT predicted-mixed, so finding them via the predicted bucket
-# would find nothing -- that IS the point of this diagnostic.
+# Per-bond contrast between benzene's two "miss" mechanisms exposed by the
+# literature SB label: modes 21/22 (ref 'SB', predicted a clean bend --
+# V_Stretch 0.09072/0.08119, both <= tau_B=0.17327, the purity gate's
+# bending blind spot) vs. modes 23/24 (ref 'stretch', predicted mixed).
+# Keyed off ref_label, not predicted_bucket: 21/22 are NOT predicted-mixed,
+# so finding them via the predicted bucket would find nothing.
 # --------------------------------------------------------------------------
 
 def benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data"):
     """Per-bond C-C vs. C-H breakdown contrasting benzene's literature-'SB'
-    modes (21/22 -- predicted a clean BENDING, the purity-gate blind spot)
-    against the literature-'stretch' modes the classifier itself calls
-    mixed (23/24 -- predicted MIXED_STRETCH_BEND), so the manuscript can
-    explain both miss mechanisms side by side with the same per-bond
-    evidence `benzene_mixed_bond_diagnostic` already uses for the other 3
-    predicted-mixed modes (13/14/19).
+    modes (21/22, bending blind spot) against the literature-'stretch' modes
+    the classifier calls mixed (23/24), with the same per-bond evidence
+    `benzene_mixed_bond_diagnostic` uses for the other predicted-mixed modes.
 
     Returns one row per mode (21, 22, 23, 24): mode_index, freq, V_Stretch,
     ref_label, predicted_label, predicted_bucket, case
     ('blind_spot_bend' for 21/22, 'overflagged_mixed' for 23/24), cc_total,
-    ch_total, cc_fraction_of_V, plus one 's_AB[<bond>]' column per C-C ring
-    bond (reusing `_bond_row_stats`, shared with Task B).
+    ch_total, cc_fraction_of_V, plus one 's_AB[<bond>]' column per C-C bond.
 
-    Raises ValueError if benzene has no ref_label=='SB' modes at all (the
-    literature relabeling has not been ingested -- see
-    src/csv_label_ingest.py).
+    Raises ValueError if benzene has no ref_label=='SB' modes (literature
+    relabeling not ingested).
     """
     detail = benzene_normal_reference_detail(lib_df, data_dir)
     sb_modes = detail.loc[detail["ref_label"] == "SB", "mode_index"].astype(int).tolist()
@@ -446,12 +359,9 @@ def benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data"):
             f"No {MOLECULE} normal modes with ref_label=='SB' found -- "
             "nothing to contrast (has the literature relabeling been "
             "ingested? see src/csv_label_ingest.py's module docstring).")
-    # The literature-stretch/predicted-mixed set is {19, 23, 24} (Task B);
-    # the manuscript specifically wants the NEAR-DEGENERATE PAIR (23, 24) as
-    # the direct contrast to 21/22 (also a near-degenerate pair), not the
-    # lone mode 19 (already the dedicated worked SB example elsewhere, per
-    # Task E's docstring) -- derived by keeping only candidates sharing an
-    # (exact-to-4dp) frequency with another candidate, not hardcoded.
+    # Contrast set: the near-degenerate PAIR among literature-stretch/
+    # predicted-mixed modes (excludes lone mode 19, the dedicated worked
+    # SB example elsewhere) -- derived by frequency-sharing, not hardcoded.
     candidates = detail[(detail["kind"] == "internal") &
                          (detail["ref_label"] == "stretch") &
                          (detail["predicted_bucket"] == "mixed")].copy()
@@ -497,29 +407,19 @@ def run_benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data", writ
 
 
 # --------------------------------------------------------------------------
-# Task E (2026-07-02): worked-example gallery mode identification
-# --------------------------------------------------------------------------
-#
-# Per Scoring_Manuscript_Plan_2026-07-02.pdf step 3a, the "Benzene normal
-# modes" section is being reworked into a descriptive worked-example gallery
-# needing three NAMED modes: a ring-breathing mode, a representative C-H
-# stretch, and an SB (mixed stretch/bend) example. The SB example is already
-# in hand (mode 19, 1319.27 cm-1, described in tab:benzenemixed) and is not
-# re-derived here. This identifies the other two by computation.
-#
-# Primary criterion (author-confirmed 2026-07-02, overriding an earlier
-# bond-uniformity-first heuristic): among benzene's 7 `S` (STRETCHING)
-# -labeled normal modes there is a clear ~2200 cm-1 frequency gap -- one mode
-# sits far below 3000 cm-1, the other six sit at/above ~3180 cm-1. The
-# low-frequency one, with V_Stretch essentially exactly 1.000, is the
-# ring-breathing mode (matches the literature ~992 cm-1 assignment); the
-# highest-frequency one is the representative C-H stretch. Per-bond `s_AB`
-# C-C vs. C-H totals are reported as SUPPORTING evidence for both picks
-# (reusing the same parsing helpers as Task B), not as the primary test.
+# Worked-example gallery mode identification: ring-breathing + representative
+# C-H stretch (the SB example, mode 19, is already fixed elsewhere and not
+# re-derived here). Criterion: among benzene's 7 STRETCHING-labeled modes
+# there is a clear ~2200 cm-1 frequency gap (one mode far below 3000 cm-1,
+# the rest at/above ~3180 cm-1) -- the low one (V_Stretch ~1.000) is
+# ring-breathing (matches the literature ~992 cm-1 assignment), the highest
+# is the C-H stretch. Per-bond C-C/C-H totals are reported as supporting
+# evidence only, not the primary test.
 
 def benzene_worked_examples(lib_df=None, data_dir="data", freq_tol=1.0):
-    """Identify, by computation, benzene's ring-breathing and representative
-    C-H-stretch normal modes for the manuscript's worked-example gallery.
+    """Identify benzene's ring-breathing and representative C-H-stretch
+    normal modes for the manuscript's worked-example gallery (see section
+    comment above for the criterion).
 
     Returns a 2-row DataFrame, one row each for role "ring_breathing" and
     "ch_stretch": mode_index, freq, V_Stretch, role, cc_total, ch_total,
@@ -527,12 +427,7 @@ def benzene_worked_examples(lib_df=None, data_dir="data", freq_tol=1.0):
     near_degenerate_partner (mode_index of another `S`-labeled mode within
     `freq_tol` cm-1, or None), partner_freq_diff (NaN if none).
 
-    Method: among C6H6's internal normal modes with predicted_bucket ==
-    "stretch", sort by frequency; the LOWEST-frequency one is
-    ring_breathing, the HIGHEST-frequency one is ch_stretch. Raises
-    ValueError if fewer than 2 STRETCHING-labeled modes exist (need two
-    distinct picks) -- fail loud rather than silently returning a
-    degenerate/duplicate identification.
+    Raises ValueError if fewer than 2 STRETCHING-labeled modes exist.
     """
     df = _load_lib(lib_df, data_dir)
     internal = df[(df["molecule"] == MOLECULE) & (df["kind"] == "internal")].copy()

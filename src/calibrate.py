@@ -1,76 +1,28 @@
-"""Phase-3 threshold calibration: derive tau_S/tau_B from the library's
-literature stretch/bend labels, sweep tau_TR for a stability plateau, and
-freeze the final Thresholds to data/results/thresholds.json.
+"""Threshold calibration: derive tau_S/tau_B from the library's literature
+stretch/bend labels, sweep tau_TR for a stability plateau, and freeze the
+final Thresholds to data/results/thresholds.json.
 
-Design
-------
-tau_S / tau_B (Step 4, internal stretch/bend split)
-    Derived from the IDEAL-molecule subset of the ingested library
-    (``library_scores.csv``'s ``ideal == 'yes'`` rows) ONLY, not the full
-    ideal+non-ideal set. Rationale: group theory guarantees that in an ideal
-    (high-symmetry) molecule every mode's irreducible representation is
-    either uniquely stretching or uniquely bending, so the ideal-molecule
-    s[V_S] values realize the framework's true, noise-free step function.
-    Verified empirically this session: the ideal-labeled stretch population's
-    minimum is 0.90368 and the ideal-labeled bend population's maximum is
-    0.17327 -- a clean, NON-OVERLAPPING gap of width ~0.73 -- so a threshold
-    pair drawn from these two boundary values separates the calibration
-    population with zero error, by construction (verified by an assertion,
-    not assumed). Calibrating on the ideal-only population and then
-    evaluating against the FULL library (ideal+non-ideal) is the honest
-    procedure: non-ideal modes are exactly the population the manuscript
-    predicts will migrate into the mixed bucket (center-of-mass-driven
-    softening, B8.3), so folding them into the calibration set would
-    contaminate the threshold with the very effect it exists to detect.
-    tau_S/tau_B are taken as the EXACT empirical boundary values (no ad hoc
-    rounding to e.g. the nearest 0.05) -- this is the tightest boundary that
-    still achieves exact separation on the calibration population, and is
-    fully reproducible from the data with no subjective rounding choice.
+tau_S / tau_B (Step 4 stretch/bend split): derived from the IDEAL-molecule
+subset only (``ideal == 'yes'``), since group theory guarantees an ideal
+molecule's modes are unambiguously stretch or bend. Verified empirical gap:
+ideal-stretch min = 0.90368, ideal-bend max = 0.17327 (width ~0.73, zero
+overlap) -- tau_S/tau_B are these exact boundary values, no rounding.
+Non-ideal modes are excluded from calibration because they are exactly the
+population expected to migrate into the mixed bucket; including them would
+contaminate the threshold with the effect it's meant to detect.
 
-tau_TR (Step 3, external purity gate 1)
-    Swept over a grid against TWO evaluation sets, evaluated once per grid
-    point (Step 2's Hungarian assignment does not depend on tau_TR, only
-    Step 3's clean/mixed decision does, but classify_all_modes is re-run in
-    full each time for simplicity -- these are small molecules, so the cost
-    is negligible):
-      1. every geometry-backed library molecule's REAL normal modes (water,
-         CO2, benzene, + every other mol_list_method.csv roster molecule --
-         since the 2026-07-07 final flip to Gaussian-direct, this is the
-         FULL roster, not a partial subset; the exact count is derived at
-         runtime from ``_geometry_pool_molecules()``/``len(pool)``, never
-         hardcoded, so this docstring cannot go stale as the roster changes).
-         Ground truth: because normal-mode translation/rotation references
-         are constructed directly from geometry (Eckart-Sayvetz),
-         completeness is EXACT for them -- every one of the n_T+n_R ideal
-         references in this set MUST classify clean at any sane tau_TR. This
-         gives a genuine accuracy metric.
-      2. benzene's 36 EMIT modes -- the paper's sole strongly-mixed-mode
-         stress test with real, already-characterized behavior (EMIT 2/9's
-         Ry-inversion, EMIT 34/35/36's flag/blind-spot triad). No independent
-         ground truth exists for all 36 EMIT modes (that full-set validation
-         is Phase 6, out of scope here), so EMIT contributes to the
-         label-change-fraction signal only, not to the accuracy metric.
-    Plateau criterion (stated explicitly, per the task): scanning tau_TR on a
-    0.005 grid from 0.05 to 0.999, the plateau is the LONGEST CONTIGUOUS run
-    of grid points for which (a) the label-change fraction relative to the
-    immediately preceding grid point is EXACTLY ZERO across the combined
-    evaluation set (the geometry-backed library's external slots + benzene's
-    36 EMIT modes), AND (b) accuracy against the normal-mode ground truth is
-    at its run maximum. A step size of 0.005 is fine enough that any genuine tau_TR
-    sensitivity shows up as a nonzero change fraction at that resolution, so
-    a strictly-zero run is a meaningful "nothing changes here" band, not an
-    artifact of coarse sampling. tau_TR is then frozen at 0.95 (the value
-    used as a worked example in the algorithm spec, PDF Section B6.2) if 0.95
-    falls inside the plateau, else at the plateau's midpoint (documented
-    either way in the output JSON's ``plateau_tau_TR_range``).
+tau_TR (Step 3 purity gate): swept over a 0.005 grid (0.05-0.999) against
+(1) every geometry-backed library molecule's real normal-mode T/R references
+(exact ground truth by Eckart-Sayvetz completeness -- always clean) and
+(2) benzene's 36 EMIT modes (label-change signal only, no independent ground
+truth). The plateau is the longest contiguous run where the label-change
+fraction vs. the previous grid point is exactly zero AND accuracy is at its
+run maximum. tau_TR is frozen at 0.95 if it falls in the plateau, else at
+the plateau's midpoint.
 
-Outputs
--------
-data/results/thresholds.json       -- frozen {tau_TR, tau_S, tau_B} + the
-                                       derivation stats + plateau range.
-data/results/tau_sensitivity_sweep.csv -- the full per-grid-point
-                                       (tau_TR, accuracy, label_change_fraction)
-                                       curve, for fig:sensitivity.
+Outputs: data/results/thresholds.json (frozen thresholds + derivation stats
++ plateau range), data/results/tau_sensitivity_sweep.csv (full sweep curve,
+fig:sensitivity).
 """
 import json
 import os
@@ -86,70 +38,30 @@ from src.library_ingest import (
 
 DEFAULT_TAU_GRID = tuple(round(x, 4) for x in np.arange(0.05, 0.9991, 0.005))
 
-# --- Single-centre-only scope filter (2026-07-05 author decision) ---
-# The manuscript's "hydride library" validation (tau_S/tau_B derivation +
-# the ideal/non-ideal confusion-matrix statistics in the "Stretching/
-# bending classification" section) is explicitly scoped to single-centre
-# AB_n topologies only -- "one distinguishable atom anchors all bonds
-# symmetrically" (JCC .tex, "Stretching/bending classification" subsection;
-# tab:ideal lists exactly 11 single-centre AB_n molecules). The molecules
-# excluded here are two-, four-, or six-centre topologies that do not fit
-# that scope and would otherwise be pooled into the non-ideal statistics by
-# mistake. H2O (single-centre AB2) is NOT excluded -- it stays in the
-# non-ideal population as a familiar illustrative molecule (separately also
-# used for the 7-scoring-functions validation table, an unrelated existing
-# use).
+# Single-centre-only scope filter: the hydride-library validation (tau_S/
+# tau_B derivation + ideal/non-ideal confusion stats) is scoped to
+# single-centre AB_n topologies only. Excludes multi-/two-centre molecules
+# (currently just C6H6, benzene -- it has its own separate confusion matrix
+# in src/benzene_validation.py, unaffected by this filter). H2O (single-
+# centre AB2) is NOT excluded. Sourced from
+# src.library_ingest.multi_centre_molecules() (mol_list_method.csv's
+# 'mol_type' column) so it stays roster-driven, not hardcoded.
 #
-# **2026-07-08: roster-derived, not hardcoded.** Originally a hardcoded
-# 7-name frozenset (C2H2, C2H4, C2H6, H2O2, C6H6, iso-C4H10, n-C4H10).
-# Repointed to ``src.library_ingest.multi_centre_molecules()``, which reads
-# ``data/mol_list_method.csv``'s per-molecule ``mol_type`` column
-# ('ideal'/'non-ideal'/'multi-centre') -- the same roster-driven source of
-# truth calibrate.py already uses everywhere else, and forward-compatible
-# with any future multi-centre molecule (just tag it in the CSV, no code
-# change needed). Six of the original 7 hardcoded names (all but C6H6) are
-# outside the finalized 72-molecule roster entirely (removed 2026-07-07)
-# and were already no-ops for filter_single_centre_library() on the real
-# library_scores.csv -- only C6H6 was ever actually present to be dropped.
-# mol_list_method.csv already tags C6H6 'multi-centre' (verified, not
-# assumed), so this reproduces byte-identical FILTERING behavior to the old
-# hardcoded set on every real/current dataset -- confirmed by
-# tests/test_calibrate.py::test_single_centre_only_exclude_matches_scope_
-# decision, which cross-checks both the roster-derived set and the
-# historical 7-name set against the real library_scores.csv and asserts
-# they drop exactly the same molecules ({"C6H6"}).
-#
-# This is a DATA-LOSS-FREE, analysis-time filter, not an ingest-time one, for
-# whichever of these molecules IS in the library/CSV. Benzene in particular
-# keeps its own separate, dedicated confusion matrix
-# (src/benzene_validation.py, benzene_internal_confusion_matrix.csv,
-# fig:benzeneconfusion) built directly from library_scores.csv's own C6H6
-# rows -- this filter has zero effect there since that module never calls
-# confusion_matrix_stats() or this filter.
+# IMPORTANT: if data/mol_list_method.csv can't be read at import time (e.g.
+# cwd isn't the repo root), this silently falls back to a hardcoded 7-name
+# frozenset from the pre-roster scope decision -- keeps the module importable
+# rather than crashing, but a future editor should know this fallback exists.
 try:
     SINGLE_CENTRE_ONLY_EXCLUDE = multi_centre_molecules()
 except Exception:
-    # Fallback to the historical hardcoded scope decision if
-    # data/mol_list_method.csv can't be read at import time (e.g. cwd isn't
-    # the repo root) -- keeps this module importable in that edge case
-    # rather than crashing on import.
     SINGLE_CENTRE_ONLY_EXCLUDE = frozenset({
         "C2H2", "C2H4", "C2H6", "H2O2", "C6H6", "iso-C4H10", "n-C4H10",
     })
 
 
 def filter_single_centre_library(lib_df):
-    """Drop every row (internal AND external, any molecule state) belonging
-    to a molecule outside the hydride library's single-centre AB_n scope
-    (see SINGLE_CENTRE_ONLY_EXCLUDE above). Applied inside
-    confusion_matrix_stats() so every caller (plot_confusion_matrix's
-    rigorous/non-ideal tiers, the direct-call regression tests) gets the
-    correct scope automatically; src/figures.py's plot_bond_scores/
-    plot_boxplots/plot_mode_mixing (which build their own populations
-    straight from library_scores.csv rather than going through
-    confusion_matrix_stats) call this directly too. Idempotent -- filtering
-    an already-filtered DataFrame is a no-op.
-    """
+    """Drop rows belonging to molecules outside the single-centre AB_n scope
+    (SINGLE_CENTRE_ONLY_EXCLUDE). Idempotent."""
     return lib_df[~lib_df["molecule"].isin(SINGLE_CENTRE_ONLY_EXCLUDE)].copy()
 
 
@@ -186,11 +98,9 @@ def derive_stretch_bend_thresholds(lib_df):
 
 
 def _geometry_pool_molecules(lib_df, data_dir="data"):
-    """Molecule names with has_geometry True AND a roster-resolvable basename
-    -- the exact population _load_geometry_pool() will load. No Gaussian
-    parsing here (just roster lookups), so callers that only need the COUNT
-    (e.g. calibrate()'s plateau_criterion prose) don't have to build the full
-    pool just to call len() on it."""
+    """Molecule names with has_geometry True and a roster-resolvable
+    basename -- the population _load_geometry_pool() will load, without
+    actually parsing anything."""
     molecules = sorted(lib_df.loc[lib_df["has_geometry"], "molecule"].unique())
     return [mol for mol in molecules if resolve_log_basename(mol, data_dir) is not None]
 
@@ -209,11 +119,8 @@ def _load_geometry_pool(lib_df, data_dir="data"):
 
 
 def _load_benzene_emit(data_dir="data"):
-    """Load benzene's EMIT modes via its roster-resolved basename (C6H6 ->
-    e.g. 'C6H6') rather than a hardcoded literal 'benzene' --
-    the log/gjf files were renamed to the finalized roster basename, but
-    data/EMIT/*_EMIT.txt is keyed by the SAME basename (also renamed,
-    2026-07-07), so this still resolves all three file types consistently."""
+    """Load benzene's EMIT modes via its roster-resolved basename (C6H6);
+    data/EMIT/*_EMIT.txt is keyed by the same basename as .log/.gjf."""
     from main import load_inputs, build_scorer_and_final
     base = resolve_log_basename("C6H6", data_dir)
     raw, _ = load_inputs(base, "emit", data_dir)
@@ -324,101 +231,48 @@ def calibrate(lib_df, data_dir="data", tau_grid=DEFAULT_TAU_GRID, preferred_tau_
 
 def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
     """Clean-category confusion matrix + per-category precision/recall
-    (fig:confusion's underlying numbers), evaluated over the WHOLE ingested
-    library (both Excel-only and geometry-backed rows), RESTRICTED to the
-    single-centre AB_n hydride-library scope (SINGLE_CENTRE_ONLY_EXCLUDE,
-    applied first thing below via filter_single_centre_library --
-    2026-07-05 author decision; see that constant's docstring for the full
-    rationale). Any molecule in `lib_df` outside that scope (C2H2, C2H4,
-    C2H6, H2O2, C6H6, iso-C4H10, n-C4H10 as of this writing) is dropped
-    before anything else runs, so it never contributes to the confusion
-    table, precision/recall, or the ideal/non-ideal tier splits below --
-    this holds regardless of whether the caller already pre-filtered by
-    `kind`/`ideal` (plot_confusion_matrix's rigorous_df/nonideal_df) or
-    passed the raw, unfiltered library (the direct-call regression tests in
-    tests/test_calibrate.py).
-
-    Reference labels: 'stretch'/'bend' for internal rows, 'translation'/
-    'rotation' for external rows (the latter are ground truth by
-    construction -- Eckart-Sayvetz normal-mode T/R references are exact).
-
-    Predicted labels:
-      - internal rows WITHOUT geometry: vib_label(V_Stretch, thresholds)
-        applied directly (Step 4 only). Since the 2026-07-07 roster-driven
-        pipeline (src/library_ingest.py), every row is geometry-backed
-        (has_geometry is unconditionally True), so this branch is a
-        defensive fallback, not the common case it used to be under the
-        old Excel-only-molecule path.
-      - internal/external rows WITH geometry: the already-computed
-        'predicted_label' column from src.library_ingest.score_geometry_
-        molecule() (full Algorithm 1, Steps 2-4) -- not recomputed here.
+    (fig:confusion's numbers), restricted to the single-centre AB_n scope
+    (SINGLE_CENTRE_ONLY_EXCLUDE, applied first). Reference labels:
+    'stretch'/'bend' for internal rows, 'translation'/'rotation' for
+    external rows (exact ground truth, Eckart-Sayvetz). Predicted labels
+    come from the already-computed 'predicted_label' column
+    (score_geometry_molecule(), full Algorithm 1).
 
     Returns {'acceptance_floor', 'per_category': {...}, 'floor_met',
-    'confusion_table': DataFrame} -- the last is the raw reference-label x
-    predicted-bucket contingency table for fig:confusion.
+    'confusion_table': DataFrame} -- the contingency table for fig:confusion.
 
-    ADDITIVE (2026-07-02, formula-auditor + lead-author recommendation):
-    each `per_category[cat]` entry also carries `recall_ideal`/
-    `recall_nonideal` (+ `n_ref_ideal`/`n_ref_nonideal`), a formal, tested
-    version of the ideal-vs-non-ideal ground-truth-strength split that
-    `src/figures.py::plot_confusion_matrix` already applies ad hoc (as of
-    commit 424a666) directly to `library_scores.csv` for `fig:confusion`'s
-    two-tier layout. The pooled `precision`/`recall` keys above are UNCHANGED
-    (existing callers/tests are unaffected) -- this only adds new keys, and
-    intentionally does not touch `src/figures.py` (that figure is already
-    correct and wired into the manuscript; this just gives the same split a
-    single formal, computed home instead of only living inside plotting code).
-    Tier masks are copied verbatim from `plot_confusion_matrix` for identical
-    semantics: `ideal` tier = every external (T/R) row REGARDLESS of its
-    `ideal` tag (Eckart-Sayvetz completeness makes those exact regardless)
-    OR any internal row with `ideal=='yes'`; `nonideal` tier = internal rows
-    with `ideal=='no'` only. For `translation`/`rotation`, every row is
-    `kind=='external'`, so `recall_ideal` reproduces the pooled `recall`
-    exactly and `recall_nonideal` is NaN (n_ref_nonideal=0, no external row
-    ever has `ideal=='no'`) -- expected, not a bug. For `stretch`/`bend`,
-    `recall_ideal` is guaranteed to be exactly 1.0: tau_S/tau_B
-    (`derive_stretch_bend_thresholds`) are LITERALLY the min/max of this same
-    `ideal=='yes'` population, so by construction no ideal-tier stretch/bend
-    row can land on the wrong side of its own defining boundary.
+    Each `per_category[cat]` entry also carries `recall_ideal`/
+    `recall_nonideal` (+ `n_ref_ideal`/`n_ref_nonideal`), an ideal-vs-non-
+    ideal ground-truth-strength split: `ideal` tier = every external row
+    (always exact) OR internal rows with `ideal=='yes'`; `nonideal` tier =
+    internal rows with `ideal=='no'`. NON-OBVIOUS INVARIANT: for
+    `stretch`/`bend`, `recall_ideal` is guaranteed exactly 1.0 by
+    construction -- tau_S/tau_B are literally the min/max of this same
+    `ideal=='yes'` population, so no ideal-tier row can land on the wrong
+    side of its own defining boundary.
     """
     from src.classifier import vib_label, classification_bucket
 
-    # Single-centre-only scope filter (2026-07-05) -- applied FIRST, before
-    # any other row selection below, so it is completely independent of
-    # whether the caller already pre-filtered by kind/ideal.
+    # Applied first, regardless of whether the caller already pre-filtered.
     lib_df = filter_single_centre_library(lib_df)
 
-    # Bucket lookup is logic-based (classification_bucket(), src/classifier.py),
-    # not a flat dict keyed by exact label: clean/mixed-external labels are now
-    # 6 distinct axis-specific strings each (e.g. "Tx".."Rz", "Tx*".."Rz*")
-    # rather than the 2 fixed CLEAN_TRANSLATION/CLEAN_ROTATION/
-    # MIXED_EXTERNAL_WITH_VIBRATION constants a flat dict used to key on.
+    # classification_bucket() does the label->bucket mapping logically
+    # (src/classifier.py), not via a flat dict, since clean/mixed-external
+    # labels are 6 distinct axis-specific strings each (e.g. "Tx".."Rz*").
 
     df = lib_df.copy()
-    df = df[df["ref_label"].notna()]  # every row here has a stretch/bend/
-                                       # translation/rotation reference label
+    df = df[df["ref_label"].notna()]
 
-    # EXCLUDE any reference label outside the 4 recognized categories
-    # (2026-07-05 fix, flagged after commit 69d549e gave benzene modes 21/22
-    # a genuine literal literature "SB" (mixed) ground-truth label for the
-    # first time). This function's confusion table and per-category
-    # precision/recall/retention accounting is specifically a 4-category
-    # (translation/rotation/stretch/bend) contingency check. Left in `df`, a
-    # foreign ref_label whose predicted bucket happens to land on one of
-    # those 4 (both mode 21 and 22 predict bucket "bend") would silently
-    # inflate that category's n_pred -- precision's denominator -- without
-    # ever being able to contribute a true positive, corrupting bend
-    # precision from 1.000 to 0.99267 for a reason that has nothing to do
-    # with classifier error. A literal literature "SB" row answers a
-    # different question ("does the literature call this mode genuinely
-    # mixed?" -- see src/benzene_validation.py::benzene_internal_confusion_matrix
-    # for that benzene-scoped 3-class table) than "did a nominal
-    # stretch/bend keep its label or migrate to mixed under non-ideal mass
-    # effects?", which is what this function's retention/precision
-    # accounting measures. Any other currently-unrecognized ref_label would
-    # hit the same silent miscount, so this is a general guard (not a
-    # benzene-only special case) and does not redesign the function or add a
-    # 3rd category to its own bucket vocabulary.
+    # Exclude any ref_label outside the 4 recognized categories: a literal
+    # literature "SB" (genuine mixed) label, e.g. benzene modes 21/22, would
+    # otherwise inflate a category's n_pred (precision's denominator)
+    # without ever contributing a true positive -- this previously corrupted
+    # bend precision from 1.000 to 0.99267 (commit 69d549e) before this
+    # filter was added. "SB" answers a different question (does the
+    # literature call this mode genuinely mixed?) than this function's
+    # retention/precision accounting (did a stretch/bend keep its label
+    # under non-ideal mass effects?) -- see src/benzene_validation.py for
+    # the former's own 3-class table.
     _KNOWN_REF_LABELS = ("stretch", "bend", "translation", "rotation")
     df = df[df["ref_label"].isin(_KNOWN_REF_LABELS)]
 
@@ -432,9 +286,7 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
 
     confusion_table = pd.crosstab(df["ref_label"], df["_pred_bucket"])
 
-    # Ideal/non-ideal ground-truth-strength tiers -- identical masks to
-    # src/figures.py::plot_confusion_matrix's ad hoc split (see docstring
-    # above); computed once here and reused for every category below.
+    # Ideal/non-ideal ground-truth-strength tiers, see docstring above.
     ideal_tier_mask = (df["kind"] == "external") | (df["ideal"] == "yes")
     nonideal_tier_mask = (df["kind"] == "internal") & (df["ideal"] == "no")
 

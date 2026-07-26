@@ -4,15 +4,11 @@ import numpy as np
 from .utils import get_symbol, get_atomic_number
 
 # --- Shared Gaussian frequency-block helpers ---------------------------
-# Both the "HP" (Coord Atom Element:, 3-dash "Frequencies ---") and
-# "Standard" (Atom AN, 2-dash "Frequencies --") block variants share the
-# exact same fixed line offsets around the "Frequencies" line:
-#   line_idx - 1 : irrep symbols (one token per mode)
-#   line_idx     : Frequencies
-#   line_idx + 1 : Reduced masses (mu, AMU)
-#   line_idx + 2 : Force constants (k, mDyne/Angstrom)
-# GaussianParser._parse_block() and IntermediateIO's new Gaussian-direct
-# format (structurally identical to a real HP block) both use these.
+# Both "HP" (Coord Atom Element:, 3-dash) and "Standard" (Atom AN, 2-dash)
+# block variants share fixed line offsets around the "Frequencies" line:
+# -1 irreps, 0 Frequencies, +1 Reduced masses (AMU), +2 Force constants
+# (mDyne/Angstrom). Used by GaussianParser._parse_block() and by
+# IntermediateIO's normal-mode format (structurally an HP block).
 
 _DASH_RE = re.compile(r'^-+$')
 
@@ -31,15 +27,9 @@ def _values_after_dash_marker(line):
 
 def _parse_freq_block_header(lines, line_idx):
     """Parse the fixed-offset header lines around a Gaussian frequency-block
-    'Frequencies ---'/'Frequencies --' line at `line_idx`.
-
-    Returns parallel lists (freqs, irreps, mus, ks), one entry per mode in
-    this block. `irreps` entries can be a placeholder string like '?A'
-    (stored as-is, never validated against a point-group table). `mus`/`ks`
-    (and `irreps`, defensively) fall back to None per-entry if their line is
-    absent, malformed, or has a token count that doesn't match the number of
-    modes in this block.
-    """
+    line at `line_idx`; returns parallel lists (freqs, irreps, mus, ks), one
+    entry per mode. mus/ks/irreps fall back to None per-entry if their line
+    is absent, malformed, or has a mismatched token count."""
     freqs = _values_after_dash_marker(lines[line_idx])
     n = len(freqs)
 
@@ -61,15 +51,10 @@ def _parse_freq_block_header(lines, line_idx):
 
 def _parse_hp_mode_vectors(lines, data_start, natoms, num_modes_in_block):
     """Read an HP-style 'Coord Atom Element:' displacement table starting at
-    `data_start` (the line right after that header): rows of
-    'coord_idx atom_idx atomic_num val1..valK' (K = num_modes_in_block),
-    3*natoms rows total (one row per coordinate per atom).
-
-    Returns (vectors, next_line): vectors has shape
-    (num_modes_in_block, natoms, 3); next_line is the index of the line
-    right after the last row consumed (so a caller can resume scanning from
-    there for the next block).
-    """
+    `data_start`: rows of 'coord_idx atom_idx atomic_num val1..valK',
+    3*natoms rows total. Returns (vectors, next_line) where vectors has
+    shape (num_modes_in_block, natoms, 3) and next_line lets the caller
+    resume scanning for the next block."""
     temp_data = np.zeros((num_modes_in_block, natoms, 3))
     current_line = data_start
     count = 0
@@ -207,12 +192,10 @@ class GaussianParser:
         except Exception: pass
 
     def _parse_modes(self):
-        # 1. Determine if High Precision (HP) modes are present
-        # Gaussian prints "Coord Atom Element:" for HP modes.
+        # Gaussian prints "Coord Atom Element:" for High-Precision (HP) modes.
         has_hp = any("Coord Atom Element:" in line for line in self.lines)
 
-        # 2. Collect frequency lines
-        # Only scan after the geometry we parsed to avoid initial guess freqs
+        # Only scan after the geometry we parsed to avoid initial-guess freqs.
         freq_lines = []
         for i in range(len(self.lines)):
             if "Frequencies --" in self.lines[i]:
@@ -222,9 +205,7 @@ class GaussianParser:
         if not freq_lines:
             freq_lines = [i for i, line in enumerate(self.lines) if "Frequencies --" in line]
 
-        # 3. Parse blocks
         for start_idx in freq_lines:
-            # Pass the has_hp flag. If True, we ONLY parse HP blocks and skip Standard ones.
             self._parse_block(start_idx, force_hp_only=has_hp)
 
     def _parse_block(self, line_idx, force_hp_only=False):
@@ -237,28 +218,25 @@ class GaussianParser:
         data_start = -1
         is_hp = False
 
-        # Scan ahead to see what kind of data block follows this frequency line
+        # Scan ahead to see what kind of data block follows this frequency line.
         for i in range(line_idx + 1, min(len(self.lines), line_idx + 30)):
             line = self.lines[i].strip()
 
-            # Check for HP header
             if "Coord Atom Element:" in line:
                 data_start = i + 1
                 is_hp = True
                 break
 
-            # Check for Standard header
             if "Atom" in line and "AN" in line:
                 data_start = i + 1
                 is_hp = False
                 break
 
-            # Fallback HP pattern check (if header missing but data present)
+            # Fallback HP pattern check (if header missing but data present).
             parts = line.split()
             if len(parts) > 3 and parts[0].isdigit() and parts[1].isdigit() and parts[2].isdigit():
                 try:
                     float(parts[3])
-                    # It looks like HP data
                     data_start = i
                     is_hp = True
                     break
@@ -266,10 +244,9 @@ class GaussianParser:
 
         if data_start == -1: return
 
-        # CRITICAL FIX:
-        # If HP modes exist in the file (force_hp_only=True), but this specific block
-        # is identified as Standard (is_hp=False), we SKIP it.
-        # This prevents reading the Standard block when HP is available.
+        # CRITICAL: when HP blocks exist in the file, a Standard block for the
+        # same frequencies must be skipped, or modes get double-counted / read
+        # at the wrong precision.
         if force_hp_only and not is_hp:
             return
 
@@ -392,24 +369,20 @@ class EMITParser:
 
 class IntermediateIO:
     """Save/load the editable intermediate checkpoint file between parsing
-    and scoring (see CLAUDE.md / main.load_inputs()'s docstring).
+    and scoring (see CLAUDE.md / main.load_inputs()).
 
-    Two structurally different formats live behind this one interface,
+    Two structurally different formats live behind this interface,
     auto-detected on load() by content (not filename):
-      - EMIT intermediates (all modes have is_emit=True): the ORIGINAL
-        simple MOLECULE_DATA/NATOMS/ATOMS/COORDINATES/BONDS/NUM_MODES/MODE
-        format -- unchanged, out of scope for the 2026-07-08 Gaussian-direct
-        rework (EMIT modes have no mu/k/irrep/Gaussian-frequency-block
-        concept). See _save_emit/_load_emit.
-      - Normal-mode intermediates (all modes have is_emit=False): the NEW
-        Gaussian-direct format (2026-07-08), matching a hand-built example
-        the author supplied: header line 'NATOMS LINEAR NAME', a gjf-style
-        connectivity block, a Standard-orientation-style coordinate block,
-        then raw Gaussian HP frequency blocks (5 modes/block) carrying
-        irrep/reduced mass/force constant alongside each mode's displacement
-        vector. See _save_normal/_load_normal, which reuse
-        _parse_freq_block_header/_parse_hp_mode_vectors -- this format is
-        structurally identical to a real Gaussian HP frequency block.
+      - EMIT intermediates (all modes is_emit=True): the original simple
+        MOLECULE_DATA/NATOMS/ATOMS/COORDINATES/BONDS/NUM_MODES/MODE format
+        (no mu/k/irrep concept). See _save_emit/_load_emit.
+      - Normal-mode intermediates (all modes is_emit=False): a Gaussian-direct
+        format -- header 'NATOMS LINEAR NAME', a gjf-style connectivity block,
+        a Standard-orientation coordinate block, then raw Gaussian HP
+        frequency blocks (5 modes/block, carrying irrep/mu/k). See
+        _save_normal/_load_normal, which reuse
+        _parse_freq_block_header/_parse_hp_mode_vectors since this format is
+        structurally identical to a real HP frequency block.
     """
 
     @staticmethod
@@ -429,7 +402,7 @@ class IntermediateIO:
             return IntermediateIO._load_emit(content)
         return IntermediateIO._load_normal(content, filename)
 
-    # --- Normal-mode format (Gaussian-direct, 2026-07-08) ---------------
+    # --- Normal-mode format (Gaussian-direct) ---------------
 
     @staticmethod
     def _save_normal(data, filename):
@@ -440,10 +413,9 @@ class IntermediateIO:
         natoms = len(atoms)
         nmodes = len(modes)
 
-        # linear = (nmodes == 3N-5) -- mirrors GaussianParser.parse()'s own
-        # fail-loud 3N-6/3N-5 check; informational round-trip metadata only
-        # (ModeScorer/classifier detect linearity independently at scoring
-        # time from the moment-of-inertia tensor).
+        # linear = (nmodes == 3N-5); informational round-trip metadata only
+        # -- ModeScorer/classifier detect linearity independently from the
+        # moment-of-inertia tensor at scoring time.
         linear = 1 if nmodes == 3 * natoms - 5 else 0
 
         mol_name = os.path.splitext(os.path.basename(filename))[0]
@@ -455,12 +427,10 @@ class IntermediateIO:
         with open(filename, 'w') as f:
             f.write(f"{natoms} {linear} {mol_name}\n")
 
-            # Bond block: one line per atom (1..natoms), gjf geom=connectivity
-            # style 'atom neighbor1 order1 neighbor2 order2 ...' (order
-            # defaults to 1.0 -- the engine does not retain real bond order
-            # past connectivity, see _parse_connectivity). Only neighbors
-            # with a HIGHER 1-based index are listed on a given atom's line
-            # (each bond appears once), matching data/gjf/*.com convention.
+            # Bond block: one line per atom, gjf geom=connectivity style
+            # 'atom neighbor1 order1 ...' (order defaults to 1.0, real bond
+            # order isn't retained). Only higher-index neighbors are listed
+            # per atom, so each bond appears once (matches data/gjf/*.com).
             adjacency = {i: [] for i in range(natoms)}
             for (i, j) in bonds:
                 lo, hi = (i, j) if i < j else (j, i)
@@ -528,14 +498,13 @@ class IntermediateIO:
         linear_flag = int(header_parts[1])
         idx = 1
 
-        # Bond block: exactly `natoms` lines, one per atom (1..natoms),
-        # positionally -- no sentinel header/footer (unlike the old EMIT
-        # format). Each line is 'atom [neighbor [order] neighbor [order] ...]'.
-        # A line with exactly one trailing token is a BARE 'atom neighbor'
-        # pair (order defaults to 1.0) -- the documented manual bond-repair
-        # workflow (CLAUDE.md: "add '1 2'-style bond lines"); anything else
-        # is read as the full alternating 'neighbor order neighbor order...'
-        # form save() always writes.
+        # Bond block: exactly `natoms` lines, one per atom, positionally (no
+        # header/footer). Each line is 'atom [neighbor [order] ...]'. A line
+        # with exactly one trailing token is a bare 'atom neighbor' pair
+        # (order defaults to 1.0) -- this is the manual bond-repair format
+        # users hand-edit in (CLAUDE.md: "add '1 2'-style bond lines");
+        # anything else is read as the full 'neighbor order neighbor order...'
+        # form save() writes.
         bonds = []
         for _ in range(natoms):
             parts = content[idx].split()

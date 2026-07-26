@@ -1,108 +1,40 @@
 """Library ingest: builds data/results/library_scores.csv for every molecule
 in the JCC paper's roster, ``data/mol_list_method.csv`` (72 rows: 11 "ideal"
-single-centre AB_n shapes, 60 "non-ideal" substituted variants of those same
-shapes, 1 "multi-centre" = benzene).
-
-**Single, roster-driven pipeline (2026-07-07 final flip to Gaussian-direct).**
-This module used to switch between two data sources -- precomputed scores
-read out of a spreadsheet workbook (the interim "source=excel" path, adopted
-2026-07-04 while only ~25/70 molecules had on-disk Gaussian geometry) and a
-disk-driven real-engine recompute ("source=gaussian"). That dual-source
-scaffolding is now retired outright, not just defaulted away from: every one
-of the 72 roster molecules has a verified, on-disk ``.log``/``.gjf`` (or
-``.com``) pair (Phase A of the 2026-07-07 plan: ``mol_list_method.csv``
-gained a ``basename`` column mapping each canonical ``molecule`` name to its
-actual on-disk file stem, e.g. ``SbH3`` -> ``SbH3``, ``BrF3`` ->
-``BrF3``). There is exactly one way to build ``library_scores.csv`` now:
-iterate the roster, run the real engine (Steps 1-4, ``main.load_inputs`` ->
-``main.build_scorer_and_final`` -> ``src.classifier.classify_all_modes``,
-``ModeScorer.score_bonds()``) on every row's basename, and label the output
-with the roster's own canonical ``molecule`` name. This module never opens
-the old spreadsheet workbook at all.
+single-centre AB_n shapes, 60 "non-ideal" substituted variants, 1
+"multi-centre" = benzene). ``data/mol_list_method.csv`` is the single source
+of truth (roster row -> on-disk ``basename``); this module never reads a
+precomputed spreadsheet -- every score is a fresh real-engine recompute
+(Steps 1-4: ``main.load_inputs`` -> ``main.build_scorer_and_final`` ->
+``src.classifier.classify_all_modes``, ``ModeScorer.score_bonds()``).
 
 Pipeline
 --------
-1. ``load_mol_roster()`` reads ``data/mol_list_method.csv`` -- the
-   authoritative (molecule, basename) registry.
+1. ``load_mol_roster()`` reads the roster.
 2. ``check_roster_disk_consistency()`` cross-checks every roster basename
-   against ``discover_geometry_molecules()``'s directory-intersection scan
-   (repurposed from primary discovery, which it used to be under
-   "source=gaussian", to a safety-net consistency check). Any roster row
-   whose basename does NOT resolve to a real ``.log``+``.gjf``/``.com`` pair
-   on disk is a real regression now that 100% coverage is the expected
-   state -- ``build_library_scores()`` raises ``FileNotFoundError`` listing
-   every such (molecule, basename) pair before doing any per-molecule work
-   (fail fast). An on-disk basename with no roster row at all (e.g. the
-   gramicidin ``1grm_MM_UFF`` companion-paper inputs -- Decision 5, out of
-   scope for this paper) is not an error; it triggers a non-fatal
-   ``warnings.warn`` and is simply excluded from the output.
-3. ``score_geometry_molecule(base, ..., mol_type=...)`` runs the real engine
-   on one on-disk molecule, returning one row per external T/R slot and one
-   row per internal "Vib i" mode, with ``ref_label``/``ideal``/``ref_key``
-   left ``None`` (label-only content, attached separately -- see below).
-   ``mol_type`` (the roster's own ``mol_type`` column for this molecule)
-   gates the ``d_CA`` column: only computed for ``ideal``/``non-ideal``
-   molecules with a unique central/hub atom -- see ``_central_atom_index()``.
-   A molecule whose files are present but fail to parse/score
-   (``FileNotFoundError``/``ValueError`` from ``build_scorer_and_final``,
-   e.g. no usable bond connectivity) is a DIFFERENT failure mode than
-   "missing from disk" -- that is warned about and skipped (excluded from
-   the CSV), not raised, since Phase B's fail-loud guarantee is specifically
-   about roster-vs-disk coverage, not every possible parse edge case.
-4. ``attach_labels()`` joins ``ref_label``/``ref_key`` onto every internal
-   row from ``src/csv_label_ingest.py``'s CSVs (``data/characterised_modes.csv``,
-   ``data/ref-label_citation.csv`` -- see that module's docstring;
-   ``data/data_score.csv`` is retired from this code path entirely as of
-   2026-07-08, see below). The join is gated by a whole-molecule
-   frequency-agreement check against ``characterised_modes.csv``'s own
-   tabulated ``freq`` column (itself regenerated straight from the on-disk
-   log by ``regenerate_characterised_modes()``, so a gate failure should now
-   only mean a real mode-count/index problem, not staleness -- kept as a
-   safety net regardless): 19 of the 72 roster molecules run at a fallback
-   level of theory (``mol_list_method.csv``'s ``current_method`` column,
-   e.g. B3LYP/3-21G instead of the default MP2/3-21G), so this gate still
-   catches genuine mode-index mismatches between the engine's parsed
-   frequency and ``characterised_modes.csv``'s expectation for that
-   (molecule, mode_index) -- one mismatched (or altogether absent) mode
-   disqualifies the WHOLE molecule's label join, so a bad molecule cannot
-   half-merge. External (T/R) rows are untouched by this gate (already
-   correct, structural, geometry-only). Scores (``V_Stretch``, ``Tx..Rz``,
-   ``predicted_label``, ``s_AB``, ...) are NEVER affected by a failed label
-   join -- only ``ref_label``/``ref_key`` are left null for that molecule's
-   internal rows. ``attach_ideal_tags()`` separately (unconditionally, not
-   gated by this frequency check) populates ``ideal`` for every internal
-   row from ``mol_list_method.csv``'s per-molecule ``mol_type`` column --
-   see that function's docstring.
+   against what's on disk. A roster row with no matching ``.log``+``.gjf``
+   pair is a fatal ``FileNotFoundError`` (100% coverage is expected). An
+   on-disk basename with no roster row (e.g. the gramicidin
+   ``1grm_MM_UFF`` companion-paper inputs, out of scope here) is an expected
+   orphan: non-fatal warning, excluded from the output.
+3. ``score_geometry_molecule()`` runs the real engine per molecule. A
+   molecule whose files exist but fail to parse/score is warned and skipped
+   (excluded from the CSV), not raised -- distinct from "missing from disk".
+4. ``attach_labels()`` joins ``ref_label``/``ref_key`` from
+   ``src/csv_label_ingest.py``'s CSVs, gated by a per-molecule frequency
+   check (see that function's docstring). ``attach_ideal_tags()`` separately
+   populates ``ideal`` from the roster's ``mol_type`` column.
 
-**``data/data_score.csv`` retirement (2026-07-08, completed 2026-07-09).**
-This module (and ``src/csv_label_ingest.py``) no longer read
-``data/data_score.csv`` at all -- every quantity it used to supply is now
-either computed by the engine (``d_CA``, replacing its old ``|d_CA|``
-column) or sourced from ``data/characterised_modes.csv``/
-``data/mol_list_method.csv`` (``ref_label``/``ref_key``/frequency-gate,
-``ideal``, respectively). The 2026-07-08 retirement left the file on disk
-untouched as a legacy artifact still synced by ``resync_reference_metadata()``;
-2026-07-09 (OH4/OF4 exclusion session) the author deleted
-``data/data_score.csv`` from disk entirely as a separate, unrelated cleanup
-of that already-retired file, so ``resync_reference_metadata()`` was updated
-in the same session to stop touching it -- it now resyncs
-``characterised_modes.csv`` only. ``regenerate_characterised_modes()`` keeps
-``characterised_modes.csv`` itself in sync with the on-disk logs (a direct
-disk scan, not restricted to the roster) while preserving the author's
-manually-curated literature columns.
+``data/data_score.csv`` is retired: every quantity it used to supply now
+comes from the engine (``d_CA``) or from ``characterised_modes.csv``/
+``mol_list_method.csv``. ``regenerate_characterised_modes()`` keeps
+``characterised_modes.csv`` in sync with on-disk logs via a direct disk scan
+(not roster-restricted), preserving manually-curated literature columns.
 
-Output schema (unchanged column names so ``src/calibrate.py``/
-``src/figures.py`` keep working):
-  ``molecule``, ``mode_index``, ``kind``, ``freq``, ``ref_label``, ``ideal``,
-  ``V_Stretch``, ``delta_b_mean``, ``s_AB``, ``rel_db``, ``has_geometry``,
-  ``predicted_label``, ``predicted_annotation``, ``Tx``, ``Ty``, ``Tz``,
-  ``Rx``, ``Ry``, ``Rz``, ``ref_key``, ``reduced_mass``, ``force_constant``,
-  ``irrep``, ``d_CA`` (additive, 2026-07-08 -- see SCHEMA_COLUMNS' own
-  comment). ``has_geometry`` is unconditionally ``True`` for every row now
-  (every roster molecule has on-disk geometry by construction) -- kept in
-  the schema rather than dropped so downstream consumers that still read it
-  (e.g. ``src/calibrate.py``'s ``_load_geometry_pool``) do not need to
-  change.
+Output schema (``SCHEMA_COLUMNS``, unchanged names so ``src/calibrate.py``/
+``src/figures.py`` keep working). ``has_geometry`` is unconditionally
+``True`` (every roster molecule has on-disk geometry) but kept in the schema
+so downstream readers (e.g. ``src/calibrate.py``'s ``_load_geometry_pool``)
+don't need to change.
 """
 import os
 import warnings
@@ -116,35 +48,19 @@ from src.parser import GaussianParser
 _EXTERNAL_SLOTS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 
 # Locked output schema (src/calibrate.py and src/figures.py read these exact
-# column names). `ref_key` (2026-07-05, citation key from
-# src/csv_label_ingest.py, e.g. "Shi1972") is a purely-additive column
-# appended at the end: existing consumers read columns by name, not
-# position, so this does not disturb them. `reduced_mass`/`force_constant`/
-# `irrep` (2026-07-08, Gaussian-direct parser rework) are appended the same
-# way -- engine-parsed metadata for internal rows, None/blank for external
-# (T/R) rows since construct_T/construct_R never set these keys. Named
-# `reduced_mass`/`force_constant` (NOT bare `k`) to avoid colliding with this
-# same CSV's existing, differently-scoped `k` column (a scoring metric
-# adjacent to `vib_scr`, unrelated to force constant).
+# column names, by name not position). `reduced_mass`/`force_constant` are
+# named that way (not bare `k`) to avoid colliding with this CSV's existing
+# `k` column, a differently-scoped scoring metric adjacent to `vib_scr`.
 SCHEMA_COLUMNS = [
     "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
     "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
     "predicted_label", "predicted_annotation",
     "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "ref_key",
     "reduced_mass", "force_constant", "irrep",
-    # d_CA (2026-07-08, data_score.csv retirement): central/hub-atom
-    # displacement amplitude for ONE internal mode -- ||mode_vector[central
-    # atom]||. Populated only for internal rows of molecules tagged
-    # mol_type=='ideal'/'non-ideal' in mol_list_method.csv (a genuine
-    # single-hub AB_n topology) AND whose bond graph resolves to exactly one
-    # atom bonded to every other atom (see _central_atom_index()); null for
-    # every external row, every multi-centre molecule (e.g. C6H6 -- no
-    # single hub exists), and any ideal/non-ideal molecule where the degree
-    # check itself fails to find a unique hub. This replaces
-    # data_score.csv's old, no-longer-read `|d_CA|` column with a real,
-    # engine-derived quantity computed directly from bonds + the mode's own
-    # displacement vector -- see score_geometry_molecule()/
-    # _central_atom_index() below.
+    # d_CA: central/hub-atom displacement amplitude, ||mode_vector[central
+    # atom]||, for internal rows of ideal/non-ideal molecules with a unique
+    # hub atom (_central_atom_index()); null otherwise (external rows,
+    # multi-centre molecules, no-unique-hub cases).
     "d_CA",
 ]
 
@@ -221,23 +137,16 @@ def _central_atom_index(bonds, n_atoms):
 def score_geometry_molecule(base, data_dir="data", thresholds=None, mol_type=None):
     """Run the real engine (Steps 1-4) on one on-disk molecule and return a
     list of row dicts (one per external T/R slot + one per internal 'Vib i'
-    mode) in the library_scores.csv schema, EXCLUDING 'molecule' (the caller
-    attaches that) and with ref_label/ideal/ref_key left None (attached
-    separately by attach_labels/attach_ideal_tags, label-only).
+    mode) in the library_scores.csv schema, excluding 'molecule' (caller
+    attaches it) with ref_label/ideal/ref_key left None (attached separately).
 
-    `mol_type` (mol_list_method.csv's 'ideal'/'non-ideal'/'multi-centre'
-    column for this molecule, optional) gates the new `d_CA` column: only
-    computed for 'ideal'/'non-ideal' molecules (a genuine single-hub AB_n
-    topology is the whole premise of "central atom"), and even then only if
-    _central_atom_index() finds exactly one atom bonded to every other atom.
-    `mol_type=None` (the default, e.g. direct test calls that don't go
-    through the roster) never computes d_CA -- same as an explicit
-    'multi-centre' tag.
+    `mol_type` gates `d_CA`: computed only for 'ideal'/'non-ideal' molecules
+    with a unique hub atom (_central_atom_index()); None/'multi-centre' never
+    computes it.
 
     Raises ValueError if no bond connectivity is available (propagated from
-    build_scorer_and_final -- a molecule with a .gjf but no usable
-    connectivity is a real data problem, not silently skipped here; the
-    caller decides whether to skip-and-warn).
+    build_scorer_and_final) -- a real data problem, not silently skipped
+    here; the caller decides whether to skip-and-warn.
     """
     from main import load_inputs, build_scorer_and_final
     from src.classifier import classify_all_modes
@@ -320,21 +229,12 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None, mol_type=Non
 
 
 def multi_centre_molecules(data_dir="data"):
-    """Molecule names tagged mol_type=='multi-centre' in
-    mol_list_method.csv -- the authoritative multi-centre / no-single-hub-
-    atom classification. Repoints (2026-07-08) src/calibrate.py's formerly
-    hardcoded SINGLE_CENTRE_ONLY_EXCLUDE frozenset (C2H2, C2H4, C2H6, H2O2,
-    C6H6, iso-C4H10, n-C4H10 -- the 2026-07-05 scope decision) to this
-    single, roster-driven source. Six of those seven names are outside the
-    finalized 72-molecule roster entirely (removed 2026-07-07) and were
-    already no-ops for filter_single_centre_library() on the real,
-    roster-driven library_scores.csv -- only C6H6 was ever actually present
-    to be dropped by that filter. mol_list_method.csv's mol_type column
-    already tags C6H6 'multi-centre' (verified, not assumed -- see
-    IMPLEMENTATION_PLAN.md), so this function reproduces byte-identical
-    FILTERING behavior to the old hardcoded set on every real/current
-    dataset, while being forward-compatible with any future multi-centre
-    molecule added to the roster (no code edit needed, just a CSV edit).
+    """Molecule names tagged mol_type=='multi-centre' in mol_list_method.csv
+    -- the authoritative multi-centre / no-single-hub-atom classification.
+    Drives src/calibrate.py's SINGLE_CENTRE_ONLY_EXCLUDE; of that set's
+    historical 7 names, only C6H6 is actually in the current 72-molecule
+    roster, so this is the single roster-driven source now (forward
+    compatible with any future multi-centre addition, no code edit needed).
     """
     roster = load_mol_roster(data_dir)
     if "mol_type" not in roster.columns:
@@ -345,40 +245,19 @@ def multi_centre_molecules(data_dir="data"):
 def attach_labels(df, csv_tables, label_lookup, freq_atol=0.05, freq_rtol=1e-4):
     """Join ref_label/ref_key onto `df`'s internal rows, molecule by
     molecule, gated by a whole-molecule frequency-agreement check against
-    `csv_tables["characterised_modes"]` (data/characterised_modes.csv --
-    2026-07-08: repointed off data/data_score.csv, which is no longer read
-    anywhere in this module; see the module docstring). This gate is NOT
-    vestigial: it catches genuine mode-index mismatches between the
-    engine's own parsed frequency and characterised_modes.csv's
-    independently-curated expectation for that (molecule, mode_index). Since
-    characterised_modes.csv's own `freq` column is now itself regenerated
-    directly from the same on-disk log the engine parses (see
-    `regenerate_characterised_modes()`), a gate failure at this point should
-    only ever mean a real mode-count/index problem, not staleness -- kept as
-    a safety net against future manual edits drifting characterised_modes.csv
-    out of sync, not removed. External rows are untouched (already correct,
-    structural).
+    `csv_tables["characterised_modes"]`. This gate is NOT dead code: a
+    single mismatched or missing mode disqualifies the WHOLE molecule's
+    label join (no half-merge), catching real mode-index mismatches between
+    the engine's parsed frequency and characterised_modes.csv's independent
+    expectation. Scores themselves are never affected by a failed join --
+    only ref_label/ref_key are left null. `ideal` is set separately by
+    `attach_ideal_tags()` (a structural roster property, ungated).
 
-    Once a molecule passes the gate, the actual ref_label/ref_key VALUES
-    written come from `label_lookup`
-    (``src.csv_label_ingest.build_label_lookup()``), not from the
-    characterised_modes.csv row directly; that row is used only for the
-    frequency gate. `ideal` is NOT set here at all -- see
-    `attach_ideal_tags()` below, which sources it from
-    mol_list_method.csv's per-molecule `mol_type` column instead (a
-    structural roster property, not a per-mode literature match, so it does
-    not need this gate).
-
-    Returns (df, skip_report) where skip_report is a list of {'molecule',
+    Returns (df, skip_report): skip_report is a list of {'molecule',
     'n_mismatched', 'example': (mode_index, engine_freq, cm_freq)} dicts, one
-    per molecule whose internal-row label join was skipped (cm_freq is None
-    if no characterised_modes.csv row exists at all for that mode index --
-    treated identically to a numeric mismatch, not silently skipped, per the
-    fail-loud guarantee established in a prior session). A molecule entirely
-    absent from characterised_modes.csv (no row at all, e.g. one of the
-    still-open T-shaped/see-saw families awaiting literature back-fill) is
-    left untouched with no skip-report entry -- not an error, just no ground
-    truth to gate against.
+    per molecule whose join was skipped. A molecule entirely absent from
+    characterised_modes.csv is left untouched with no skip-report entry --
+    not an error, just no ground truth to gate against.
     """
     cm = csv_tables["characterised_modes"].copy()
     cm["freq"] = pd.to_numeric(cm["freq"], errors="coerce")
@@ -525,10 +404,7 @@ def _build_library_scores(data_dir, thresholds, return_skip_report):
             "mol_type, not this gate).",
             stacklevel=3)
 
-    # d_CA reporting: warn once per ideal/non-ideal molecule with NO unique
-    # central atom found (multi-centre molecules are never attempted at
-    # all -- see score_geometry_molecule()'s mol_type gate -- so they are
-    # deliberately excluded from this check).
+    # Warn once per ideal/non-ideal molecule with no unique central atom.
     for molecule, mol_type in mol_type_by_molecule.items():
         if mol_type not in ("ideal", "non-ideal"):
             continue
@@ -566,47 +442,16 @@ def run_ingest_pipeline(data_dir="data", thresholds=None, write=True):
     return df, out_path, skip_report
 
 
-# --- Phase 2 (2026-07-08): resync characterised_modes.csv (data_score.csv,
-# too, until it was deleted from disk 2026-07-09) freq/mu/k from the on-disk
-# log, fixing attach_labels()'s stale-freq gate failures at the source. See
-# IMPLEMENTATION_PLAN.md RESUME HERE + the plan file
-# `before-that-the-program-ethereal-penguin.md`, Phase 2.
+# resync_reference_metadata() below resyncs characterised_modes.csv's
+# freq/mu/k from the on-disk log, fixing attach_labels()'s stale-freq gate
+# failures at the source. `irrep` is deliberately excluded from this resync:
+# see regenerate_characterised_modes()'s docstring for the full ASCII-vs-
+# Unicode irrep carve-out reasoning (authoritative site).
 #
-# `irrep` is deliberately NOT touched by this resync (see
-# `resync_reference_metadata`'s docstring "irrep is out of scope" note) --
-# confirmed via `plot_irrep_coupling` (src/figures.py) that
-# characterised_modes.csv's irrep column is read downstream with hardcoded
-# Unicode-subscript/prime strings (e.g. "A₂\"", "E'", "B₂") matched by exact
-# equality; the raw Gaussian-log irrep token is a different, ASCII-only
-# alphabet ("A2\"", "E", "B2") that would silently break every category
-# match if written in place. Building a correct, fully-general
-# ASCII->Unicode-subscript/prime/Greek irrep translator (Sigma/Pi for linear
-# groups, primes for D3h, etc.) is a real but separable piece of work
-# matching the already-recorded, author-approved deferral ("defer
-# regenerating the irrep/bond-length columns ... to a follow-up session") --
-# left untouched here rather than risk a silent mistranslation. A second,
-# independent reason: at least one molecule (AlCl3-class, Gaussian's own
-# near-degenerate "?A"/"?B" placeholder irreps) has an EXISTING irrep value
-# that is the author's own manual resolution of an ambiguity Gaussian itself
-# could not resolve -- the raw log value is strictly less informative there,
-# so overwriting would be a regression, not a resync, even before the
-# formatting problem.
-#
-# `k` (originally verified against the now-deleted data_score.csv) WAS
-# independently confirmed to be a real force constant column, not an
-# unrelated scoring metric: for every molecule whose freq already agreed
-# with the on-disk log (i.e. no staleness), those `k` values matched
-# `Force constants ---` in the log to 4 decimal places exactly (e.g. SnH4
-# mode 1: log 0.3149 == 0.3149; TeH4 mode 6: log 1.6307 == 1.6307).
-# `characterised_modes.csv` has an explicit, unambiguous `k` (force
-# constant) + `μ` (reduced mass) column pair with the same semantics,
-# safe to overwrite in place.
-#
-# 2026-07-09 (OH4/OF4 exclusion session): `data/data_score.csv` was deleted
-# from disk entirely (an unrelated cleanup of an already-retired file, see
-# the module docstring above). This function is updated to resync
-# `characterised_modes.csv` only -- it no longer reads or writes
-# `data_score.csv`.
+# `k` was independently cross-checked as a genuine force constant, not an
+# unrelated scoring metric: for molecules whose freq already agreed with the
+# log, `k` matched the log's "Force constants ---" line to 4 dp exactly
+# (e.g. SnH4 mode 1: 0.3149 == 0.3149; TeH4 mode 6: 1.6307 == 1.6307).
 
 def _resolve_log_path(base, data_dir="data"):
     """basename -> full path to its .log/.out file, or None if neither exists."""
@@ -618,11 +463,9 @@ def _resolve_log_path(base, data_dir="data"):
 
 
 def _fmt_trim(value, dp=4):
-    """Format `value` to `dp` decimal places, then strip trailing zeros (and
-    a trailing bare '.') -- matches data_score.csv/characterised_modes.csv's
-    own existing convention (e.g. Gaussian's '485.3180' is stored there as
-    '485.318', not '485.3180'), so a resync doesn't introduce a purely
-    cosmetic reformatting diff on top of the real value change."""
+    """Format `value` to `dp` dp, stripping trailing zeros/'.' -- matches
+    characterised_modes.csv's existing convention (e.g. '485.3180' stored as
+    '485.318'), avoiding a purely cosmetic reformatting diff."""
     s = f"{value:.{dp}f}"
     if "." in s:
         s = s.rstrip("0").rstrip(".")
@@ -630,32 +473,17 @@ def _fmt_trim(value, dp=4):
 
 
 def resync_reference_metadata(data_dir="data", write=True):
-    """Resync `freq` (+ `k` force constant, + `μ` reduced mass) in
-    `characterised_modes.csv` from the on-disk Gaussian `.log` the engine
-    actually scores, for every `mol_list_method.csv` roster molecule that
-    already has existing rows in that CSV. `irrep` is intentionally left
-    untouched -- see the module comment above this function for why.
+    """Resync `freq`/`k`/`mu` in `characterised_modes.csv` from the on-disk
+    Gaussian `.log` for every roster molecule with existing rows there.
+    `irrep` is left untouched (see regenerate_characterised_modes()).
 
-    Formerly (2026-07-08) also resynced `data/data_score.csv` in the same
-    pass; that file was deleted from disk entirely 2026-07-09 (an unrelated
-    cleanup of an already-retired file, see the module docstring), so this
-    function now touches `characterised_modes.csv` only. The report/changes
-    schema is unchanged (`changes` entries still carry a `csv` field) since
-    every entry has always been, and remains, `"characterised_modes.csv"`.
+    Rows are matched by 1-based internal mode index (`mode` column),
+    matching `main.py build_scorer_and_final()`'s "Vib i" numbering --
+    position within `GaussianParser.parse(parse_modes=True)['modes']`.
 
-    Rows are matched by 1-based internal mode index (the `mode` column),
-    identical to the indexing `main.py build_scorer_and_final()` assigns as
-    "Vib i" labels and `attach_labels()` gates on -- i.e. position within
-    `GaussianParser.parse(parse_modes=True)['modes']` (Gaussian's own
-    frequency-block order; Gaussian already projects out translation/
-    rotation, so this list is exactly the 3N-6/3N-5 internal modes with no
-    offset bookkeeping needed).
-
-    A molecule's mode COUNT (or the max `mode` index) disagreeing with the
-    on-disk log's parsed mode count is treated as a real structural mismatch
-    (different geometry/atom count), not a staleness problem, and is
-    skipped (that molecule's rows left untouched) -- reported, never
-    silently guessed.
+    A molecule's mode count disagreeing with the on-disk log's parsed count
+    is a real structural mismatch (not staleness); skipped and reported,
+    never silently guessed.
 
     Returns a report dict:
       ``resynced``: [{"molecule", "basename", "n_modes",
@@ -702,16 +530,9 @@ def resync_reference_metadata(data_dir="data", write=True):
             continue
         n_engine = len(engine_modes)
 
-        # Validate EXACT agreement (not just count/max -- a formula-auditor
-        # review, 2026-07-08, caught that count+max alone would silently
-        # pass a CSV with duplicate/non-contiguous mode indices, e.g.
-        # [1, 1, 3, 4, 5] for n_engine=5 -- len==5, max==5, but mode 2 is
-        # missing and mode 1 is duplicated) between the CSV's `mode` values
-        # and {1, ..., n_engine}. A blank "mode" cell is its OWN reported
-        # problem (not silently excluded from the count, which could mask a
-        # real mismatch and would otherwise crash `int(float(''))` in the
-        # update loop below) -- filtered rows are only ever used past this
-        # point once the whole molecule has cleanly passed.
+        # Validate EXACT agreement (not just count/max): count+max alone
+        # would silently pass duplicate/non-contiguous mode indices, e.g.
+        # [1, 1, 3, 4, 5] for n_engine=5 (mode 2 missing, mode 1 duplicated).
         problems = []
         blank_rows = [i for i in cm_idx if cm.at[i, "mode"] == ""]
         valid_idx = [i for i in cm_idx if cm.at[i, "mode"] != ""]
@@ -760,24 +581,14 @@ def resync_reference_metadata(data_dir="data", write=True):
     return report
 
 
-# --- Phase 3 (2026-07-08): regenerate characterised_modes.csv from a direct ---
-# disk scan, and retire data_score.csv from the code path entirely. See
-# IMPLEMENTATION_PLAN.md RESUME HERE for the full author directive. Distinct
-# from resync_reference_metadata() above: that function only ever UPDATES
-# freq/k/mu on EXISTING rows for the (now-frozen) mol_list_method.csv
-# roster; this one determines the row SET itself directly from disk (any
-# .log+.gjf/.com pair under data/logs+data/gjf, not restricted to the
-# roster), so a molecule dropped into data/logs+data/gjf later is picked up
-# automatically without a mol_list_method.csv edit first.
+# regenerate_characterised_modes() below determines the row SET directly
+# from disk (unlike resync_reference_metadata(), which only updates existing
+# rows for the fixed roster), so a molecule dropped into data/logs+data/gjf
+# later is picked up automatically without a mol_list_method.csv edit.
 
 def _basename_to_molecule_map(data_dir="data"):
-    """basename -> canonical mol_list_method.csv molecule name (roster-only
-    lookup; empty dict if the roster can't be read for any reason). Used by
-    regenerate_characterised_modes() to translate an on-disk basename (e.g.
-    'SbH3') to the canonical short name ('SbH3') that
-    characterised_modes.csv's existing rows are keyed by -- a basename with
-    no roster row falls back to using the raw basename itself (no canonical
-    alternative exists for it)."""
+    """basename -> canonical roster molecule name (empty dict if roster
+    unreadable); falls back to the raw basename if no roster row matches."""
     try:
         roster = load_mol_roster(data_dir)
     except Exception:
@@ -786,11 +597,8 @@ def _basename_to_molecule_map(data_dir="data"):
 
 
 # The 7 manually-curated columns preserved verbatim across a regeneration
-# (never engine-derived); "shape" is included here per the author's
-# explicit 2026-07-08 decision -- unlike freq/mu/k/irrep, a molecule's
-# shape label is not literally reparsed from the log, it is an
-# author-assigned classification. Order matches characterised_modes.csv's
-# own header so a freshly-built row dict lines up 1:1 with old rows.
+# (never engine-derived; "shape" is an author-assigned classification, not
+# reparsed from the log). Order matches characterised_modes.csv's header.
 _CHARACTERISED_MODES_MANUAL_COLUMNS = (
     "shape", "type", "sym", "description", "νₖ", "ref", "Note",
 )
@@ -798,55 +606,31 @@ _CHARACTERISED_MODES_MANUAL_COLUMNS = (
 
 def regenerate_characterised_modes(data_dir="data", write=True):
     """Regenerate data/characterised_modes.csv's engine-derivable columns
-    (molecule, mode, freq, mu (`μ`), k) from a DIRECT ON-DISK SCAN of
-    data/logs + data/gjf (via discover_geometry_molecules() -- every
-    .log/.out + .com/.gjf basename pair actually present, NOT restricted to
-    mol_list_method.csv's 72-row roster, so a file pair dropped in later is
-    picked up automatically without a roster edit first).
+    (molecule, mode, freq, mu, k) from a direct on-disk scan of data/logs +
+    data/gjf (not restricted to the roster, so new file pairs are picked up
+    automatically). Preserves manually-curated columns
+    (_CHARACTERISED_MODES_MANUAL_COLUMNS) for existing (molecule, mode) rows;
+    blank for genuinely new ones.
 
-    Preserves the author's manually-curated columns
-    (_CHARACTERISED_MODES_MANUAL_COLUMNS: shape, type, sym, description,
-    ref, Note, and the literature mode label νₖ) for every (molecule, mode)
-    that already had a row; leaves them blank for genuinely new
-    (molecule, mode) pairs that never had one.
-
-    `irrep` is DELIBERATELY carved out of the "auto columns overwritten"
-    set and treated like a manual column for any row that ALREADY has one:
-    an existing row's irrep is preserved untouched; only a genuinely NEW
-    row (nothing to lose) gets the raw engine-parsed token. This mirrors
-    resync_reference_metadata()'s own documented reasoning (see the module
-    comment above that function) -- the on-disk log's irrep token is plain
-    ASCII ("B2", "A1'"-with-ASCII-prime, "?A"/"?B" near-degeneracy
-    placeholders), while existing characterised_modes.csv values are
-    hand-verified Unicode-subscript/prime strings ("B₂", "A₁′") that
-    src/figures.py::plot_irrep_coupling matches by exact string equality;
-    blindly overwriting every row's irrep with the raw ASCII token would
-    silently break that matching (and in at least one known case, regress
-    an author-resolved Gaussian placeholder to strictly less information).
-    Building a general ASCII->Unicode irrep translator remains the
-    already-documented, deliberately deferred follow-up (IMPLEMENTATION_
-    PLAN.md) -- not attempted here.
-
-    Molecule naming: see _basename_to_molecule_map()'s docstring.
+    `irrep` carve-out (authoritative reasoning; referenced elsewhere in this
+    module and in src/figures.py): an existing row's irrep is preserved
+    untouched, never overwritten with the raw engine-parsed token. The
+    on-disk log's irrep is plain ASCII ("B2", "A1'"), while existing
+    characterised_modes.csv values are hand-verified Unicode-subscript/prime
+    strings ("B₂", "A₁′") that src/figures.py::plot_irrep_coupling matches by
+    exact string equality -- e.g. BBr3/OCl2 are known cases with this
+    ASCII-vs-Unicode mismatch. Overwriting would silently break that
+    matching (and regress at least one author-resolved Gaussian near-
+    degeneracy placeholder to less information). A general ASCII->Unicode
+    translator is deliberately deferred, not attempted here. Only genuinely
+    new rows (nothing to lose) get the raw engine-parsed irrep token.
 
     Returns a report dict:
-      'n_disk_basenames': int -- basenames found on disk (data/logs+data/gjf
-        intersection).
-      'n_old_molecules': int -- distinct molecules in the OLD
-        characterised_modes.csv (before this call).
-      'n_new_molecules': int -- distinct molecules in the regenerated file.
-      'dropped_molecules': sorted [str, ...] -- molecules present in the OLD
-        file with NO on-disk log+gjf match anymore (surfaced, never silent
-        -- git history preserves the row regardless).
-      'added_molecules': sorted [str, ...] -- molecules newly present on
-        disk with no OLD row at all (get blank manual columns).
-      'parse_failures': [{'molecule', 'basename', 'detail'}, ...] -- on-disk
-        pairs that failed to parse (excluded from the output; reported, not
-        silently dropped).
-      'n_rows_written': int.
-      'n_rows_with_preserved_manual_labels': int -- rows whose manual
-        columns were carried over from an existing (molecule, mode) match
-        (a strict subset of n_rows_written; the rest are genuinely new).
+      'n_disk_basenames', 'n_old_molecules', 'n_new_molecules': counts.
+      'dropped_molecules' / 'added_molecules': sorted molecule-name lists
+        (no on-disk match anymore / newly present on disk).
+      'parse_failures': [{'molecule', 'basename', 'detail'}, ...].
+      'n_rows_written', 'n_rows_with_preserved_manual_labels': int.
     """
     old_path = os.path.join(data_dir, "characterised_modes.csv")
     old = pd.read_csv(old_path, dtype=str, keep_default_na=False)

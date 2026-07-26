@@ -56,13 +56,9 @@ def intermediate_path(dirs, mol_name, mode_type):
 
 def _cache_is_fresh(inter_path, source_paths):
     """True iff `inter_path` exists and is at least as new as every file in
-    `source_paths` (mtime-based invalidation). An intermediate older than any
-    of its sources is stale -- e.g. the Gaussian log was re-run with a better
-    basis set, or a .gjf/EMIT file was added/edited after the cache was
-    built -- and must be regenerated rather than silently trusted. An
-    intermediate that IS newer than every source is trusted as-is, which is
-    also how manually-added bonds (edited into the intermediate when a
-    molecule has no .gjf) persist across runs instead of being clobbered."""
+    `source_paths` (mtime-based invalidation), so a stale cache (source
+    regenerated/edited) is regenerated. Manually-added bonds persist across
+    runs because saving them bumps the intermediate's mtime past its sources."""
     if not os.path.exists(inter_path):
         return False
     inter_mtime = os.path.getmtime(inter_path)
@@ -70,51 +66,26 @@ def _cache_is_fresh(inter_path, source_paths):
 
 
 def _normal_cache_is_current_format(inter_path):
-    """True iff a 'normal' intermediate at `inter_path` is in the NEW
-    Gaussian-direct format (2026-07-08), not the OLD 'MOLECULE_DATA' format
-    it used to share with EMIT intermediates.
-
-    A cache written before this rework is mtime-fresh (nothing re-parsed
-    it) but structurally cannot supply reduced_mass/force_constant/irrep --
-    those fields simply do not exist in the old format. Without this check,
-    such a pre-existing cache would silently return None for them forever,
-    since IntermediateIO.load() correctly auto-detects and parses the old
-    format (score-neutral -- frequency/vector/atoms/bonds are unaffected)
-    rather than raising, so mtime-based staleness alone never catches it.
-    Treating an old-format 'normal' cache as NOT current forces exactly one
-    self-healing reparse-and-rewrite (in the new format), after which it
-    stays current like any other fresh cache. IntermediateIO.load()'s own
-    format auto-detection (peeking at the first line) is mirrored here
-    rather than imported, to keep this a cheap one-line-read check without
-    a full parse."""
+    """True iff a 'normal' intermediate is in the new Gaussian-direct format,
+    not the old 'MOLECULE_DATA' format it used to share with EMIT
+    intermediates. A pre-rework cache is mtime-fresh but structurally lacks
+    reduced_mass/force_constant/irrep, and mtime alone can't detect that --
+    this forces one self-healing reparse-and-rewrite in the new format."""
     with open(inter_path, 'r') as f:
         first_line = f.readline().strip()
     return first_line != "MOLECULE_DATA"
 
 
 def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
-    """Parse geometry, modes, and connectivity for a molecule -- via a
-    mtime-invalidated cache in data/intermediate/ so repeated runs (and the
-    library-scale pipelines that score many molecules per invocation) don't
-    re-parse an unchanged Gaussian log/EMIT file every time.
+    """Parse geometry, modes, and connectivity for a molecule, via the
+    mtime-invalidated intermediate cache (see _cache_is_fresh). mode_type is
+    'normal' or 'emit'. Returns (raw_data, dirs); raises on missing files or
+    wrong mode counts. Does NOT prompt; suitable for headless/reproduce use.
+    Pass `use_cache=False` to force a fresh parse (still refreshes the cache).
 
-    mode_type is 'normal' (Gaussian vibrational modes) or 'emit' (EMIT modes).
-    Returns (raw_data, dirs). Raises on missing files or wrong mode counts (the
-    parsers fail loud). Does NOT prompt; suitable for headless / reproduce use.
-
-    Caching contract: if data/intermediate/<mol>_<mode_type>_data.txt exists
-    and is at least as new as every source file it could have come from (the
-    log, the .gjf if present, and the EMIT file if mode_type=='emit'), it is
-    loaded directly and the raw log/EMIT files are NOT re-parsed. Otherwise
-    (missing, or a source is newer -- e.g. the log was regenerated) this
-    re-parses from source and OVERWRITES the intermediate with the fresh
-    result, so the cache self-heals rather than silently going stale. Pass
-    `use_cache=False` to force a fresh parse regardless (still refreshes the
-    cache for next time). The written intermediate is later re-read by the
-    interactive missing-bonds flow in main() if `raw['bonds']` comes back
-    empty -- if the user hand-edits bonds into it, that edit's mtime keeps
-    the cache fresh on subsequent runs (source files unchanged), so manually
-    added connectivity persists instead of being overwritten every run.
+    If `raw['bonds']` comes back empty, main()'s interactive fallback lets the
+    user hand-edit bonds into the written intermediate; that edit's mtime
+    keeps the cache fresh afterward so the connectivity persists.
     """
     if mode_type not in ("normal", "emit"):
         raise ValueError(f"mode_type must be 'normal' or 'emit', got {mode_type!r}")
@@ -148,20 +119,25 @@ def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
 
 
 def build_scorer_and_final(raw, mode_type):
-    """Align to principal axes and build the candidate mode pool ('final').
+    """Align to principal axes and build the candidate mode pool ('final'),
+    shared by score_modes() and the classifier so both score the identical
+    mode list.
+      - 'normal': MIT rotates the molecule AND the mode vectors
+        (rotate_modes=True); the 3 ideal T + 3 ideal R references are
+        prepended to the real vibrational modes.
+      - 'emit'  : EMIT modes already live in principal axes, so MIT rotates
+        only the molecule (rotate_modes=False); no ideal references are
+        added -- all 3N raw EMIT eigenvectors are the candidate pool.
 
-    Shared by score_modes() and classifier.run_classification() so both stages
-    construct the exact same mode list from the same raw parse:
-      - 'normal': ModeScorer.MIT rotates the molecule AND the mode vectors, and
-        the 3 ideal translations + 3 ideal rotations are prepended (they are
-        literally in the candidate pool, alongside the real vibrational modes).
-      - 'emit'  : MIT rotates the molecule only (EMIT modes already live in
-        principal axes); no ideal references are added -- all 3N raw EMIT
-        eigenvectors are the candidate pool.
+    Raises ValueError if no bond connectivity is available (fail loud rather
+    than silently corrupt the V-score). Returns (scorer, final).
 
-    Raises ValueError if no bond connectivity is available (a missing bond list
-    silently corrupts the V-score, so we fail loud rather than score garbage).
-    Returns (scorer, final) where final is a list of mode dicts.
+    Linear-molecule invariant (authoritative site): a linear molecule has
+    n_R=2, but MIT() always places the linear (smallest-moment) axis on the
+    new X axis, so construct_R()'s "Rx" reference is an all-zero placeholder,
+    not a genuine external mode. It is dropped here -- left in, it would fall
+    through Step 2 (external_slots() excludes Rx for linear molecules, so no
+    slot claims it) into Step 4 and be mislabeled BENDING (V=0 <= tau_B).
     """
     if not raw["bonds"]:
         raise ValueError(
@@ -175,14 +151,6 @@ def build_scorer_and_final(raw, mode_type):
             m["label"] = f"Vib {i+1}"
         ideal_R = scorer.construct_R()
         if is_linear(scorer):
-            # n_R = 2 for a linear molecule (spec). construct_R() always builds
-            # 3 ideal references, but MIT() places the linear (smallest-moment)
-            # axis on the new X axis, so the "Rx" reference is an all-zero
-            # vector -- an ill-defined placeholder, not a genuine external
-            # mode. Drop it before it enters the candidate pool: left in, it
-            # would fall through classify_all_modes' Step 2 (no slot claims
-            # it, since external_slots() correctly excludes Rx for linear
-            # molecules) into Step 4 and be mislabeled BENDING (V=0 <= tau_B).
             ideal_R = [m for m in ideal_R if m["label"] != "Rx"]
         final = scorer.construct_T() + ideal_R + rotated
     else:
@@ -191,12 +159,7 @@ def build_scorer_and_final(raw, mode_type):
 
 
 def score_modes(raw, mode_type):
-    """Pure scoring core: align to principal axes, build ideal T/R modes (normal
-    only), and score every mode. Returns a list of result-row dicts.
-
-    Raises ValueError if no bond connectivity is available (see
-    build_scorer_and_final).
-    """
+    """Score every mode in build_scorer_and_final's candidate pool; returns a list of result-row dicts."""
     scorer, final = build_scorer_and_final(raw, mode_type)
 
     rows = []
@@ -209,9 +172,8 @@ def score_modes(raw, mode_type):
             "Tx": sc["T"]["x"], "Ty": sc["T"]["y"], "Tz": sc["T"]["z"],
             "Rx": sc["R"]["x"], "Ry": sc["R"]["y"], "Rz": sc["R"]["z"],
             "V_Stretch": sc["V"],
-            # mu/k/irrep (2026-07-08): only real Gaussian normal modes carry
-            # these; EMIT modes and the synthetic ideal T/R references never
-            # set these keys, so .get() naturally yields None/blank for them.
+            # Only real Gaussian normal modes carry mu/k/irrep; .get() yields
+            # None for EMIT modes and the synthetic ideal T/R references.
             "Mu": mode.get("reduced_mass"),
             "K": mode.get("force_constant"),
             "Irrep": mode.get("irrep"),
@@ -235,14 +197,7 @@ def run_pipeline(mol_name, mode_type, data_dir="data", write=True):
 
 
 def run_classify_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, write=True):
-    """Headless classify pipeline: load inputs -> classify_all_modes -> CSV.
-
-    Mirrors run_pipeline() but runs the full Algorithm 1 classifier
-    (src/classifier.py) instead of stopping at Step-1 scores. Returns
-    (DataFrame, output_path); raises on any missing input, missing bonds, or
-    wrong mode count (same fail-loud behaviour as load_inputs()/
-    build_scorer_and_final()).
-    """
+    """Headless pipeline: load inputs -> classify_all_modes (Algorithm 1) -> CSV."""
     raw, dirs = load_inputs(mol_name, mode_type, data_dir)
     scorer, final = build_scorer_and_final(raw, mode_type)
     scored = classify_all_modes(scorer, final, thresholds)
@@ -257,21 +212,10 @@ def run_classify_pipeline(mol_name, mode_type, data_dir="data", thresholds=None,
 def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=True):
     """Headless EMIT -> normal-mode projection pipeline (Phase 2, eq:emitproj).
 
-    Builds the mass-weighted normal-mode reference basis (ideal T/R + real
-    vibrational modes, src/projection.py's locked convention) from
-    data/logs/<mol>.log, projects the raw EMIT eigenvectors from
-    data/EMIT/<mol>_EMIT.txt onto it, and writes two files:
-      - data/results/<mol>_EMIT_contributions.csv -- grouped fractions
-        (C2_Tx..C2_Rz, C2_VS/VB/VMix) per EMIT mode; matches the columns and
-        semantics of the pre-existing hand-derived ground-truth file of the
-        same name (validated to ~1e-4 absolute agreement on EMIT 2/9/34-36).
-      - data/results/<mol>_EMIT_projection_full.csv -- the finer-grained
-        per-individual-reference-mode Theta_tilde**2 detail (one column per
-        ideal T/R slot and per real normal mode), the richer
-        "projection-coefficients data file" the roadmap calls for.
-
-    Raises on any missing input / missing bonds / wrong mode count (same
-    fail-loud behaviour as load_inputs()/build_scorer_and_final()).
+    Builds the mass-weighted normal-mode reference basis from data/logs/<mol>.log,
+    projects the raw EMIT eigenvectors from data/EMIT/<mol>_EMIT.txt onto it, and
+    writes two files: <mol>_EMIT_contributions.csv (grouped T/R/V fractions per
+    EMIT mode) and <mol>_EMIT_projection_full.csv (per-reference-mode detail).
     Returns (df_grouped, df_full, (path_grouped, path_full)).
     """
     raw_n, dirs = load_inputs(mol_name, "normal", data_dir)
@@ -279,13 +223,9 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
     raw_e, _ = load_inputs(mol_name, "emit", data_dir)
     scorer_e, final_e = build_scorer_and_final(raw_e, "emit")
 
-    # Q (built from scorer_n's rotated geometry) and Theta (the raw, unrotated
-    # EMIT eigenvectors) are only frame-consistent because both parses read
-    # the SAME log geometry, and MIT()'s eigendecomposition is deterministic
-    # on identical input, so scorer_n and scorer_e land in the identical
-    # principal-axis frame. That coupling was implicit; assert it rather than
-    # relying on parsing determinism silently (formula-auditor finding,
-    # 2026-07-01).
+    # Q and Theta are only frame-consistent because both parses read the SAME
+    # log geometry and MIT()'s eigendecomposition is deterministic -- assert
+    # it rather than relying on that silently.
     coords_n = np.array([[a.x(), a.y(), a.z()] for a in scorer_n.atoms])
     coords_e = np.array([[a.x(), a.y(), a.z()] for a in scorer_e.atoms])
     if not np.allclose(coords_n, coords_e, atol=1e-6):
@@ -311,38 +251,24 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
 
 
 def _print_table(df, title):
-    """Echo a results DataFrame to the terminal as a clean, borderless,
-    whitespace-aligned table (pandas' own to_string()) -- readable at a
-    glance, and paste-friendly into Excel (no box-drawing/'|'/'-' characters
-    to strip first, unlike tabulate's grid styles)."""
+    """Echo a results DataFrame via pandas to_string() -- borderless and paste-friendly into Excel."""
     print(f"\n--- {title} ---")
     print(df.to_string(index=False, float_format="%.4f"))
 
 
 def _run_flag_pipelines(args):
     """Handle the --classify / --emit-projection / --library / --calibrate /
-    --figures flags (Phase-5 CLI subcommands). These wire up the EXISTING
-    headless pipeline functions (run_classify_pipeline, run_projection_pipeline,
-    src.library_ingest.run_ingest_pipeline, src.calibrate.run_calibration_pipeline,
-    src.figures.regenerate_all) -- no scoring/classification logic lives here.
+    --figures CLI flags by wiring up the existing headless pipeline functions.
 
-    Design (documented in README.md "How to Use" / IMPLEMENTATION_PLAN.md):
-      - --library/--calibrate/--figures are GLOBAL (molecule-independent) and
-        ignore -m/--molecule if it happens to be supplied alongside them.
-      - --classify/--emit-projection are PER-MOLECULE and require -m.
-        --classify additionally requires --mode (normal|emit), since that is
-        exactly what determines which classified CSV gets written.
-      - All flags given together run in a fixed, sensible order: --library,
-        --calibrate, --classify, --emit-projection, --figures (library/
-        calibrate feed figures; classify/emit-projection are independent of
-        each other and of library/calibrate). Any subset can be combined.
-      - Fails loud (prints a clear message, returns without a stack trace) on
-        a bad combination (e.g. --classify with no --mode, --emit-projection
-        with no EMIT data) rather than silently doing nothing.
+      - --library/--calibrate/--figures are GLOBAL and ignore -m/--molecule.
+      - --classify/--emit-projection are PER-MOLECULE and require -m;
+        --classify additionally requires --mode (normal|emit).
+      - Combined flags run in fixed order: --library, --calibrate, --classify,
+        --emit-projection, --figures. Fails loud on a bad combination rather
+        than silently doing nothing.
 
-    Returns True if at least one flag was handled (caller should stop --
-    the plain Step-1 scoring path is skipped), False if none of these flags
-    were passed (caller falls through to the original interactive/--mode path).
+    Returns True if at least one flag was handled (caller should stop),
+    False otherwise (caller falls through to the interactive/--mode path).
     """
     any_flag = args.library or args.calibrate or args.classify or args.emit_projection or args.figures
     if not any_flag:
@@ -465,12 +391,8 @@ def main():
         print(f"Error: {e}")
         return
 
-    # Interactive fallback: if connectivity is missing, let the user add bonds to
-    # the intermediate file (already written by load_inputs()'s cache), then
-    # reload. (run_pipeline/score_modes raise instead.) Once bonds are added
-    # and saved, the file's mtime keeps it "fresh" on later runs (see
-    # load_inputs()/_cache_is_fresh()), so this edit persists instead of
-    # being asked for again every time.
+    # Interactive fallback: let the user add bonds to the intermediate file
+    # then reload (headless run_pipeline/score_modes raise instead); see _cache_is_fresh.
     if not raw["bonds"]:
         inter = intermediate_path(dirs, mol_name, mode_type)
         print("\n" + "!" * 70)

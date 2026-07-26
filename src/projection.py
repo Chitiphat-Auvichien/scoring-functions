@@ -1,56 +1,24 @@
 """EMIT -> normal-mode projection (eq:emitproj): Theta_tilde = Q^T Theta.
 
-Phase-0 locked decision (mass-weighting convention, IMPLEMENTATION_PLAN.md):
-------------------------------------------------------------------------------
-Scores (s[T]/s[R]/s[V_S], scoring.py) are computed from UNWEIGHTED Cartesian
-displacements -- that convention is unchanged and is NOT touched here. This
-module is the one place mass-weighting enters, because it is what the
-projection reference needs to be a genuine orthonormal basis.
+Scores elsewhere (scoring.py) use unweighted Cartesian displacements; this
+module is the one place mass-weighting enters, because a genuine orthonormal
+reference basis requires it. Both Gaussian's normal-mode vectors and raw EMIT
+eigenvectors are unit-length under the plain Cartesian inner product but only
+mutually orthogonal under the mass-weighted inner product <u,v> = sum_A m_A
+(u_A . v_A) (Eckart-Sayvetz). Verified on benzene's 30 real normal modes: the
+unweighted Gram matrix has off-diagonals up to 0.80 (not orthogonal); the
+mass-weighted Gram matrix's off-diagonals are <=4e-4 (numerical noise only).
 
-Both Gaussian's printed normal-mode vectors and the raw EMIT eigenvectors are
-normalized to unit length under the plain (unweighted) Cartesian inner
-product, but they are only mutually ORTHOGONAL under the mass-weighted inner
-product <u, v> = sum_A m_A (u_A . v_A) -- this is verified numerically on
-benzene: the plain Gram matrix of the 30 real normal modes has off-diagonal
-entries up to 0.80, while the mass-weighted Gram matrix's off-diagonals are
-<=4e-4 (consistent with Gaussian's ~5-6 significant-figure print precision,
-i.e. numerical noise, not a real deviation from orthogonality). The same
-holds for the raw EMIT eigenvectors read from data/EMIT/<mol>_EMIT.txt. This
-is the standard Eckart-Sayvetz signature: true harmonic normal modes are
-orthonormal in mass-weighted coordinates; Gaussian (and, empirically, EMIT)
-report them back-transformed to unweighted Cartesian and renormalized to unit
-Euclidean length for display.
+Convention (locked): every mode vector v is mass-weighted as
+v_mw[A] = sqrt(m_A) * v[A], then renormalized to unit length, before use in Q
+or Theta. Stacking [ideal T, ideal R, real vibrational modes] this way gives
+a near-orthonormal basis Q, so Theta_tilde = Q^T Theta (eq:emitproj) yields
+per-column fractions Theta_tilde**2 summing to ~1 per EMIT mode (Parseval).
 
-Convention (LOCKED): for every reference/candidate mode vector v (ideal T/R
-built the same geometric way as ModeScorer.construct_T/construct_R, or a real
-vibrational normal mode, or a raw EMIT eigenvector), define the mass-weighted
-form v_mw[A] = sqrt(m_A) * v[A] (same scalar applied to all 3 Cartesian
-components of atom A), then renormalize v_mw to unit Euclidean length. Given
-COM + principal-axis alignment (already enforced by ModeScorer.COM/MIT), the
-ideal T/R block is analytically exactly orthogonal to itself in this metric,
-and the Eckart-Sayvetz theorem makes it (numerically-exactly) orthogonal to
-the true vibrational normal modes -- so stacking [ideal T, ideal R, real
-vibrational modes] gives a basis Q that is orthonormal to within the input
-files' print precision (~1e-4, verified above). Projecting the
-similarly-mass-weighted-and-renormalized EMIT eigenvector Theta onto Q,
-
-    Theta_tilde = Q^T Theta                                    (eq:emitproj)
-
-then yields per-column fractional contributions Theta_tilde**2 that sum to
-~1 per EMIT mode (Parseval), matching the semantics of the existing
-data/results/benzene_EMIT_contributions.csv (validated to ~1e-4 absolute
-agreement on EMIT 2/9/34/35/36 against that file during development).
-
-Internal/vibration fractions (C2_VS / C2_VB / C2_VMix): the manuscript's
-external split (translation/rotation/vibration fractions) falls straight out
-of Q's 6 ideal-T/R columns. The stretch/bend/mixed split of the *vibration*
-fraction is NOT itself a projection quantity -- it is obtained by reusing the
-Step-4 internal classification (classifier.vib_label) on each REAL
-vibrational normal mode's own (unweighted) s[V_S] score, then summing that
-normal mode's Theta_tilde**2 into the corresponding bucket. This reproduces
-the ground-truth CSV's C2_VS/C2_VB/C2_VMix columns exactly and keeps the
-stretch/bend boundary defined in exactly one place (classifier.py), not
-duplicated here.
+Internal/vibration fractions (C2_VS/C2_VB/C2_VMix): the stretch/bend/mixed
+split of a real normal mode's contribution reuses Step-4's classification
+(classifier.vib_label) on that mode's own s[V_S] score, so the boundary is
+defined in exactly one place (classifier.py), not duplicated here.
 """
 
 import numpy as np
@@ -58,34 +26,24 @@ import numpy as np
 from .classifier import Thresholds, vib_label, STRETCHING, BENDING, MIXED_STRETCH_BEND
 
 # The 6 possible ideal external reference labels. A linear molecule's pool
-# (main.build_scorer_and_final) omits "Rx" (n_R=2); this module handles that
-# by simply never finding "Rx" in the reference labels -- no special-casing.
+# omits "Rx" (n_R=2); handled by simply never finding "Rx" in the labels.
 EXTERNAL_LABELS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 
 # Internal/vibration buckets a real normal mode's Theta_tilde**2 is summed
-# into (mirrors classifier.py's Step-4 labels: the actual STRETCHING/BENDING/
-# MIXED_STRETCH_BEND constants, currently "S"/"B"/"SB" -- imported rather
-# than hardcoded here so a future relabeling in classifier.py cannot silently
-# desync this module's grouping from vib_label()'s real output).
+# into; imported from classifier.py rather than hardcoded to stay in sync.
 _VIB_GROUPS = (STRETCHING, BENDING, MIXED_STRETCH_BEND)
 
 
 def mass_weights_from_scorer(scorer):
-    """sqrt(mass_A) per atom, repeated x3 (one weight per Cartesian
-    component) -- length 3N, in atom order. Reads masses straight off the
-    scorer's Atom objects (single source of truth; matches whatever
-    atomicMass lookup ModeScorer already did), so this module never
-    re-derives masses from symbols independently.
-    """
+    """sqrt(mass_A) per atom, repeated x3 (length 3N, atom order), read from
+    the scorer's Atom objects so masses stay a single source of truth."""
     masses = np.array([atom.rMass for atom in scorer.atoms], dtype=float)
     return np.repeat(np.sqrt(masses), 3)
 
 
 def _mass_weighted_unit_columns(mode_list, weights):
-    """Flatten each mode's (N,3) vector, mass-weight it, and renormalize to
-    unit Euclidean length. Returns an ndarray (3N, len(mode_list)) whose
-    columns are in the same order as mode_list.
-    """
+    """Flatten, mass-weight, and unit-renormalize each mode's (N,3) vector.
+    Returns ndarray (3N, len(mode_list)), columns in mode_list order."""
     cols = []
     for mode in mode_list:
         v = np.asarray(mode["vector"], dtype=float).flatten() * weights

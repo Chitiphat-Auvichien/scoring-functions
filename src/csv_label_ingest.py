@@ -1,57 +1,26 @@
-"""Default source (2026-07-05 author decision, sole source since the
-2026-07-07 retirement of the old precomputed-spreadsheet ingest path) for the
-``ref_label``/citation-key content that ``src/library_ingest.py`` attaches to
-every internal-vibration row of ``library_scores.csv``.
-
-Two author-maintained CSVs under ``data/`` supply this content:
+"""Source for the ``ref_label``/citation-key content that
+``src/library_ingest.py`` attaches to every internal-vibration row of
+``library_scores.csv``. Two author-maintained CSVs under ``data/`` supply it:
 
 - ``data/characterised_modes.csv``: one row per (molecule, 1-based internal
-  mode index), regenerated from a direct on-disk scan of
-  ``data/logs``/``data/gjf`` by ``src.library_ingest.regenerate_characterised_
-  modes()`` for its engine-derivable columns (``freq``/``μ``/``k``), while
-  PRESERVING the author's manually-curated literature columns -- most
-  importantly ``type`` (the literature ``ref_label``: ``"bend"``/
-  ``"stretch"``/``"SB"``, the last a genuine 3rd class for two of benzene's
-  modes, not just the classifier's own predicted mixed bucket) and ``ref``
-  (a citation key, e.g. ``"Shi1972"``, joined onto ``data_score.csv``... no
-  longer -- see below -- joined onto this SAME file's own rows). Only a
-  fraction of rows currently have a citation key filled in (the rest are
-  blank -- a real, partial-coverage data limitation, not a bug: the author
-  has not back-filled citations for the whole library yet).
-- ``ref-label_citation.csv`` (a handful of rows): citation key -> full
-  bibliographic metadata (doi, 1st author, journal, year, note).
+  mode index). Engine-derivable columns (``freq``/``mu``/``k``) are
+  regenerated from disk by ``src.library_ingest.regenerate_characterised_
+  modes()``, while manually-curated literature columns are preserved --
+  ``type`` (the literature ``ref_label``: ``"bend"``/``"stretch"``/``"SB"``,
+  the last a genuine 3rd class for two benzene modes) and ``ref`` (a citation
+  key, e.g. ``"Shi1972"``; only partially back-filled, not a bug).
+- ``ref-label_citation.csv``: citation key -> bibliographic metadata (doi,
+  1st author, journal, year, note).
 
-**2026-07-08: ``data/data_score.csv`` retired from this module entirely.**
-Prior to this session, ``data_score.csv`` supplied the SAME ``type``/``ideal``
-content as ``characterised_modes.csv``'s ``type`` column (a near-duplicate,
-maintained separately) plus the frequency-agreement gate
-``src.library_ingest.attach_labels()`` used. Both roles are now served by
-``characterised_modes.csv`` alone (its own ``freq`` column, freshly
-regenerated straight from the on-disk log, is what the gate compares
-against -- see ``src.library_ingest.attach_labels()``'s docstring), and
-``ideal`` itself is no longer a per-mode literature label at all: it is
-sourced structurally from ``data/mol_list_method.csv``'s per-molecule
-``mol_type`` column by ``src.library_ingest.attach_ideal_tags()``, entirely
-outside this module. ``data/data_score.csv`` was left on disk, unread by
-any code path, from 2026-07-08 until 2026-07-09, when the author deleted it
-entirely (an unrelated cleanup of an already-retired file, alongside the
-OH4/OF4 library-exclusion session) -- ``src.library_ingest.resync_
-reference_metadata()`` was updated the same session to stop reading/writing
-it, so no code path references the file at all anymore.
+``data/data_score.csv`` is retired: its ``type``/``ideal`` content and
+frequency-agreement gate are now both served by ``characterised_modes.csv``
+alone (``ideal`` itself comes structurally from ``mol_list_method.csv``'s
+``mol_type`` column via ``attach_ideal_tags()``); no code path reads it.
 
-**Coverage gap (2026-07-07: out of scope, not a gap to patch).** These CSVs
-do not cover every molecule the old workbook-driven pipeline used to score
-(``C2H2``, ``C2H4``, ``C2H6``, ``H2O2``, ``iso-C4H10``, ``n-C4H10``) -- but
-all six are multi-centre molecules and are also absent from
-``data/mol_list_method.csv``'s finalized 72-molecule roster (confirmed),
-i.e. genuinely out of scope for this paper's Gaussian-direct pipeline, not a
-coverage gap that needs a fallback. The old workbook-fallback that used to
-cover them (``build_label_lookup``'s old ``fallback_ds`` parameter) has been
-removed entirely along with the workbook-sourced ingest path it supported
-(``src/library_ingest.py``, formerly ``src/excel_ingest.py``). Per-bond
-``s_AB`` data is untouched by this module entirely; it comes from the real
-engine's own recompute (``src/library_ingest.py::score_geometry_molecule``),
-unrelated to label/citation content.
+Coverage gap (out of scope, not a bug to patch): these CSVs omit six
+multi-centre molecules (``C2H2``, ``C2H4``, ``C2H6``, ``H2O2``,
+``iso-C4H10``, ``n-C4H10``) that are also absent from the finalized
+72-molecule roster.
 
 Public API (consumed by ``src/library_ingest.py``):
   ``load_label_csvs(data_dir)`` -> dict of the two raw DataFrames
@@ -69,11 +38,8 @@ import os
 
 import pandas as pd
 
-# Literal literature ref_label values this framework recognizes. Anything
-# else in the 'type' column (typos, blanks) maps to None rather than being
-# silently accepted -- same fail-quiet-but-not-fail-wrong policy the old
-# workbook-only code used for ("bend", "stretch"), extended to the genuine
-# 3rd class "SB" (mixed stretch/bend), per the 2026-07-05 benzene relabeling.
+# Literal literature ref_label values recognized; anything else (typos,
+# blanks) in the 'type' column maps to None rather than being accepted silently.
 ALLOWED_REF_LABELS = ("bend", "stretch", "SB")
 
 LABEL_CSV_FILES = {
@@ -101,11 +67,7 @@ def _filtered_ref_label(raw_type):
 
 def build_label_lookup(tables):
     """Build {(molecule, mode:int): {"ref_label", "ref_key"}} from
-    ``characterised_modes.csv`` alone (2026-07-08: ``data_score.csv`` is no
-    longer read here -- see module docstring). See module docstring for the
-    molecules these CSVs do not cover (no fallback needed -- they are
-    absent from the 72-molecule roster too).
-    """
+    ``characterised_modes.csv`` alone."""
     cm = tables["characterised_modes"].copy()
     cm["mode"] = pd.to_numeric(cm["mode"], errors="coerce")
 

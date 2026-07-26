@@ -1,71 +1,21 @@
-"""Phase-6 (recommended-before-submission) systematic flag precision/recall
-validation -- IMPLEMENTATION_PLAN.md Phase 6, item 1: "Flag precision/recall
-over ALL 36 benzene EMIT modes (and library externals) against the C2
-projection reference." Promotes the prior anecdotal EMIT 2/9/34-36 spot-check
-into a full 36-mode confusion count, since benzene EMIT is this manuscript's
-only remaining stress test of the classifier's mixed-external flag (an axis
-label with a trailing "*", e.g. "Tx*"; Gramicidin's scale demonstration was
-deferred to the companion paper, Decision 5).
+"""Systematic flag precision/recall validation over all 36 benzene EMIT modes
+(and library externals) against the projection reference (src/projection.py).
 
-What is being compared
------------------------
-- classify_all_modes()'s PREDICTED flag: does Algorithm 1's two-gate purity
-  test (src/classifier.py Step 3) give a mode the mixed-external flag (an
-  axis label with a trailing "*", e.g. "Tx*") ("predicted positive") or not
-  ("predicted negative" -- this collapses every clean-external label
-  ("Tx".."Rz") and every Step-4 internal label ("S"/"B"/"SB") into one
-  bucket, since a mode never even assigned an external slot in Step 2 has
-  no opportunity to be flagged at all -- see the FN-mechanism note below).
-- The projection's (src/projection.py, eq:emitproj) GROUND TRUTH: does the
-  mode genuinely have fractional external+vibration character?
+Compares classify_all_modes()'s mixed-external flag (Step 3's two-gate purity
+test; an axis label with trailing "*", e.g. "Tx*") against a projection-based
+ground truth: per EMIT mode, M_ext = max(C2_Tx..C2_Rz). Ground truth is MIXED
+iff GT_EXT_LO < M_ext < GT_EXT_HI, else CLEAN. GT_EXT_HI=0.95 reuses tau_TR
+(the classifier's own purity bar); GT_EXT_LO=0.05 is a small symmetric floor
+above the ~1e-4 numerical orthonormality noise floor (projection.py).
 
-Ground-truth criterion (no single canonical one exists a priori for this --
-unlike the calibration's exact-by-construction normal-mode T/R ground truth;
-this is the same honesty the task itself calls for). Define, per EMIT mode,
-
-    M_ext = max(C2_Tx, C2_Ty, C2_Tz, C2_Rx, C2_Ry, C2_Rz)   (projection fractions,
-                                                              benzene_EMIT_contributions.csv)
-
-    ground truth = MIXED  iff  GT_EXT_LO < M_ext < GT_EXT_HI   (genuine fractional
-                                                                 external/vibration split)
-    ground truth = CLEAN  iff  M_ext <= GT_EXT_LO  or  M_ext >= GT_EXT_HI
-                                                        (negligible external character,
-                                                         or ~complete external dominance)
-
-Thresholds: GT_EXT_HI = 0.95 mirrors tau_TR itself (the classifier's own
-Step-3 purity bar) -- reusing the same number keeps "dominant" consistently
-defined across ground truth and classifier. GT_EXT_LO = 0.05 is a small,
-symmetric "negligible" floor, roughly 10-50x the ~1e-4-1e-3 numerical
-orthonormality residual documented in projection.py's module docstring, so
-real (if small) coupling is not misclassified as noise. Verified empirically
-this session: no benzene EMIT mode's M_ext exceeds ~0.7674 (the EMIT 34/35/36
-triad) -- the GT_EXT_HI=0.95 "clean-external, M_ext~1" branch never actually
-fires for these 36 modes (EMIT eigenvectors are not constructed to be pure
-external modes the way real geometry-backed normal-mode T/R references are;
-see library_external_flag_confusion for the case where M_ext DOES hit 1.0
-exactly, by construction). All 19 "ground truth CLEAN" modes here are
-CLEAN via the M_ext<=0.05 (purely internal) branch, not the M_ext>=0.95
-branch -- documented, not hidden.
-
-Result (see IMPLEMENTATION_PLAN.md Changelog / final report for the full
-write-up): precision = 1.0 (the flag never fires on a genuinely clean mode),
-recall = 5/17 = 0.294 (it misses most genuinely mixed modes). The
-false-negative mechanism generalizes the previously-documented EMIT-36 blind
-spot (Decision X, "amplitude-invariant, score-indistinguishable-from-pure-
-translation") to a SECOND, independent, and more widespread cause: Step 2's
-plain one-to-one linear_sum_assignment only ever assigns exactly n_T+n_R=6
-of the 36 modes an external slot at all (by construction -- the algorithm
-spec's global assignment, not a bug); the other 30 modes fall straight to
-Step 4 and can NEVER receive the mixed-external flag regardless of
-how much genuine external character their projection shows (e.g. EMIT 1, 2,
-5, 7, 8, 10-14, 18 all have 7-39% external character by projection but are
-Step-2 assignment "losers" for their slot, not just amplitude-degenerate
-like EMIT 36). EMIT 2 vs EMIT 9 is the sharpest illustration: EMIT 2 has
-MORE genuine external (Ry) character by projection (38.7%) than EMIT 9
-(14.1%), yet EMIT 9 wins the Ry slot (its s[Ry] SCORE is larger, 0.215 vs
-0.143 -- the documented score/projection ranking inversion), so EMIT 9 is
-correctly flagged (TP) while EMIT 2, despite being MORE mixed, is missed
-(FN). This is evidence the low recall is systematic to Step 2's one-to-one
+Finding: precision = 1.0 (flag never fires on a genuinely clean mode), recall
+= 5/17 = 0.294 (misses most genuinely mixed modes). Root cause: Step 2's
+one-to-one linear_sum_assignment only ever assigns 6 of 36 modes an external
+slot at all (by construction, not a bug) -- the other 30 modes reach Step 4
+and can never be flagged regardless of true external character. E.g. EMIT 2
+has more genuine Ry character than EMIT 9 by projection (38.7% vs 14.1%) but
+EMIT 9 wins the Ry slot on raw score (0.215 vs 0.143), so EMIT 9 is flagged
+(TP) while EMIT 2 is missed (FN) -- the recall gap is systematic to Step 2's
 assignment mechanism, not an isolated edge case.
 """
 import os
@@ -122,11 +72,7 @@ def benzene_emit_flag_confusion(data_dir="data", thresholds=None,
 
     thresholds = thresholds or Thresholds.calibrated()
 
-    # Resolve benzene's canonical roster name (C6H6) to its actual on-disk
-    # basename (e.g. 'C6H6') rather than hardcoding the old,
-    # now-renamed literal 'benzene' -- data/EMIT/*_EMIT.txt is keyed by the
-    # same basename (2026-07-07 rename), so this resolves log/gjf/EMIT
-    # consistently.
+    # Resolve benzene's roster name (C6H6) to its on-disk basename.
     base = resolve_log_basename("C6H6", data_dir)
     raw, _ = load_inputs(base, "emit", data_dir)
     scorer, final = build_scorer_and_final(raw, "emit")
@@ -168,28 +114,16 @@ def benzene_emit_flag_confusion(data_dir="data", thresholds=None,
 
 
 def library_external_flag_confusion(data_dir="data", lib_df=None):
-    """Systematic clean-vs-mixed-external check on the 25 geometry-backed
-    library molecules' REAL normal-mode T/R references (the task's
-    parenthetical "and library externals").
+    """Clean-vs-mixed-external check on the library molecules' real normal-
+    mode T/R references. Ground truth is degenerate by construction: a real
+    T/R reference is one of Q's own columns, orthonormal to the rest by
+    Eckart-Sayvetz completeness, so M_ext=1.0 and ground truth is CLEAN for
+    every row -- this verifies (not assumes) the classifier's flag never
+    fires here (FP=0).
 
-    Ground truth here is degenerate by construction, not merely assumed: a
-    real normal mode's ideal T/R reference IS one of the projection
-    reference basis Q's own columns (src/projection.py), so it is
-    orthonormal to the other 3N-1 columns to machine/print precision --
-    Eckart-Sayvetz completeness -- meaning M_ext=1.0 exactly for every one of
-    these rows without needing to actually run project_emit on them. Ground
-    truth is therefore CLEAN for 100% of these rows; this function verifies
-    (rather than assumes) that the classifier's predicted_label never carries
-    the mixed-external flag for any of them (FP=0) -- the same fact
-    src/calibrate.py's tau_TR sensitivity sweep already established
-    indirectly (100% accuracy at every grid point), re-expressed here as a
-    directly comparable flag-confusion count alongside the benzene EMIT
-    table above.
-
-    Returns (ext_df, stats) where ext_df is the filtered
-    (kind=='external' & has_geometry) subset of library_scores.csv and stats
-    is the _confusion_from_bools() dict (TP=FN=0 by construction; only
-    FP/TN are informative here).
+    Returns (ext_df, stats): ext_df is the (kind=='external' & has_geometry)
+    subset of library_scores.csv; stats is _confusion_from_bools() output
+    (TP=FN=0 by construction; only FP/TN are informative).
     """
     if lib_df is None:
         lib_df = pd.read_csv(os.path.join(data_dir, "results", "library_scores.csv"))

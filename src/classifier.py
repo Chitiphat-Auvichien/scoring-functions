@@ -1,30 +1,18 @@
 """Unified mode classifier -- Algorithm 1 ``classify_all_modes``.
 
-Implements the authoritative spec: IMPLEMENTATION_PLAN.md "Authoritative spec"
-section (canonical, includes the two-gate purity refinement) and the
-pseudocode in ``JCC_manuscript_structure_scoped.md`` Section 7.2 (structure of
-Steps 1-4). Consumes a ``(scorer, final)`` pair of the same shape
-``main.build_scorer_and_final`` produces, so classification always runs on the
-identical mode pool that ``score_modes()`` scores (ideal T/R references
-prepended for normal modes; raw EMIT eigenvectors only for EMIT). This module
-is self-contained (no dependency on ``main.py``); ``main.py`` orchestrates by
-calling into it -- see ``main.run_classify_pipeline``.
+Implements the spec in IMPLEMENTATION_PLAN.md's "Authoritative spec" section
+(includes the two-gate purity refinement) and the Steps 1-4 pseudocode in
+``JCC_manuscript_structure_scoped.md`` Section 7.2. Consumes a
+``(scorer, final)`` pair as produced by ``main.build_scorer_and_final``, so
+classification runs on the identical mode pool ``score_modes()`` scores.
+Self-contained; ``main.py`` orchestrates via ``main.run_classify_pipeline``.
 
-Label vocabulary (author-approved rename, 2026-07-02; short, axis-specific
-symbolic scheme, replacing the earlier CLEAN_TRANSLATION/CLEAN_ROTATION/
-MIXED_EXTERNAL_WITH_VIBRATION/STRETCHING/BENDING/MIXED_STRETCH_BEND strings)
---------------------------------------------------------------------------
-Clean external (Step 3, gate pass)   -> the specific Step-2 slot name:
-    "Tx", "Ty", "Tz", "Rx", "Ry", "Rz".
-Mixed external + vibration (Step 3, gate fail) -> the same slot name with a
-    trailing "*": "Tx*", "Ty*", "Tz*", "Rx*", "Ry*", "Rz*".
-Stretching / bending / mixed stretch-bend (Step 4) -> "S" / "B" / "SB"
-    (Python constant names STRETCHING/BENDING/MIXED_STRETCH_BEND unchanged,
-    only their string VALUES changed, to minimize import-site churn).
-See ``is_external_label``/``external_axis``/``is_clean_external``/
-``is_mixed_external``/``is_translation``/``is_rotation`` below for the
-reusable predicates downstream code should use instead of hand-rolling regex
-against these strings.
+Label vocabulary: a clean external (Step 3 gate pass) is the Step-2 slot name
+("Tx".."Rz"); a mixed external+vibration (gate fail) is the slot name with a
+trailing "*" (e.g. "Tx*"); internal modes (Step 4) are "S"/"B"/"SB"
+(stretching/bending/mixed). Use ``is_external_label``/``external_axis``/
+``is_clean_external``/``is_mixed_external``/``is_translation``/``is_rotation``
+below rather than hand-rolling regex against these strings.
 
 Pipeline
 --------
@@ -32,11 +20,9 @@ Step 1  score every mode: {s[Tx..Tz], s[Rx..Rz], s[V_S]}, per-bond {s_AB}.
 Step 2  global external-mode assignment: one-to-one ``linear_sum_assignment``
         (scipy Hungarian solver) of the n_T+n_R external slots against ALL
         modes in the pool, maximizing sum |score|. Plain assignment only --
-        no degenerate-axis-block special-casing (retracted 2026-07-01,
-        Decision 8: axis choice within a degenerate inertia tensor is a
-        labeling convention fixed by the eigensolver, not an assignment
-        ambiguity; normal-mode T/R references are built directly from
-        geometry, never searched for).
+        no degenerate-axis-block special-casing (Decision 8: axis choice
+        within a degenerate inertia tensor is a labeling convention fixed by
+        the eigensolver, not an assignment ambiguity).
 Step 3  two-gate purity test on each assigned (slot, mode) pair: clean iff
         |score_for_slot| >= tau_TR AND s[V_S] <= tau_B -> the bare slot name
         (e.g. "Tx"); else the slot name with a trailing "*" (e.g. "Tx*"),
@@ -56,17 +42,12 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-# Phase-3 calibration output (src/calibrate.py). Thresholds.calibrated() reads
-# this if present; Thresholds() below remains the explicit, hardcoded
-# provisional fallback for a fresh clone / before Phase 3 has been run.
+# Phase-3 calibration output (src/calibrate.py); Thresholds() below is the
+# explicit hardcoded fallback used if this file doesn't exist yet.
 DEFAULT_CALIBRATION_PATH = os.path.join("data", "results", "thresholds.json")
 
 
 # --- Classification labels ---------------------------------------------
-# Clean-external / mixed-external labels are no longer fixed constants -- they
-# are axis-specific strings ("Tx".."Rz", optionally with a trailing "*")
-# assigned dynamically in classify_all_modes() (Step 3) from whichever slot
-# Step 2 assigned. See the module docstring above and the predicates below.
 STRETCHING = "S"
 BENDING = "B"
 MIXED_STRETCH_BEND = "SB"
@@ -118,18 +99,11 @@ def is_rotation(label):
 
 
 def classification_bucket(label):
-    """Map any classify_all_modes() classification label to its semantic
-    bucket name -- "translation"/"rotation"/"mixed_external" for external
-    slots (clean vs. mixed distinguished by the trailing "*"), or
-    "stretch"/"bend"/"mixed" for the Step-4 internal vibration labels.
-    Falls back to returning `label` unchanged for anything else (e.g. a
-    string that is already a bucket name), mirroring the ``dict.get(x, x)``
-    fallback pattern used by the old per-label dict lookups this replaces
-    (src/calibrate.py's ``_BUCKET``, src/benzene_validation.py's
-    ``_PRED_TO_BUCKET``) -- a single shared home for that logic instead of
-    two near-duplicate dicts that would otherwise need 6 axis-specific keys
-    each for clean and 6 more for mixed.
-    """
+    """Map a classify_all_modes() label to its semantic bucket:
+    "translation"/"rotation"/"mixed_external" for external slots, or
+    "stretch"/"bend"/"mixed" for Step-4 internal labels. Single shared home
+    for this logic (replaces near-duplicate per-label dicts elsewhere);
+    falls back to returning `label` unchanged."""
     if is_mixed_external(label):
         return "mixed_external"
     if is_translation(label):
@@ -144,9 +118,7 @@ def classification_bucket(label):
         return "mixed"
     return label
 
-# Tolerance for the "smallest principal moment ~= 0" linear-molecule test,
-# relative to the largest moment (mirrors DEGEN_TOL-style relative guards
-# elsewhere in scoring.py; this is a separate, purpose-specific constant).
+# Relative tolerance for the "smallest principal moment ~= 0" linear-molecule test.
 LINEAR_TOL = 1e-6
 
 
@@ -158,21 +130,12 @@ class Thresholds:
     tau_S  : stretching bar on s[V_S] (>= -> STRETCHING).
     tau_B  : bending bar on s[V_S] (<= -> BENDING); also gate 2 of Step 3.
 
-    The defaults below (0.95 / 0.9 / 0.2) are the PROVISIONAL constants used
-    before Phase-3 calibration existed -- kept here, unchanged, as the
-    explicit hardcoded fallback (`Thresholds()`), not overwritten by
-    calibration. Phase-3's calibrated values (derived in src/calibrate.py from
-    the hydride library's literature stretch/bend labels + a tau_TR
-    sensitivity sweep; see IMPLEMENTATION_PLAN.md) are loaded on demand via
-    `Thresholds.calibrated()`, which classify_all_modes() now uses as its
-    default when `thresholds=None` is passed and data/results/thresholds.json
-    exists (falling back to these same provisional numbers if it does not --
-    e.g. a fresh clone before Phase 3 has been run). This split is
-    deliberate: tests/test_classifier.py pins `Thresholds()` explicitly, so
-    those regression goldens stay fixed to these exact numbers even if a
-    future recalibration (new library data) changes thresholds.json; the
-    calibrated behavior has its own dedicated tests
-    (tests/test_calibrate.py) that load Thresholds.calibrated() explicitly.
+    Defaults (0.95/0.9/0.2) are the provisional pre-calibration constants,
+    deliberately NOT auto-overwritten by Phase-3 calibration -- use
+    `Thresholds.calibrated()` for the calibrated values instead.
+    tests/test_classifier.py pins `Thresholds()` explicitly so its regression
+    goldens stay fixed even if thresholds.json is later recalibrated;
+    calibrated behavior has its own tests (tests/test_calibrate.py).
     """
     tau_TR: float = 0.95
     tau_S: float = 0.9
@@ -180,10 +143,7 @@ class Thresholds:
 
     @classmethod
     def calibrated(cls, path=DEFAULT_CALIBRATION_PATH):
-        """Load the Phase-3 calibrated thresholds from `path` if it exists;
-        otherwise fall back to the provisional class defaults above (no
-        warning -- running before Phase 3 has produced thresholds.json is an
-        expected, supported state, not an error)."""
+        """Load calibrated thresholds from `path` if it exists, else the class defaults."""
         if os.path.exists(path):
             with open(path) as f:
                 data = json.load(f)
@@ -193,26 +153,17 @@ class Thresholds:
 
 def is_linear(scorer, tol=LINEAR_TOL):
     """True if the smallest principal moment of inertia is ~0 (linear molecule).
-
-    Must be called on a scorer whose geometry reflects the frame the modes
-    were scored in (i.e. after MIT() has rotated it into principal axes, as
-    build_scorer_and_final always does) -- consistent with construct_R()'s
-    n_R=2 special case for the on-axis rotation.
-    """
+    Must be called post-MIT() (as build_scorer_and_final always does) -- see
+    main.py::build_scorer_and_final for the n_R=2 / Rx-placeholder invariant this feeds."""
     moments, _ = scorer.principal_axes()
     scale = max(float(np.max(np.abs(moments))), 1e-12)
     return moments[0] <= tol * scale
 
 
 def external_slots(scorer):
-    """Return the (n_T, n_R, slot_labels) external slots per the spec.
-
-    n_T = 3 always. n_R = 2 if linear else 3. For a linear molecule, MIT()
-    rotates the molecular (smallest-moment) axis onto the new X axis (its
-    rotation matrix places the ascending-eigenvalue eigenvector in column 0),
-    so the ill-defined on-axis rotation is always 'Rx' post-alignment; it is
-    excluded, leaving Ry/Rz.
-    """
+    """Return the (n_T, n_R, slot_labels) external slots per the spec:
+    n_T=3 always, n_R=2 if linear else 3 (see main.py::build_scorer_and_final
+    for why the excluded axis is always 'Rx')."""
     linear = is_linear(scorer)
     r_slots = ("Ry", "Rz") if linear else _R_SLOTS_FULL
     slots = _T_SLOTS + r_slots
@@ -235,35 +186,20 @@ def _score_slot(scores, slot):
 
 
 def classify_all_modes(scorer, final, thresholds=None):
-    """Algorithm 1: score, globally assign externals, apply two-gate purity,
-    then classify remaining internal modes.
+    """Algorithm 1: score every mode, globally assign externals (Step 2:
+    plain Hungarian assignment, no degenerate-axis special-casing -- Decision
+    8, deliberately not reintroduced), apply two-gate purity (Step 3), then
+    classify remaining internal modes (Step 4).
 
-    Parameters
-    ----------
-    scorer : ModeScorer
-        Already constructed and MIT-aligned (as build_scorer_and_final leaves
-        it) -- its current geometry is the frame 'final' vectors are in.
-    final : list of mode dicts {frequency, vector, label?, is_emit?}
-        The full candidate pool (ideal T/R + vibrational modes for 'normal';
-        raw EMIT eigenvectors for 'emit') -- exactly what score_modes() scores.
-    thresholds : Thresholds, optional. Defaults to Thresholds.calibrated() --
-        the Phase-3 calibrated values if data/results/thresholds.json exists,
-        else the same provisional constants as Thresholds().
-
-    Returns
-    -------
-    list of dicts, one per mode in 'final' (same order), each:
-        {name, frequency, is_emit, T, R, V, classification, annotation, bonds}
-    'bonds' is a list of {'i','j','s_AB','rel_db','i_label','j_label'} (see
-    ModeScorer.score_bonds()), populated only for STRETCHING /
-    MIXED_STRETCH_BEND classifications; [] otherwise.
-    'classification' is the bare Step-2 slot name ("Tx".."Rz") for a clean
-    external, that same slot name with a trailing "*" (e.g. "Tx*") for a
-    mixed external+vibration mode, or "S"/"B"/"SB" (STRETCHING/BENDING/
-    MIXED_STRETCH_BEND) for a Step-4 internal mode.
-    'annotation' is "vibration=<vib_label>" for mixed-external ("*"-suffixed)
-    modes -- the axis is intentionally NOT repeated here since the top-level
-    classification string already names it; "" otherwise.
+    scorer must already be MIT-aligned (as build_scorer_and_final leaves it);
+    final is its candidate mode pool. thresholds defaults to
+    Thresholds.calibrated(). Returns a list of dicts, one per mode in `final`
+    (same order): {name, frequency, is_emit, T, R, V, classification,
+    annotation, bonds}. 'bonds' (see ModeScorer.score_bonds()) is populated
+    only for STRETCHING/MIXED_STRETCH_BEND. 'classification' is the bare
+    Step-2 slot name for a clean external, that slot name with a trailing "*"
+    for mixed external+vibration, or "S"/"B"/"SB" for a Step-4 internal mode.
+    'annotation' is "vibration=<vib_label>" for mixed-external modes, "" otherwise.
     """
     thresholds = thresholds or Thresholds.calibrated()
     n_T, n_R, slots = external_slots(scorer)
@@ -280,11 +216,8 @@ def classify_all_modes(scorer, final, thresholds=None):
             "T": sc["T"],
             "R": sc["R"],
             "V": sc["V"],
-            # mu/k/irrep (2026-07-08): only real Gaussian normal modes carry
-            # these (GaussianParser/IntermediateIO); EMIT eigenvectors and
-            # the synthetic ideal T/R references (construct_T/construct_R)
-            # never set these keys, so .get() correctly yields None for them
-            # rather than a KeyError -- see src/parser.py's module docstring.
+            # mu/k/irrep: only real Gaussian normal modes carry these; see
+            # main.py::score_modes for the .get()-defaulting rationale.
             "reduced_mass": mode.get("reduced_mass"),
             "force_constant": mode.get("force_constant"),
             "irrep": mode.get("irrep"),
@@ -341,13 +274,8 @@ def classify_all_modes(scorer, final, thresholds=None):
 
 
 def classify_to_rows(scored):
-    """Flatten classify_all_modes() output into CSV-row dicts.
-
-    Columns: Mode, Freq/Eigenvalue, Tx,Ty,Tz,Rx,Ry,Rz,V_Stretch, label,
-    annotation, s_AB (atom-symbol 'Elem#-Elem#:value' list, e.g.
-    "C1-C2:0.0342", semicolon-joined; blank if bonds not attached for this
-    mode's classification).
-    """
+    """Flatten classify_all_modes() output into CSV-row dicts. s_AB is a
+    semicolon-joined 'Elem#-Elem#:value' list, e.g. "C1-C2:0.0342"."""
     rows = []
     for m in scored:
         is_emit = m["is_emit"]

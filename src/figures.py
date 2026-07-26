@@ -175,13 +175,13 @@ COLORS = {
     "sens_change": "#000000",     # black     -- label-change-fraction curve, fig:sensitivity
     "plateau_band": "#56B4E9",    # sky blue @ low alpha -- tau_TR plateau shading, fig:sensitivity
     # sequential, colorblind-safe -- fig:confusion/fig:benzeneconfusion heatmap.
-    # CHANGED 2026-07-23 (author request) from "Blues": that map's high-value
-    # end (~#2070b4/#08306b) reads as nearly the same blue as the "bending"
-    # category color used for this SAME heatmap's tick labels, risking a cell
-    # shaded dark for a high COUNT (any category) being misread as "about
-    # bending." Green is not claimed by any category color (bend=blue,
-    # stretch=red/vermillion, mixed=purple, external=gray), so it can't collide.
-    "confusion_cmap": "Greens",
+    # CHANGED 2026-07-26 (author request) from "Greens" to "YlGnBu". NOTE:
+    # YlGnBu's high-value end (~#225ea8/#081d58) is blue-ish -- the SAME
+    # collision risk with the "bending" tick-label color (#1A5DE4) that got
+    # "Blues" rejected for this heatmap on 2026-07-23 (see git history). This
+    # was flagged and knowingly accepted rather than truncating the colormap
+    # or keeping Greens -- not an oversight if a future reader reconsiders it.
+    "confusion_cmap": "YlGnBu",
 }
 
 # Reference-label (library ground truth) / predicted-bucket -> shared

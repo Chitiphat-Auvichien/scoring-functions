@@ -16,7 +16,9 @@ below rather than hand-rolling regex against these strings.
 
 Pipeline
 --------
-Step 1  score every mode: {s[Tx..Tz], s[Rx..Rz], s[V_S]}, per-bond {s_AB}.
+Step 1  score every mode: {s[Tx..Tz], s[Rx..Rz], s[V_S]}, per-bond {s_AB}
+        (s_AB is signed: positive = stretching, negative = compressing;
+        s[V_S] itself is not signed).
 Step 2  global external-mode assignment: one-to-one ``linear_sum_assignment``
         (scipy Hungarian solver) of the n_T+n_R external slots against ALL
         modes in the pool, maximizing sum |score|. Plain assignment only --
@@ -29,7 +31,7 @@ Step 3  two-gate purity test on each assigned (slot, mode) pair: clean iff
         annotated with vib_label(s[V_S]).
 Step 4  every mode NOT assigned an external slot in Step 2: vib_label(s[V_S])
         -> STRETCHING ("S") / BENDING ("B") / MIXED_STRETCH_BEND ("SB").
-        Per-bond s_AB attached for STRETCHING / MIXED_STRETCH_BEND.
+        Per-bond s_AB (signed) attached for STRETCHING / MIXED_STRETCH_BEND.
 
 n_T = 3; n_R = 2 if linear else 3 (linear: smallest principal moment ~= 0).
 """

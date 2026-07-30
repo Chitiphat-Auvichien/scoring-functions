@@ -512,7 +512,7 @@ def plot_benzene_normal_modes(
     # legend -- merge them into one "clean T/R" entry (local to this figure
     # only; CATEGORY_LABEL itself stays untouched).
     _LEGEND_MERGE_KEY = {"translation": "clean_tr", "rotation": "clean_tr"}
-    _LEGEND_MERGE_TEXT = {"clean_tr": "clean T/R"}
+    _LEGEND_MERGE_TEXT = {"clean_tr": "T/R"}
 
     seen_labels = set()
     for _, row in normal.iterrows():
@@ -1191,6 +1191,10 @@ def plot_bond_scores(
     lib_df = pd.read_csv(library_csv)
     lib_df = filter_single_centre_library(lib_df)
     bonds = _explode_bonds(lib_df)
+    # s_AB is now signed (positive = stretching, negative = compressing) in
+    # the underlying data; this figure plots its magnitude only (unchanged
+    # appearance from before s_AB became signed).
+    bonds["s_AB"] = bonds["s_AB"].abs()
     bonds = bonds[bonds["ref_label"].isin(("stretch", "bend")) & bonds["ideal"].isin(("yes", "no"))]
     bonds["abs_rel_db"] = bonds["rel_db"].abs()
 

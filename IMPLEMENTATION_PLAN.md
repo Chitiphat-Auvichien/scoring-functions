@@ -1711,6 +1711,15 @@ library scores from the Excel file.
 - `s[V_S] = (1/Σ|Δb|²) Σ |Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}|`, `Δb_AB=d_B−d_A`; **`b̂^{i}` = the INITIAL
   (equilibrium-geometry) bond direction**, not the perturbed one; range `[0,1]`. Per-bond
   `s_AB = |Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}| / Σ_bonds|Δb|²` (global denominator) with `s[V_S]=Σ s_AB`.
+  **Update 2026-07-30: `s_AB` is now SIGNED** — drop the outer `|...|` around the
+  `unit(Δb_AB)·b̂_AB^{i}` term, i.e. `s_AB = |Δb_AB|²·(unit(Δb_AB)·b̂_AB^{i}) / Σ_bonds|Δb|²` (positive =
+  bond stretching, negative = compressing). `s[V_S]` itself is **unchanged** — it still uses the
+  magnitude internally (`_bond_contributions()`'s `terms` list keeps its `abs()`) and stays
+  non-negative, so all classification thresholds/labels are bit-for-bit identical to before. The
+  invariant is now `Σ|s_AB| == s[V_S]` (not `Σ s_AB == s[V_S]`), asserted in `score_bonds()`.
+  `fig:bondscores` (`plot_bond_scores()`) plots `|s_AB|` explicitly to stay pixel-identical; the two
+  roll-up totals `cc_total`/`ch_total` in `benzene_validation.py` also switched to magnitude sums so
+  `cc_fraction_of_V` keeps its previously-validated meaning.
 - **Algorithm 1** (PDF §B6.2): Step1 score → Step2 global **plain one-to-one** assignment via
   `linear_sum_assignment` over the `n_T+n_R` external slots vs. all modes, **MAXIMIZING `Σ|score|`**
   (scipy minimizes by default → negate the cost matrix or use `maximize=True`). **No block-constraint

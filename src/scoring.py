@@ -348,16 +348,23 @@ class ModeScorer:
 
     def _bond_contributions(self):
         """Per-bond pieces of the V-score (eq:vscore numerator/denominator),
-        plus the diagnostic signed relative bond-length change. Returns three
+        plus the diagnostic signed relative bond-length change. Returns four
         parallel lists over self.bList:
-          terms   : |Δb_AB|^2 * |unit(Δb_AB).b_hat_AB|  (numerator term)
-          sqdisps : |Δb_AB|^2                            (denominator term)
-          rel_db  : (|b_AB+Δd_AB| - |b_AB|) / |b_AB|. NOT part of eq:vscore/
-                    eq:bondscore -- a diagnostic only (fig:bondscores' x-axis).
-        Vscore() and score_bonds() both build on this so per-bond s_AB sums
-        back to s[V_S] exactly.
+          terms        : |Δb_AB|^2 * |unit(Δb_AB).b_hat_AB|  (numerator term,
+                         magnitude -- feeds s[V_S] via Vscore(), unchanged)
+          signed_terms : |Δb_AB|^2 * (unit(Δb_AB).b_hat_AB)  (signed version
+                         of the same term, no outer abs() -- feeds the signed
+                         per-bond s_AB in score_bonds(); positive = stretching,
+                         negative = compressing)
+          sqdisps      : |Δb_AB|^2                            (denominator term)
+          rel_db       : (|b_AB+Δd_AB| - |b_AB|) / |b_AB|. NOT part of
+                         eq:vscore/eq:bondscore -- a diagnostic only
+                         (fig:bondscores' x-axis).
+        Vscore() and score_bonds() both build on this. s_AB is signed but
+        s[V_S] is not: Σ|s_AB| == s[V_S] exactly (not Σ s_AB).
         """
         terms = []
+        signed_terms = []
         sqdisps = []
         rel_db = []
         for b in range(self.nBond):
@@ -374,17 +381,18 @@ class ModeScorer:
             dot_val = np.dot(delDisp, bVec_curr)
 
             terms.append(abs(dot_val) * delDispLength / bLength)
+            signed_terms.append(dot_val * delDispLength / bLength)
             sqdisps.append(delDispLength**2)
 
             if bLength > EPS_NORM:
                 rel_db.append((sizeVec(bVec_curr + delDisp) - bLength) / bLength)
             else:
                 rel_db.append(0.0)
-        return terms, sqdisps, rel_db
+        return terms, signed_terms, sqdisps, rel_db
 
     def Vscore(self):
         """Calculates the Vibrational Score s[V_S] (eq:vscore)."""
-        terms, sqdisps, _ = self._bond_contributions()
+        terms, _signed_terms, sqdisps, _ = self._bond_contributions()
         modeScr = sum(terms)
         denom = sum(sqdisps)
 
@@ -393,29 +401,33 @@ class ModeScorer:
         return 0.0
 
     def score_bonds(self):
-        """Per-bond stretch contribution s_AB (eq:bondscore):
-        s_AB = |Δb_AB|^2 * |unit(Δb_AB).b_hat_AB| / Σ_bonds |Δb|^2
+        """Per-bond stretch contribution s_AB (eq:bondscore), signed:
+        s_AB = |Δb_AB|^2 * (unit(Δb_AB).b_hat_AB) / Σ_bonds |Δb|^2
+
+        Positive s_AB means the bond is stretching, negative means it is
+        compressing; s[V_S] (Vscore()) itself remains non-negative and is
+        computed from the magnitude internally, unaffected by this sign.
 
         Returns a list of dicts {'i','j','s_AB','rel_db','i_label','j_label'}
         aligned with self.bList ('i_label'/'j_label' are e.g. "C1", "H7" for
-        readable bond identifiers). Asserts Σ s_AB == s[V_S] to 1e-6. Call
+        readable bond identifiers). Asserts Σ|s_AB| == s[V_S] to 1e-6. Call
         calculate_scores() first so the atom dispVecs are populated.
         """
-        terms, sqdisps, rel_db = self._bond_contributions()
+        _terms, signed_terms, sqdisps, rel_db = self._bond_contributions()
         denom = sum(sqdisps)
 
         bonds = []
         for b in range(self.nBond):
             idx1, idx2 = self.bList[b]
-            s_AB = terms[b] / denom if denom > EPS_DENOM else 0.0
+            s_AB = signed_terms[b] / denom if denom > EPS_DENOM else 0.0
             bonds.append({
                 "i": idx1, "j": idx2, "s_AB": s_AB, "rel_db": rel_db[b],
                 "i_label": f"{self.atoms[idx1].symbol}{idx1 + 1}",
                 "j_label": f"{self.atoms[idx2].symbol}{idx2 + 1}",
             })
 
-        total = sum(bd["s_AB"] for bd in bonds)
+        total = sum(abs(bd["s_AB"]) for bd in bonds)
         vs = self.Vscore()
         assert abs(total - vs) <= 1e-6, \
-            f"Sum of per-bond s_AB ({total}) != s[V_S] ({vs})"
+            f"Sum of |per-bond s_AB| ({total}) != s[V_S] ({vs})"
         return bonds

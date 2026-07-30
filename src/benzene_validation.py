@@ -236,8 +236,11 @@ def _bond_row_stats(r):
     C-C ring bond) from one `library_scores.csv` row -- shared by both bond
     diagnostics below so they can't silently drift apart."""
     bonds = _parse_bond_string(r["s_AB"])
-    cc_total = sum(v for k, v in bonds.items() if _is_cc_bond(k))
-    ch_total = sum(v for k, v in bonds.items() if not _is_cc_bond(k))
+    # s_AB is signed (positive = stretching, negative = compressing); these
+    # roll-up totals want magnitude sums (no cancellation between bonds), so
+    # cc_fraction_of_V keeps its previously-validated meaning.
+    cc_total = sum(abs(v) for k, v in bonds.items() if _is_cc_bond(k))
+    ch_total = sum(abs(v) for k, v in bonds.items() if not _is_cc_bond(k))
     row = {
         "mode_index": int(r["mode_index"]),
         "freq": float(r["freq"]),
@@ -289,7 +292,12 @@ def benzene_mixed_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0):
     for _, r in lib_rows.iterrows():
         row = _bond_row_stats(r)
         bonds = _parse_bond_string(r["s_AB"])
-        bond_vectors[row["mode_index"]] = np.array([bonds.get(b, 0.0) for b in _CC_RING_BONDS])
+        # s_AB is signed; this correlation measures magnitude-pattern
+        # complementarity between near-degenerate partners (which C-C bonds
+        # are strongly vs. weakly perturbed), not phase/sign agreement, so
+        # use magnitudes here too -- consistent with cc_total/ch_total above
+        # and unchanged from before s_AB became signed.
+        bond_vectors[row["mode_index"]] = np.array([abs(bonds.get(b, 0.0)) for b in _CC_RING_BONDS])
         rows.append(row)
     bond_detail_df = pd.DataFrame(rows).sort_values("mode_index").reset_index(drop=True)
 
@@ -446,8 +454,10 @@ def benzene_worked_examples(lib_df=None, data_dir="data", freq_tol=1.0):
 
     def _bond_stats(row):
         bonds = _parse_bond_string(row["s_AB"])
-        cc_total = sum(v for k, v in bonds.items() if _is_cc_bond(k))
-        ch_total = sum(v for k, v in bonds.items() if not _is_cc_bond(k))
+        # s_AB is signed; these totals want magnitude sums (see
+        # _bond_row_stats above for the same rationale).
+        cc_total = sum(abs(v) for k, v in bonds.items() if _is_cc_bond(k))
+        ch_total = sum(abs(v) for k, v in bonds.items() if not _is_cc_bond(k))
         cc_vec = np.array([bonds.get(b, 0.0) for b in _CC_RING_BONDS])
         ch_vec = np.array([bonds.get(b, 0.0) for b in _CH_BONDS])
         cc_cv = float(cc_vec.std() / cc_vec.mean()) if cc_vec.mean() else float("nan")

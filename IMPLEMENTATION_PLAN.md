@@ -10,11 +10,48 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-07-24 (**CO2 re-tagged `non-ideal`** — corrects an inconsistency with its linear
-> siblings CS2/CSe2/CTe2 (already `non-ideal`); `--library`/`--calibrate`/`--figures` regenerated,
-> `tau_S`/`tau_B` unchanged bit-for-bit, `pytest` re-pinned and green (105/105). See RESUME HERE below.)
+> Last updated: 2026-08-01 (**Empirical CPU-time benchmark added** — new `scripts/benchmark_cpu_time.py`
+> compares Gaussian's freq-only job-step CPU time against `classify_all_modes`' own CPU time across all
+> 69 `data/logs/*.log` molecules (N=3..12) -> `data/results/cpu_time_benchmark.csv`. Meant to replace the
+> manuscript's theoretical Big-O "Computational cost" section (§8/`JCC_SI_computational_cost.tex`) with a
+> measured one. See RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-08-01 (empirical CPU-time benchmark session):** Added `scripts/benchmark_cpu_time.py` (new
+> `scripts/` directory — no prior precedent in the repo for one-off analysis scripts, so this establishes
+> the convention). It reads the atom count `N` from each molecule's parsed geometry and its Gaussian
+> freq-only job CPU time from the log, and separately benchmarks `build_scorer_and_final()` +
+> `classify_all_modes()` (Algorithm 1) with `time.process_time()` (CPU time; cross-platform/Windows-safe,
+> unlike `resource`). **Verified the Link1-split log assumption first, across all 69 logs, before trusting
+> it:** every `data/logs/*.log` has exactly 2 "Job cpu time:" lines (job step 1 = `opt freq=...`
+> optimization, job step 2 = a Link1 restart with route `#N Geom=AllCheck ... Freq` — a freq-only single
+> point on the checkpointed geometry) — **zero exceptions**, so `gaussian_freq_cpu_seconds()` taking the
+> LAST "Job cpu time" line is safe for the whole dataset; it still raises (not silently mis-times) if a
+> future log doesn't have exactly 2 such lines. Confirmed against the user's own manually-checked
+> H2O.log (2.2s opt / 1.0s freq) and C6H6.log (4.3s opt / 19.1s freq) numbers exactly.
+> **Algorithm timing methodology:** naive per-call `time.process_time()` timing was tried first and
+> produced huge relative stddev (e.g. water: mean 3.1ms, stddev 6.2ms) — traced to Windows'
+> `GetProcessTimes()` having a real OS-tick granularity (~15.6ms) far coarser than the 100ns resolution
+> its API reports, so individual sub-millisecond calls are dominated by clock quantization, not real
+> variance. Fixed by switching to `timeit.Timer(stmt=..., timer=time.process_time)`:
+> `autorange()` calibrates a batch size whose total process_time clears the 0.2s noise floor, then
+> `repeat(repeat=10, number=batch_size)` times 10 such batches, and per-call time = batch_total /
+> batch_size — quantization averages out within a batch, and batch-to-batch stddev now reflects genuine
+> jitter (e.g. water: mean 3.9ms, stddev down to sub-ms for most molecules, a few noisier outliers
+> remain, likely real OS/background-process contention on the dev machine, not a code bug).
+> **Result:** all 69 molecules classified successfully (no missing bonds, no `classify_all_modes`
+> failures) — `data/results/cpu_time_benchmark.csv` (columns: molecule, N, gaussian_freq_cpu_s,
+> classifier_cpu_s, classifier_cpu_s_stddev, n_iterations), sorted by N. Trend: `classifier_cpu_s` stays
+> in the 2–31ms range across the whole N=3..12 dataset (worst case C6H6, N=12: 27.5ms), while
+> `gaussian_freq_cpu_s` spans 1.0s to 1855.4s (AsBr3, N=4) — driven far more by QM
+> method/basis-set/element choice than by N alone. `gaussian/classifier` ratio ranges from ~65x
+> (XeOH4, N=6: 2.0s / 30.6ms — smallest Gaussian job paired with one of the larger classifier times)
+> up to ~4.7x10^5x (AsBr3, N=4: 1855.4s / 3.9ms); the great majority of the 69 molecules are in the
+> 10^3–10^5x range. Even the worst case in the dataset is 2 orders of magnitude, supporting "negligible
+> in absolute terms" without cherry-picking. Not yet done this session (flagged for later): wiring this CSV into the
+> manuscript's `JCC_SI_computational_cost.tex`/§8 prose (that edit is `lead-author`/manuscript scope, not
+> this script) — this session only produces and validates the underlying data.
+>
 > **2026-07-24 (CO2 ideal → non-ideal retag session):** `data/mol_list_method.csv` tagged CO2
 > `mol_type=ideal` since the 2026-07-23 session below (commit `8a12c32`, which removed `SnO2`/`FH3`
 > from the roster and separately re-tagged CO2 `ideal` in the same edit) — but CO2's linear-triatomic

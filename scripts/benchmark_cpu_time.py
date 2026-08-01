@@ -1,0 +1,195 @@
+"""Empirical CPU-time comparison: Gaussian's freq-only job step vs. our
+classification algorithm, for every molecule with a log in data/logs/.
+
+Replaces the manuscript's theoretical Big-O "Computational cost" argument
+with a measured one: for each molecule (N = atom count), compare
+
+  (a) gaussian_freq_cpu_s -- the CPU time Gaussian itself reports for the
+      frequency calculation alone (NOT the geometry optimization that
+      precedes it), and
+  (b) classifier_cpu_s    -- the CPU time build_scorer_and_final() +
+      classify_all_modes() (Algorithm 1, Steps 1-4) takes on the SAME
+      molecule, once inputs are already parsed.
+
+Log structure (verified across all 69 data/logs/*.log -- see docstring of
+_gaussian_freq_cpu_seconds() below): every log's route line is
+"opt freq=... <method>/<basis> [geom=connectivity]" (job step 1, geometry
+optimization), followed by a Link1 restart with route
+"#N Geom=AllCheck ... Freq" (job step 2, a freq-only single point on the
+optimized/checkpointed geometry). Each job step ends with its own
+"Job cpu time:  X days  Y hours  Z minutes  W seconds." line, so the LAST
+such line in the log is the freq-only job's CPU time -- exactly what we want
+to compare against (Gaussian's cost to supply the normal modes our algorithm
+then classifies, not the cost of finding the stationary point itself).
+
+Usage (from Github/scoring-functions/):
+    py scripts/benchmark_cpu_time.py
+
+Writes data/results/cpu_time_benchmark.csv with columns:
+    molecule, N, gaussian_freq_cpu_s, classifier_cpu_s,
+    classifier_cpu_s_stddev, n_iterations
+"""
+import glob
+import os
+import re
+import statistics
+import sys
+import time
+import timeit
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from main import load_inputs, build_scorer_and_final, resolve_dirs  # noqa: E402
+from src.classifier import classify_all_modes, Thresholds  # noqa: E402
+
+# Number of independently-calibrated batches to time per molecule, so we get
+# a batch-to-batch stddev (real jitter) rather than a per-call one.
+# time.process_time() on Windows is backed by GetProcessTimes(), whose
+# actual OS-tick granularity (~15.6 ms) is far coarser than the API's
+# reported 100 ns resolution -- timing individual sub-millisecond calls
+# directly is dominated by that quantization, not real variance. Batching
+# (each batch calibrated by timeit.Timer.autorange() to clear its own 0.2 s
+# noise floor, per-call time = batch_total / batch_size) averages the
+# quantization out within a batch; repeating several such batches gives a
+# stddev that reflects genuine run-to-run variability instead.
+_N_BATCHES = 10
+
+_JOB_CPU_TIME_RE = re.compile(
+    r"Job cpu time:\s*(\d+)\s*days\s+(\d+)\s*hours\s+(\d+)\s*minutes\s+([\d.]+)\s*seconds"
+)
+
+
+def _job_cpu_time_lines_to_seconds(log_text):
+    """Return a list of CPU seconds, one per 'Job cpu time' line, in file order."""
+    out = []
+    for m in _JOB_CPU_TIME_RE.finditer(log_text):
+        days, hours, minutes, seconds = m.groups()
+        total = (int(days) * 86400 + int(hours) * 3600
+                  + int(minutes) * 60 + float(seconds))
+        out.append(total)
+    return out
+
+
+def gaussian_freq_cpu_seconds(log_path):
+    """Extract the freq-only job step's CPU time (seconds) from a Gaussian log.
+
+    Assumes the verified Link1-split pattern: exactly 2 "Job cpu time" lines
+    (job 1 = opt, job 2 = freq-only single point via Link1/AllCheck), and
+    returns the LAST one. Raises ValueError if a log doesn't have exactly 2
+    lines, so a differently-structured log is reported/skipped rather than
+    silently mis-timed.
+    """
+    with open(log_path, "r", errors="replace") as f:
+        text = f.read()
+    times = _job_cpu_time_lines_to_seconds(text)
+    if len(times) != 2:
+        raise ValueError(
+            f"expected exactly 2 'Job cpu time' lines (opt job + Link1 freq-only "
+            f"job), found {len(times)}"
+        )
+    return times[-1]
+
+
+def benchmark_classifier(mol_name, data_dir="data", thresholds=None,
+                          n_batches=_N_BATCHES):
+    """Time build_scorer_and_final() + classify_all_modes() (algorithm only,
+    no log-parsing/CSV I/O) via time.process_time() (CPU time, Windows-safe).
+
+    Warms the intermediate cache with one untimed load_inputs() call, then
+    uses timeit.Timer(timer=time.process_time) to calibrate a batch size
+    (autorange(): the smallest loop count whose total process_time clears
+    0.2 s) and times `n_batches` such batches (repeat()). Per-call time is
+    each batch's total / batch size, so individual sub-millisecond calls are
+    never timed directly (see _N_BATCHES docstring re: Windows clock
+    quantization). Returns (mean_s, stddev_s, n_iterations) where
+    n_iterations = batch_size * n_batches.
+    """
+    # Warm-up: forces the parse + intermediate-cache write once, untimed.
+    load_inputs(mol_name, "normal", data_dir, use_cache=True)
+
+    def _one_call():
+        raw, _ = load_inputs(mol_name, "normal", data_dir, use_cache=True)
+        scorer, final = build_scorer_and_final(raw, "normal")
+        classify_all_modes(scorer, final, thresholds)
+
+    timer = timeit.Timer(stmt=_one_call, timer=time.process_time)
+    batch_size, _ = timer.autorange()  # smallest n with total process_time >= 0.2s
+    batch_totals = timer.repeat(repeat=n_batches, number=batch_size)
+    per_call = [t / batch_size for t in batch_totals]
+
+    mean_s = statistics.fmean(per_call)
+    stddev_s = statistics.pstdev(per_call) if len(per_call) > 1 else 0.0
+    n_iterations = batch_size * n_batches
+    return mean_s, stddev_s, n_iterations
+
+
+def main():
+    data_dir = "data"
+    dirs = resolve_dirs(data_dir)
+    log_paths = sorted(glob.glob(os.path.join(dirs["logs"], "*.log")))
+    thresholds = Thresholds.calibrated()
+
+    rows = []
+    skipped = []
+    pattern_mismatches = []
+
+    for log_path in log_paths:
+        mol_name = os.path.splitext(os.path.basename(log_path))[0]
+
+        try:
+            gaussian_cpu_s = gaussian_freq_cpu_seconds(log_path)
+        except ValueError as e:
+            pattern_mismatches.append((mol_name, str(e)))
+            print(f"[SKIP] {mol_name}: log pattern mismatch -- {e}")
+            continue
+
+        try:
+            raw, _ = load_inputs(mol_name, "normal", data_dir, use_cache=True)
+            n_atoms = len(raw["atoms"])
+        except (FileNotFoundError, ValueError) as e:
+            skipped.append((mol_name, f"load_inputs failed: {e}"))
+            print(f"[SKIP] {mol_name}: load_inputs failed -- {e}")
+            continue
+
+        try:
+            mean_s, stddev_s, n_iter = benchmark_classifier(
+                mol_name, data_dir, thresholds)
+        except ValueError as e:
+            # e.g. "No bond connectivity available" from build_scorer_and_final
+            skipped.append((mol_name, f"classification failed: {e}"))
+            print(f"[SKIP] {mol_name}: classification failed -- {e}")
+            continue
+
+        rows.append({
+            "molecule": mol_name,
+            "N": n_atoms,
+            "gaussian_freq_cpu_s": gaussian_cpu_s,
+            "classifier_cpu_s": mean_s,
+            "classifier_cpu_s_stddev": stddev_s,
+            "n_iterations": n_iter,
+        })
+        print(f"[OK]   {mol_name}: N={n_atoms:3d}  gaussian_freq={gaussian_cpu_s:9.4f}s  "
+              f"classifier={mean_s*1e3:9.4f}ms +/- {stddev_s*1e3:.4f}ms  (n={n_iter})")
+
+    import pandas as pd
+    df = pd.DataFrame(rows).sort_values("N").reset_index(drop=True)
+    out_path = os.path.join(dirs["results"], "cpu_time_benchmark.csv")
+    df.to_csv(out_path, index=False)
+    print(f"\nWrote {len(df)}-row benchmark -> {out_path}")
+
+    if pattern_mismatches:
+        print(f"\n{len(pattern_mismatches)} log(s) did NOT fit the assumed "
+              f"Link1-split pattern (excluded):")
+        for mol_name, reason in pattern_mismatches:
+            print(f"  - {mol_name}: {reason}")
+
+    if skipped:
+        print(f"\n{len(skipped)} molecule(s) skipped (algorithm/input failure):")
+        for mol_name, reason in skipped:
+            print(f"  - {mol_name}: {reason}")
+
+    return df
+
+
+if __name__ == "__main__":
+    main()

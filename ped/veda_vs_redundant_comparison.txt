@@ -1,0 +1,101 @@
+==============================================================================
+VEDA-style (natural-coordinate, EPm-optimized) vs. existing
+(redundant-coordinate, Pulay-pseudoinverse) benzene PED comparison
+==============================================================================
+
+1. Per-mode side-by-side percentages (existing -> new), max abs diff
+------------------------------------------------------------------------------
+mode  1 (  412.0 cm-1): CH_stretch=   0.0->   0.0 (  +0.0) CC_stretch=   0.0->   0.0 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=   0.0->   0.0 (  +0.0) out_of_plane= 100.0-> 100.0 (  +0.0)
+mode  2 (  645.9 cm-1): CH_stretch=  -0.0->  -0.0 (  +0.0) CC_stretch=   7.1->   7.1 (  +0.0) CCC_bend=  60.7->   0.0 ( -60.7) CCH_bend=  32.2->  92.9 ( +60.7) out_of_plane=   0.0->   0.0 (  +0.0)
+mode  3 (  678.2 cm-1): CH_stretch=   0.0->   0.0 (  +0.0) CC_stretch=   0.0->   0.0 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=   0.0->   0.0 (  +0.0) out_of_plane= 100.0-> 100.0 (  +0.0)
+mode  4 (  684.2 cm-1): CH_stretch=   0.0->   0.0 (  +0.0) CC_stretch=   0.0->   0.0 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=   0.0->   0.0 (  +0.0) out_of_plane= 100.0-> 100.0 (  +0.0)
+mode  5 (  852.2 cm-1): CH_stretch=   0.0->   0.0 (  +0.0) CC_stretch=   0.0->   0.0 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=   0.0->   0.0 (  +0.0) out_of_plane= 100.0-> 100.0 (  +0.0)
+mode  6 (  931.2 cm-1): CH_stretch=   0.0->   0.0 (  +0.0) CC_stretch=   0.0->   0.0 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=   0.0->   0.0 (  +0.0) out_of_plane= 100.0-> 100.0 (  +0.0)
+mode  7 (  933.5 cm-1): CH_stretch=   0.0->   0.0 (  +0.0) CC_stretch=   0.0->   0.0 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=   0.0->   0.0 (  +0.0) out_of_plane= 100.0-> 100.0 (  +0.0)
+mode  8 (  992.6 cm-1): CH_stretch=   0.8->   0.8 (  +0.0) CC_stretch=  99.2->  99.2 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=   0.0->   0.0 (  +0.0) out_of_plane=   0.0->   0.0 (  +0.0)
+mode  9 ( 1056.4 cm-1): CH_stretch=   0.2->   0.2 (  +0.0) CC_stretch=  43.7->   0.0 ( -43.7) CCC_bend=  22.1->   0.0 ( -22.1) CCH_bend=  33.9->  99.8 ( +65.9) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 10 ( 1067.5 cm-1): CH_stretch=   0.1->   0.1 (  +0.0) CC_stretch=   0.0->  -0.0 (  -0.0) CCC_bend=  66.6->   0.0 ( -66.6) CCH_bend=  33.3->  99.9 ( +66.6) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 11 ( 1237.3 cm-1): CH_stretch=   0.0->   0.0 (  +0.0) CC_stretch=  35.6->  35.6 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=  64.4->  64.4 (  +0.0) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 12 ( 1247.1 cm-1): CH_stretch=   0.0->   0.0 (  +0.0) CC_stretch=  33.2->  33.2 (  +0.0) CCC_bend=  -0.7->   0.0 (  +0.7) CCH_bend=  67.6->  66.8 (  -0.8) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 13 ( 1319.3 cm-1): CH_stretch=  -0.0->  -0.0 (  +0.0) CC_stretch=  64.5->  64.5 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=  35.5->  35.5 (  +0.0) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 14 ( 1435.5 cm-1): CH_stretch=   0.0->   0.0 (  +0.0) CC_stretch=   0.0->   0.0 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend= 100.0-> 100.0 (  +0.0) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 15 ( 1532.8 cm-1): CH_stretch=   0.3->   0.3 (  +0.0) CC_stretch=  12.9->   0.0 ( -12.9) CCC_bend=   6.5->   0.0 (  -6.5) CCH_bend=  80.3->  99.7 ( +19.4) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 16 ( 1598.9 cm-1): CH_stretch=   0.2->   0.2 (  +0.0) CC_stretch=  59.7->  59.7 (  +0.0) CCC_bend=   6.7->   0.0 (  -6.7) CCH_bend=  33.4->  40.2 (  +6.8) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 17 ( 3182.3 cm-1): CH_stretch=  99.9->  99.9 (  +0.0) CC_stretch=   0.0->  -0.0 (  -0.0) CCC_bend=   0.1->   0.0 (  -0.1) CCH_bend=   0.0->   0.1 (  +0.1) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 18 ( 3191.9 cm-1): CH_stretch=  99.8->  99.8 (  +0.0) CC_stretch=   0.1->   0.1 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=   0.1->   0.1 (  +0.0) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 19 ( 3209.6 cm-1): CH_stretch=  99.5->  99.5 (  +0.0) CC_stretch=   0.3->   0.0 (  -0.3) CCC_bend=   0.1->   0.0 (  -0.1) CCH_bend=   0.1->   0.5 (  +0.4) out_of_plane=   0.0->   0.0 (  +0.0)
+mode 20 ( 3223.2 cm-1): CH_stretch=  99.2->  99.2 (  +0.0) CC_stretch=   0.8->   0.8 (  +0.0) CCC_bend=   0.0->   0.0 (  +0.0) CCH_bend=   0.0->   0.0 (  +0.0) out_of_plane=   0.0->   0.0 (  +0.0)
+
+2. Summary statistics across all 30 modes x 5 categories
+------------------------------------------------------------------------------
+Mean |diff| per category-entry: 4.41 percentage points
+Max |diff|:                     66.60 percentage points
+Per-mode max |diff| > 10 pts:   4 / 20 modes
+Per-mode max |diff| > 30 pts:   3 / 20 modes
+
+3. EPm (VEDA's documented PED-purity objective, max possible = 30)
+------------------------------------------------------------------------------
+EPm is defined over INDIVIDUAL internal coordinates (VEDA's own
+definition: sum of each mode's single largest coordinate PED), not
+over post-hoc physical categories -- so the existing method's EPm
+below is recomputed directly from its raw 42-coordinate B/H/L/lambda
+(04_compute_ped.py's own inputs), matching the level of aggregation
+used for the new method's 30 individual natural/mixed/reduced
+coordinates. Comparing category-grouped percentages instead would
+silently favor whichever method groups more coordinates per category.
+Existing redundant-coordinate table:                EPm = 6.0808
+New natural-coordinate table, UNMIXED (before step 07): EPm = 24.8163
+New natural-coordinate table, after mixing (step 07):   EPm = 27.7496
+New natural-coordinate table, after reduction (step 08): EPm = 27.7396
+Improvement over existing method: +21.6589 (+356.2%)
+
+NOTE: most of the EPm improvement comes from resolving the ring-closure
+redundancy into a well-conditioned non-redundant basis (unmixed EPm already 24.82 vs existing 6.08), not from the
+mixing/reduction optimization itself (which adds only +2.93 more).
+
+4. Convergence and conditioning diagnostics
+------------------------------------------------------------------------------
+Mixing (step 07): 10 accepted moves, converged in 11 history entries
+Original redundant B (42x36): condition number over its 30 real singular values = 1.0688e+01 (rcond=1e-8 pseudoinverse used)
+New natural B_nat (30x36):    condition number = 2.1084e+01 (exact inverse-like pseudoinverse, no truncation needed)
+
+5. The four modes cited in JCC_man_CA.tex Table tab:benzenemixed
+------------------------------------------------------------------------------
+
+1056.39 cm-1:
+  existing (published): 44% CC stretch + 34% CCH bend + 22% CCC bend
+  new (natural coords): 100% CCH bend
+  max category diff: 65.9 percentage points <-- LARGE DISAGREEMENT
+
+1319.27 cm-1:
+  existing (published): 64% CC stretch + 36% CCH bend
+  new (natural coords): 64% CC stretch + 36% CCH bend
+  max category diff: 0.0 percentage points
+
+1532.85 cm-1:
+  existing (published): 80% CCH bend + 13% CC stretch + 7% CCC bend
+  new (natural coords): 100% CCH bend
+  max category diff: 19.4 percentage points
+
+1598.9 cm-1:
+  existing (published): 60% CC stretch + 33% CCH bend + 7% CCC bend
+  new (natural coords): 60% CC stretch + 40% CCH bend
+  max category diff: 6.8 percentage points
+
+6. Factual checklist (no recommendation -- for your own review)
+------------------------------------------------------------------------------
+[x] New table's category percentages sum to ~100% for every mode
+[x] New method's EPm exceeds the existing method's EPm
+[ ] Zero modes with >30-point category disagreement (actual count: 3)
+[ ] Zero of the 4 manuscript-cited modes show >30-point disagreement (actual count: 1/4)
+[ ] CCC-bend is 0% throughout the new table by construction (see VEDA_STYLE_METHODOLOGY.md) -- the two methods are not reporting the same 5 categories on equal footing for bend-type modes; this is a structural difference, not a checklist pass/fail item.
+
+IMPORTANT: modes at 1056.39 and 1532.85 cm-1 -- the two modes the
+manuscript's own discussion relies on most heavily to argue for real
+mixed stretch-bend (SB) character -- are the ones with the largest
+disagreement: the new natural-coordinate method reports them as
+~100% CCH bend (no stretch character at all), where the existing
+redundant-coordinate method reported 44% and 13% CC-stretch
+respectively. This is a real numerical disagreement between two
+legitimate coordinate-system choices, not a bug in either pipeline --
+see VEDA_STYLE_METHODOLOGY.md Sec. 'Why the two methods disagree'.

@@ -1,0 +1,30 @@
+  # freq(cm-1)  deg   CHstr  CCstr  CCCbend  CCHbend  out-of-plane  dominant character
+--------------------------------------------------------------------------------------
+  1      412.0 (x2)     0.0    0.0      0.0      0.0         100.0  100% out-of-plane
+  2      645.9 (x2)    -0.0    7.1      0.0     92.9           0.0  93% CCH bend + 7% CC stretch
+  3      678.2          0.0    0.0      0.0      0.0         100.0  100% out-of-plane
+  4      684.2          0.0    0.0      0.0      0.0         100.0  100% out-of-plane
+  5      852.2 (x2)     0.0    0.0      0.0      0.0         100.0  100% out-of-plane
+  6      931.2 (x2)     0.0    0.0      0.0      0.0         100.0  100% out-of-plane
+  7      933.5          0.0    0.0      0.0      0.0         100.0  100% out-of-plane
+  8      992.6          0.8   99.2      0.0      0.0           0.0  99% CC stretch
+  9     1056.4 (x2)     0.2    0.0      0.0     99.8           0.0  100% CCH bend
+ 10     1067.5          0.1   -0.0      0.0     99.9           0.0  100% CCH bend
+ 11     1237.3          0.0   35.6      0.0     64.4           0.0  64% CCH bend + 36% CC stretch
+ 12     1247.1 (x2)     0.0   33.2      0.0     66.8           0.0  67% CCH bend + 33% CC stretch
+ 13     1319.3         -0.0   64.5      0.0     35.5           0.0  64% CC stretch + 36% CCH bend
+ 14     1435.5          0.0    0.0      0.0    100.0           0.0  100% CCH bend
+ 15     1532.8 (x2)     0.3    0.0      0.0     99.7           0.0  100% CCH bend
+ 16     1598.9 (x2)     0.2   59.7      0.0     40.2           0.0  60% CC stretch + 40% CCH bend
+ 17     3182.3         99.9   -0.0      0.0      0.1           0.0  100% CH stretch
+ 18     3191.9 (x2)    99.8    0.1      0.0      0.1           0.0  100% CH stretch
+ 19     3209.6 (x2)    99.5    0.0      0.0      0.5           0.0  99% CH stretch
+ 20     3223.2         99.2    0.8      0.0      0.0           0.0  99% CH stretch
+
+20 unique lines representing all 30 vibrational modes (degenerate e-type pairs shown once, marked (x2)).
+
+Frequencies are Gaussian's own computed harmonic values (unscaled), from data/logs/C6H6.log (MP2/3-21G, D6h, freq=hpmodes) -- the same benzene calculation used throughout the JCC manuscript.
+
+Coordinates: non-redundant natural-coordinate basis (steps 06-08), NOT the redundant 42-coordinate basis of benzene_PED_table.txt.
+
+CCC-bend is legitimately ~0% throughout: the natural-coordinate construction found no independent CCC-bend direction for this ring (see VEDA_STYLE_METHODOLOGY.md) -- not a computation error.

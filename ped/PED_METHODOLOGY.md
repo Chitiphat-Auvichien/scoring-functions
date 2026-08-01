@@ -10,6 +10,13 @@ mathematically correct, and how the result was numerically validated.
 The condensed version of this document, sized for the manuscript's
 Supporting Information bundle, is `JCC/JCC_man_scoring/JCC_SI_PED_benzene.tex`.
 
+A separate, additive cross-check of this pipeline against VEDA's published
+(not reverse-engineered) methodology — a non-redundant, EPm-optimized
+coordinate approach — lives in `VEDA_STYLE_METHODOLOGY.md`. It does not
+modify anything described in this document; see that file for a comparison
+report, including a real disagreement at two of the four modes discussed in
+Section 6 below.
+
 ## 1. Purpose
 
 The main-text classification framework in this repository scores each

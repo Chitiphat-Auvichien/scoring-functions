@@ -20,13 +20,12 @@ one-to-one onto this pipeline's 5 reporting categories:
                      ring-torsion + CH-wag into one category, see
                      PED_METHODOLOGY.md section 4)
 
-Sign convention. VEDA4's own .ved header calls its matrix both "PED: sign
-= direction" (top) and "TED: sum = 100" (bottom) for the SAME matrix --
-it does not cleanly separate the two terms. Numerically, the printed
-values are signed but only sum to ~100 per mode in ABSOLUTE value (the
-raw signed sum is often far below 100, confirmed by inspection); this
-script therefore sums |value| per category, consistent with how the
-program's own "sum = 100" claim is actually true.
+Sign convention. veda4/c6h6_reconstructed.ved actually contains TWO
+separate 30x30 matrices, not one relabeled: a "PED: sign = direction"
+table first, then a distinct "TED: sum = 100" table with different
+(not just sign-flipped or |.|'d) values. The TED table's own signed
+values already sum to ~100 per mode directly -- no absolute-value
+post-processing needed or applied here; this script uses the TED table.
 
 Degenerate E-symmetry pairs are matched between the two programs by rank
 position in the descending-frequency list after grouping consecutive
@@ -83,26 +82,37 @@ our_pcts = np.vstack([
 # --- Parse VEDA4's real output -------------------------------------------
 
 def parse_ved(path):
+    """Returns (freqs, ped_matrix, ted_matrix). .ved contains TWO distinct
+    30x30 matrices -- a signed 'PED: sign = direction' table, then a
+    separately-computed 'TED: sum = 100' table (different values, not a
+    transform of the first) -- each preceded by its own '1 2 3 ... 30'
+    column-header line and followed by 30 data rows."""
     with open(path) as f:
         lines = f.readlines()
 
     dfac_line = next(i for i, l in enumerate(lines) if 'diagonality factor' in l)
-    ped_line = next(i for i, l in enumerate(lines) if l.strip().startswith('PED: sign'))
+    ped_hdr = next(i for i, l in enumerate(lines) if l.strip().startswith('PED: sign'))
+    ted_hdr = next(i for i, l in enumerate(lines) if l.strip().startswith('TED:'))
 
-    freq_lines = [l for l in lines[dfac_line + 1:ped_line] if l.strip()]
+    freq_lines = [l for l in lines[dfac_line + 1:ped_hdr] if l.strip()]
     freqs = np.array([float(x) for l in freq_lines for x in l.split()])
 
-    matrix = []
-    i = ped_line + 2  # skip the 'PED: sign...' line and the '1 2 3 ... 30' header
-    while len(matrix) < len(freqs):
-        nums = [float(x) for x in lines[i].split()]
-        row_label, values = int(nums[0]), nums[1:-1]
-        if len(values) != len(freqs):
-            raise ValueError(f"{path}: row {row_label} has {len(values)} "
-                              f"coordinate values, expected {len(freqs)}.")
-        matrix.append(values)
-        i += 1
-    return freqs, np.array(matrix)  # (30,), (30 modes, 30 coords)
+    def read_matrix(header_line_idx):
+        rows = []
+        i = header_line_idx + 1
+        while len(rows) < len(freqs):
+            nums = [float(x) for x in lines[i].split()]
+            row_label, values = int(nums[0]), nums[1:-1]
+            if len(values) != len(freqs):
+                raise ValueError(f"{path}: row {row_label} has {len(values)} "
+                                  f"coordinate values, expected {len(freqs)}.")
+            rows.append(values)
+            i += 1
+        return np.array(rows)
+
+    ped_matrix = read_matrix(ped_hdr + 1)
+    ted_matrix = read_matrix(ted_hdr + 1)
+    return freqs, ped_matrix, ted_matrix  # (30,), (30,30), (30,30)
 
 
 def parse_coord_categories(path):
@@ -134,13 +144,13 @@ def parse_coord_categories(path):
     return [category(*coord_type[i + 1]) for i in range(n)]
 
 
-veda_freqs, veda_matrix = parse_ved(VED_PATH)          # (30,), (30, 30)
-coord_cats = parse_coord_categories(VDF_PATH)           # len 30
+veda_freqs, _ped_matrix, veda_matrix = parse_ved(VED_PATH)  # use the TED table
+coord_cats = parse_coord_categories(VDF_PATH)                # len 30
 
 veda_pcts = np.zeros((len(CAT_ORDER), veda_matrix.shape[0]))
 for ci, cat in enumerate(CAT_ORDER):
     cols = [j for j, c in enumerate(coord_cats) if c == cat]
-    veda_pcts[ci] = np.abs(veda_matrix[:, cols]).sum(axis=1)
+    veda_pcts[ci] = veda_matrix[:, cols].sum(axis=1)  # signed -- TED already sums to ~100
 
 
 # --- Align modes by rank within degenerate groups, not raw frequency ----
@@ -218,9 +228,9 @@ with open(txt_path, 'w') as f:
             "E-symmetry pairs averaged and shown once, deg=2).\n")
     f.write("'ours' = ped/benzene_PED_table.csv (redundant 42-coordinate, "
             "signed PED, this repo's own from-scratch reconstruction).\n")
-    f.write("'v4' = real VEDA4.exe output (veda4/c6h6_reconstructed.ved, "
-            "categories summed by |value| -- see this script's docstring "
-            "for why).\n")
+    f.write("'v4' = real VEDA4.exe output (veda4/c6h6_reconstructed.ved's "
+            "'TED: sum=100' table, categories summed signed, no |.| -- "
+            "see this script's docstring).\n")
 
 print(f"Wrote {csv_path}")
 print(f"Wrote {txt_path}")

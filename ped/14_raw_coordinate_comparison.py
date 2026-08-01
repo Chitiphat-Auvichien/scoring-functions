@@ -14,12 +14,16 @@ Sources:
     CCC bend, 12 CCH bend, 6 ring torsion, 6 CH wag -- see
     PED_METHODOLOGY.md section 3), one row per coordinate, labeled by type
     and (0-based) atom indices from coord_labels.txt.
-  - VEDA4: veda4/c6h6_reconstructed.ved's raw signed matrix (30 x 30,
-    Nint=30 -- non-redundant, see this repo's answer on why VEDA4 has a
-    smaller/differently-sized coordinate set per family), one column per
-    coordinate s1..s30, labeled by VEDA4's own STRE/BEND/TORS + CH/CC/CCC/
-    HCC/HCCC/CCCC type tags from the "definitions of modes" section of
-    c6h6_reconstructed.vdf.
+  - VEDA4: veda4/c6h6_reconstructed.ved contains TWO separate 30x30
+    matrices, not one relabeled -- a "PED: sign = direction" table and a
+    distinct "TED: sum = 100" table with different (not just sign-flipped
+    or |.|'d) values, each with its own column-header line and 30 data
+    rows. Both are extracted here as separate column blocks (veda4_PED_*
+    and veda4_TED_*), one column per coordinate s1..s30, labeled by
+    VEDA4's own STRE/BEND/TORS + CH/CC/CCC/HCC/HCCC/CCCC type tags from
+    the "definitions of modes" section of c6h6_reconstructed.vdf. Nint=30
+    -- non-redundant, see this repo's discussion of why VEDA4 has a
+    smaller/differently-sized coordinate set per family than ours.
 
 The two coordinate sets are NOT the same basis (different count, different
 specific linear combinations within each motion-type family -- see this
@@ -72,24 +76,30 @@ for line in open(os.path.join(HERE, 'coord_labels.txt')):
 # --- VEDA4: raw per-coordinate PED/TED matrix -----------------------------
 
 def parse_ved(path):
+    """Returns (freqs, ped_matrix, ted_matrix) -- two distinct 30x30
+    matrices, see module docstring."""
     with open(path) as f:
         lines = f.readlines()
     dfac_line = next(i for i, l in enumerate(lines) if 'diagonality factor' in l)
-    ped_line = next(i for i, l in enumerate(lines) if l.strip().startswith('PED: sign'))
-    freq_lines = [l for l in lines[dfac_line + 1:ped_line] if l.strip()]
+    ped_hdr = next(i for i, l in enumerate(lines) if l.strip().startswith('PED: sign'))
+    ted_hdr = next(i for i, l in enumerate(lines) if l.strip().startswith('TED:'))
+    freq_lines = [l for l in lines[dfac_line + 1:ped_hdr] if l.strip()]
     freqs = np.array([float(x) for l in freq_lines for x in l.split()])
 
-    matrix = []
-    i = ped_line + 2
-    while len(matrix) < len(freqs):
-        nums = [float(x) for x in lines[i].split()]
-        row_label, values = int(nums[0]), nums[1:-1]
-        if len(values) != len(freqs):
-            raise ValueError(f"{path}: row {row_label} has {len(values)} "
-                              f"coordinate values, expected {len(freqs)}.")
-        matrix.append(values)
-        i += 1
-    return freqs, np.array(matrix)  # (30,), (30 modes, 30 coords)
+    def read_matrix(header_line_idx):
+        rows = []
+        i = header_line_idx + 1
+        while len(rows) < len(freqs):
+            nums = [float(x) for x in lines[i].split()]
+            row_label, values = int(nums[0]), nums[1:-1]
+            if len(values) != len(freqs):
+                raise ValueError(f"{path}: row {row_label} has {len(values)} "
+                                  f"coordinate values, expected {len(freqs)}.")
+            rows.append(values)
+            i += 1
+        return np.array(rows)
+
+    return freqs, read_matrix(ped_hdr + 1), read_matrix(ted_hdr + 1)
 
 
 def parse_coord_types(path):
@@ -106,9 +116,10 @@ def parse_coord_types(path):
     return [types[i + 1] for i in range(n)]
 
 
-veda_freqs, veda_matrix = parse_ved(VED_PATH)      # (30,), (30 modes, 30 coords)
-veda_types = parse_coord_types(VDF_PATH)            # len 30, [(kind, sub), ...]
-veda_labels = [f"veda4_s{i+1}_{kind}_{sub}" for i, (kind, sub) in enumerate(veda_types)]
+veda_freqs, veda_ped, veda_ted = parse_ved(VED_PATH)  # (30,), (30,30), (30,30)
+veda_types = parse_coord_types(VDF_PATH)               # len 30, [(kind, sub), ...]
+veda_ped_labels = [f"veda4_PED_s{i+1}_{kind}_{sub}" for i, (kind, sub) in enumerate(veda_types)]
+veda_ted_labels = [f"veda4_TED_s{i+1}_{kind}_{sub}" for i, (kind, sub) in enumerate(veda_types)]
 
 
 # --- Align the 30 modes by rank in descending frequency only -------------
@@ -126,18 +137,22 @@ if len(our_rank) != len(veda_rank):
 csv_path = os.path.join(HERE, 'raw_coordinate_comparison.csv')
 with open(csv_path, 'w', newline='') as f:
     w = csv.writer(f)
-    w.writerow(['rank', 'freq_gaussian_cm-1', 'freq_veda4_cm-1'] + our_labels + veda_labels)
+    w.writerow(['rank', 'freq_gaussian_cm-1', 'freq_veda4_cm-1'] +
+               our_labels + veda_ped_labels + veda_ted_labels)
     for rank, (oi, vi) in enumerate(zip(our_rank, veda_rank), start=1):
         our_vals = [f"{x:.2f}" for x in ped_raw[:, oi]]
-        veda_vals = [f"{x:.2f}" for x in veda_matrix[vi, :]]
-        w.writerow([rank, f"{vibfreq[oi]:.4f}", f"{veda_freqs[vi]:.4f}"] + our_vals + veda_vals)
+        veda_ped_vals = [f"{x:.2f}" for x in veda_ped[vi, :]]
+        veda_ted_vals = [f"{x:.2f}" for x in veda_ted[vi, :]]
+        w.writerow([rank, f"{vibfreq[oi]:.4f}", f"{veda_freqs[vi]:.4f}"] +
+                   our_vals + veda_ped_vals + veda_ted_vals)
 
 print(f"Wrote {csv_path}")
 print(f"{len(our_rank)} rows (one per mode, unmerged), "
       f"{len(our_labels)} raw 'ours' coordinate columns + "
-      f"{len(veda_labels)} raw VEDA4 coordinate columns.")
+      f"{len(veda_ped_labels)} veda4_PED_* + {len(veda_ted_labels)} veda4_TED_* columns.")
 print("\nNote: 'ours' columns are signed PED% summing to ~100% per row "
       "by construction (Pulay pseudoinverse normalization, step 4).")
-print("VEDA4 columns are signed and do NOT sum to 100% per row unless "
-      "summed by absolute value (VEDA4's own 'TED: sum=100' convention -- "
-      "see its .ved header); left as printed here, unmodified.")
+print("veda4_PED_* columns are signed and generally do NOT sum to ~100% "
+      "per row. veda4_TED_* columns are a SEPARATE table VEDA4 computes "
+      "(not a transform of the PED one) whose signed values do sum to "
+      "~100% per row directly, matching its own 'TED: sum=100' header.")

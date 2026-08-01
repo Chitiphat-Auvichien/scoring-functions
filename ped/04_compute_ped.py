@@ -19,7 +19,11 @@ Theory:
   so amu/Angstrom-based units from steps 1-2 are fine as-is.)
 
 Requires: H_cart.npy, L.npy, vibfreq.npy (step 2); B.npy, coord_labels.txt (step 3)
-Output: PED_group_pct.npy (n_categories x 30, in %), cats.txt
+Output: PED_group_pct.npy (n_categories x 30, in %), cats.txt,
+        PED_raw_pct.npy (Nint x 30, in %, signed, one row per individual
+        internal coordinate before category grouping -- used by step 14 to
+        compare raw per-coordinate values against VEDA4's own, without
+        collapsing either side into categories first)
 """
 import os
 import numpy as np
@@ -59,10 +63,16 @@ cat_idx = {c: [i for i, l in enumerate(labels) if l == c] for c in cats}
 PED_group = np.array([PED_raw[cat_idx[c], :].sum(axis=0) for c in cats])
 PED_group_pct = 100 * PED_group / PED_group.sum(axis=0, keepdims=True)
 
+# Same per-mode renormalization as the grouped version above (colsums are
+# already ~1.0, so this only corrects the same <0.1% deviation) -- applied
+# per-coordinate instead of per-category, so nothing is summed/collapsed.
+PED_raw_pct = 100 * PED_raw / PED_raw.sum(axis=0, keepdims=True)
+
 np.save(os.path.join(HERE, 'PED_group_pct.npy'), PED_group_pct)
+np.save(os.path.join(HERE, 'PED_raw_pct.npy'), PED_raw_pct)
 with open(os.path.join(HERE, 'cats.txt'), 'w') as f:
     for c in cats:
         f.write(c + '\n')
 
 print("\nCategories:", cats)
-print("Saved: PED_group_pct.npy, cats.txt")
+print("Saved: PED_group_pct.npy, PED_raw_pct.npy, cats.txt")

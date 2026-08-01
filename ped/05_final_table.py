@@ -67,7 +67,7 @@ footer = [
     f"\n{len(grouped)} unique lines representing all 30 vibrational modes "
     f"(degenerate e-type pairs shown once, marked (x2)).",
     "\nFrequencies are Gaussian's own computed harmonic values (unscaled), "
-    "from data/logs/C6H6_MP2_3-21G_D6h.log (MP2/3-21G, D6h, freq=hpmodes) "
+    "from data/logs/C6H6.log (MP2/3-21G, D6h, freq=hpmodes) "
     "-- the same benzene calculation used throughout the JCC manuscript.",
     "\nOut-of-plane category = ring_torsion + CH_wag_oop merged (non-orthogonal "
     "internal coordinates for a planar ring -- see README.md).",

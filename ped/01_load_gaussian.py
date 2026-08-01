@@ -2,7 +2,7 @@
 Step 1: Load benzene geometry + all 30 vibrational normal modes directly
 from the actual Gaussian log used in the JCC manuscript -- no PySCF, no
 independent geometry optimization. This is the same MP2/3-21G, D6h,
-freq=hpmodes calculation (data/logs/C6H6_MP2_3-21G_D6h.log) that produces
+freq=hpmodes calculation (data/logs/C6H6.log) that produces
 every benzene figure/table in the paper.
 
 Requires: the parent scoring-functions repo's src/parser.py, src/utils.py
@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from src.parser import GaussianParser
 
 LOG_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'logs',
-                         'C6H6_MP2_3-21G_D6h.log')
+                         'C6H6.log')
 
 parser = GaussianParser(LOG_PATH)
 data = parser.parse(parse_modes=True)

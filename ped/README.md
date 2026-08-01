@@ -3,7 +3,7 @@
 Reproduces a full Wilson-Decius-Cross / Pulay redundant-internal-coordinate
 normal mode analysis of benzene, using the **actual Gaussian calculation
 behind the JCC manuscript's benzene results**
-(`data/logs/C6H6_MP2_3-21G_D6h.log`, MP2/3-21G, D6h, `freq=hpmodes`) — not
+(`data/logs/C6H6.log`, MP2/3-21G, D6h, `freq=hpmodes`) — not
 an independently-optimized geometry/Hessian from a separate quantum
 chemistry run.
 
@@ -36,7 +36,7 @@ sanity checks and saves `.npy`/`.txt` files consumed by the next step:
 
 | Script | What it does | Key output |
 |---|---|---|
-| `01_load_gaussian.py` | Parses `data/logs/C6H6_MP2_3-21G_D6h.log` via the repo's `GaussianParser` — geometry, all 30 HP-precision vibrational modes, connectivity | `opt_coords_ang.npy`, `l_raw.npy`, `vibfreq.npy`, `reduced_mass.npy`, `bonds.txt` |
+| `01_load_gaussian.py` | Parses `data/logs/C6H6.log` via the repo's `GaussianParser` — geometry, all 30 HP-precision vibrational modes, connectivity | `opt_coords_ang.npy`, `l_raw.npy`, `vibfreq.npy`, `reduced_mass.npy`, `bonds.txt` |
 | `02_reconstruct_hessian.py` | Reconstructs the full Cartesian Hessian directly from Gaussian's own frequencies + displacement vectors (no VEDA, no `.chk`); validates by re-diagonalizing and recovering Gaussian's own frequencies | `H_cart.npy`, `L.npy` |
 | `03_build_internal_coords.py` | Detects the ring + substituents generically from the parsed bonds graph; defines 42 redundant internal coordinates (6 C-C str, 6 C-H str, 6 C-C-C bend, 12 C-C-H bend, 6 ring torsions, 6 C-H wags) and builds the Wilson B-matrix by finite differences | `B.npy` |
 | `04_compute_ped.py` | F_q = (B⁺)ᵀ H B⁺ (Moore-Penrose pseudoinverse handles the redundancy); PED[n,μ] = D[n,μ]·(F_qD)[n,μ]/λ_μ | `PED_group_pct.npy` |
@@ -62,10 +62,11 @@ sanity checks and saves `.npy`/`.txt` files consumed by the next step:
   hexagonal ring, "ring torsion" and "C-H out-of-plane wag" are not
   orthogonal internal coordinates, so their individual PED contributions
   can come out negative or >100% for out-of-plane modes. This is a
-  known, published issue in benzene PED analysis (see Jamróz, "On the
-  Internal Coordinates in the PED Analysis: Bending or Torsion?").
-  Script 5 merges them into one "out-of-plane" category rather than
-  reporting a misleading split.
+  known, published issue in benzene PED analysis (see Jamróz, M. H. "On the
+  Internal Coordinates in the Potential Energy Distribution (PED) Analysis:
+  Bending or Torsion?" *Enliven: Bioinformatics* 1(4), 006 (2014),
+  doi:10.18650/2376-9416.14006). Script 5 merges them into one "out-of-plane"
+  category rather than reporting a misleading split.
 - **No frequency scale factor is applied.** There is no verified,
   citable published scale factor for MP2/3-21G (unlike, e.g., Scott &
   Radom's well-known 0.8929 for HF/6-31G(d)) — asserting one without a

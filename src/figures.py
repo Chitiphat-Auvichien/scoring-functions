@@ -29,7 +29,10 @@ construction, kept only as a self-consistency check, not an accuracy claim),
 score vs. central-atom displacement amplitude, faceted by same-irrep
 coupling partner; reads ``irrep``/``shape``/``type`` from
 ``characterised_modes.csv``, ideal/non-ideal from ``mol_list_method.csv``'s
-``mol_type``, and scores from ``library_scores.csv``).
+``mol_type``, and scores from ``library_scores.csv``), ``plot_cpu_time_benchmark``
+(fig:cputime, PROPOSED label not yet wired into the .tex -- empirical CPU-time
+figure for the "Computational cost" section as it is rewritten away from a
+pure Big-O argument; reads ``data/results/cpu_time_benchmark.csv``).
 
 Cross-figure visual consistency: every figure encoding a classification
 category reuses the same ``CATEGORY_COLOR``/``CATEGORY_MARKER``/
@@ -86,6 +89,12 @@ COLORS = {
     # heatmap. NOTE: YlGnBu's high-value end is blue-ish, a known collision
     # risk with the "bending" tick-label color -- knowingly accepted.
     "confusion_cmap": "YlGnBu",
+    # fig:cputime only -- Okabe-Ito vermillion/bluish-green pair, not reused
+    # by any classification-category encoding elsewhere in this module (this
+    # figure doesn't encode a T/R/S/B category, so the "one color = one
+    # category everywhere" rule above doesn't apply to it).
+    "cost_gaussian": "#D55E00",     # vermillion -- Gaussian freq-calc CPU time
+    "cost_classifier": "#009E73",   # bluish green -- classifier CPU time
 }
 
 # Reference-label / predicted-bucket -> shared classification-CATEGORY name.
@@ -1736,12 +1745,123 @@ def plot_sensitivity(
     return summary
 
 
+# --------------------------------------------------------------------------
+# fig:cputime -- empirical computational-cost figure (replaces/accompanies
+# the purely theoretical Big-O argument in "Computational cost", tab:cost).
+# PROPOSED LABEL, not yet wired into the .tex (that edit is a separate step
+# -- see this module's own docstring: figures.py never touches the .tex).
+# --------------------------------------------------------------------------
+
+def plot_cpu_time_benchmark(
+    benchmark_csv="data/results/cpu_time_benchmark.csv",
+    out_dir="data/figures",
+    label="fig_cputime",
+):
+    """Build fig:cputime: empirical CPU time vs. atom count N, log-scale,
+    for the classification algorithm (this framework) against the Gaussian
+    frequency-calculation step that supplies its input -- one point per
+    hydride-library molecule (69 molecules, N=3..12; benzene/C6H6 at N=12 is
+    the single largest case).
+
+    ``gaussian_freq_cpu_s`` is Gaussian's frequency-only CPU time
+    (optimization excluded, verified via the Link1 job-step split in each
+    .log -- see scripts/benchmark_cpu_time.py); ``classifier_cpu_s`` is this
+    framework's classification CPU time (time.process_time(), timeit-
+    calibrated against ``n_iterations`` to survive Windows' ~15.6 ms OS-tick
+    granularity), with ``classifier_cpu_s_stddev`` plotted as a thin error
+    bar (usually invisible at this log-scale span -- included anyway, not
+    for visual effect).
+
+    Small reproducible x-jitter (fixed seed) separates the many molecules
+    sharing the same integer N (e.g. 17 molecules at N=4) -- N itself is not
+    perturbed in the underlying data, only the plotted x-position.
+
+    Not one of the 6 named JCC figures in this module's existing scope (see
+    module docstring / IMPLEMENTATION_PLAN.md); added because the
+    "Computational cost" section (tab:cost, purely theoretical Big-O) is
+    being rewritten around this empirical benchmark. Caption text and .tex
+    wiring are a separate step -- this function only builds the artifact.
+    """
+    _style()
+    df = pd.read_csv(benchmark_csv)
+    df = df.sort_values(["N", "molecule"]).reset_index(drop=True)
+    ratio = df["gaussian_freq_cpu_s"] / df["classifier_cpu_s"]
+
+    rng = np.random.default_rng(0)
+    jitter = rng.uniform(-0.12, 0.12, size=len(df))
+    x = df["N"].to_numpy(dtype=float) + jitter
+
+    fig, ax = plt.subplots(figsize=(4.6, 3.9))
+
+    ax.errorbar(x, df["classifier_cpu_s"], yerr=df["classifier_cpu_s_stddev"],
+                fmt="none", ecolor=COLORS["cost_classifier"], elinewidth=0.5,
+                alpha=0.35, zorder=2, capsize=0)
+    ax.scatter(x, df["gaussian_freq_cpu_s"], marker="o", s=20,
+               facecolors="none", edgecolors=COLORS["cost_gaussian"],
+               linewidths=0.9, alpha=0.85, zorder=3,
+               label="Gaussian frequency calculation")
+    ax.scatter(x, df["classifier_cpu_s"], marker="^", s=20,
+               facecolors=COLORS["cost_classifier"],
+               edgecolors=COLORS["cost_classifier"],
+               linewidths=0.5, alpha=0.85, zorder=3,
+               label="classification algorithm (this work)")
+
+    # Per-N median trend line (unjittered, true N on the x-axis) -- makes
+    # the "barely grows with N" claim visible at a glance, not just implied
+    # by the scatter cloud.
+    med = df.groupby("N")[["gaussian_freq_cpu_s", "classifier_cpu_s"]].median()
+    ax.plot(med.index, med["gaussian_freq_cpu_s"], color=COLORS["cost_gaussian"],
+            lw=1.1, ls="--", zorder=4, alpha=0.8)
+    ax.plot(med.index, med["classifier_cpu_s"], color=COLORS["cost_classifier"],
+            lw=1.1, ls="--", zorder=4, alpha=0.8)
+
+    ax.set_yscale("log")
+    ax.set_xlabel("Number of atoms, $N$")
+    ax.set_ylabel("CPU time (s)")
+    n_by_N = df.groupby("N").size()
+    ax.set_xticks(sorted(df["N"].unique()))
+    ax.set_xlim(df["N"].min() - 0.6, df["N"].max() + 0.6)
+    # "upper right", not "upper left": the two highest-CPU-time Gaussian
+    # points (AsBr3, PBr3, both N=4) sit directly under an upper-left
+    # legend box and collide with its text -- verified by rendering. The
+    # upper-right corner (above the N=12 benzene point, the lone point at
+    # large N) is empty at this y-range.
+    ax.legend(loc="upper right", frameon=False, handletextpad=0.4,
+              labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary = {
+        "pdf": pdf_path, "png": png_path,
+        "n_molecules": len(df),
+        "N_range": (int(df["N"].min()), int(df["N"].max())),
+        "molecules_per_N": n_by_N.to_dict(),
+        "gaussian_cpu_s_range": (float(df["gaussian_freq_cpu_s"].min()),
+                                  float(df["gaussian_freq_cpu_s"].max())),
+        "classifier_cpu_s_range": (float(df["classifier_cpu_s"].min()),
+                                    float(df["classifier_cpu_s"].max())),
+        "ratio_gaussian_over_classifier": {
+            "min": float(ratio.min()), "min_molecule": str(df.loc[ratio.idxmin(), "molecule"]),
+            "median": float(ratio.median()),
+            "max": float(ratio.max()), "max_molecule": str(df.loc[ratio.idxmax(), "molecule"]),
+        },
+        "classifier_median_cpu_s_by_N": med["classifier_cpu_s"].to_dict(),
+        "gaussian_median_cpu_s_by_N": med["gaussian_freq_cpu_s"].to_dict(),
+        "framing": ("empirical replacement/companion for the theoretical "
+                    "Big-O 'Computational cost' section (tab:cost); PROPOSED "
+                    "label fig:cputime, not yet wired into the .tex."),
+    }
+    return summary
+
+
 def regenerate_all(verbose=True):
     """Regenerate every manuscript figure in one call. Each figure function
     reads its own already-computed ``data/results/*.csv`` inputs with their
     own defaults; this function takes no molecule-specific arguments.
 
-    Returns a dict {tex_label: result_dict} for all 12 figures, in the same
+    Returns a dict {tex_label: result_dict} for all 13 figures, in the same
     order they are built. Raises whatever the underlying plot_* function
     raises (e.g. a missing input CSV) -- fail loud, no silent partial
     regeneration.
@@ -1759,6 +1879,7 @@ def regenerate_all(verbose=True):
         ("fig:modemixing", plot_mode_mixing),
         ("SI irrep-degeneracy coupling (no fig: label yet)", plot_irrep_coupling),
         ("fig:sensitivity", plot_sensitivity),
+        ("fig:cputime (proposed, not yet in .tex)", plot_cpu_time_benchmark),
     ]
     results = {}
     for tex_label, fn in fns:

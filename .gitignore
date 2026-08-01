@@ -19,6 +19,10 @@ ped/cats.txt
 ped/nat_coord_labels.txt
 ped/epm_history.txt
 
+# ped/11_inspect_coordinate.py's ad hoc diagnostic images (regenerated on
+# demand, not a source or a manuscript figure)
+ped/inspect_coord_*.png
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db

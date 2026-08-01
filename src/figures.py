@@ -1760,8 +1760,21 @@ def plot_cpu_time_benchmark(
     """Build fig:cputime: empirical CPU time vs. atom count N, log-scale,
     for the classification algorithm (this framework) against the Gaussian
     frequency-calculation step that supplies its input -- one point per
-    hydride-library molecule (69 molecules, N=3..12; benzene/C6H6 at N=12 is
-    the single largest case).
+    hydride-library molecule, restricted to the MP2/3-21G subset
+    (``mp2_321g == True``, 50 of 68 molecules, N=3..12; benzene/C6H6 at N=12
+    is the single largest case in this filtered subset).
+
+    FILTERING (added 2026-08-01): ``cpu_time_benchmark.csv`` now carries
+    ``mp2_321g``/``method_basis`` joined from ``data/mol_list_method.csv`` --
+    18 of the 68 library molecules were run at a different Gaussian
+    method/basis (e.g. MP2/6-311G) for SCF-convergence or symmetry reasons,
+    confounding a bare "CPU time vs. N" reading with "CPU time vs. method".
+    This function filters to ``mp2_321g == True`` BEFORE plotting or
+    computing summary statistics, so both the figure and every number in the
+    returned summary describe the controlled, single-method/basis subset
+    only. The excluded 18 (including AsBr3/MP2-6-311G, the single largest
+    CPU-time point in the full 68-molecule set at 1855 s) are NOT shown and
+    NOT folded into any statistic here -- see ``n_excluded_non_mp2_321g``.
 
     ``gaussian_freq_cpu_s`` is Gaussian's frequency-only CPU time
     (optimization excluded, verified via the Link1 job-step split in each
@@ -1773,8 +1786,8 @@ def plot_cpu_time_benchmark(
     for visual effect).
 
     Small reproducible x-jitter (fixed seed) separates the many molecules
-    sharing the same integer N (e.g. 17 molecules at N=4) -- N itself is not
-    perturbed in the underlying data, only the plotted x-position.
+    sharing the same integer N -- N itself is not perturbed in the
+    underlying data, only the plotted x-position.
 
     Not one of the 6 named JCC figures in this module's existing scope (see
     module docstring / IMPLEMENTATION_PLAN.md); added because the
@@ -1783,7 +1796,10 @@ def plot_cpu_time_benchmark(
     wiring are a separate step -- this function only builds the artifact.
     """
     _style()
-    df = pd.read_csv(benchmark_csv)
+    df_all = pd.read_csv(benchmark_csv)
+    n_total = len(df_all)
+    df = df_all[df_all["mp2_321g"] == True].copy()  # noqa: E712 -- explicit bool filter, not truthiness
+    n_excluded = n_total - len(df)
     df = df.sort_values(["N", "molecule"]).reset_index(drop=True)
     ratio = df["gaussian_freq_cpu_s"] / df["classifier_cpu_s"]
 
@@ -1833,15 +1849,27 @@ def plot_cpu_time_benchmark(
     pdf_path, png_path = _savefig(fig, out_dir, label)
     plt.close(fig)
 
+    gaussian_min_idx = df["gaussian_freq_cpu_s"].idxmin()
+    gaussian_max_idx = df["gaussian_freq_cpu_s"].idxmax()
+    classifier_min_idx = df["classifier_cpu_s"].idxmin()
+    classifier_max_idx = df["classifier_cpu_s"].idxmax()
+
     summary = {
         "pdf": pdf_path, "png": png_path,
         "n_molecules": len(df),
+        "n_excluded_non_mp2_321g": int(n_excluded),
         "N_range": (int(df["N"].min()), int(df["N"].max())),
         "molecules_per_N": n_by_N.to_dict(),
         "gaussian_cpu_s_range": (float(df["gaussian_freq_cpu_s"].min()),
                                   float(df["gaussian_freq_cpu_s"].max())),
+        "gaussian_cpu_s_min_molecule": str(df.loc[gaussian_min_idx, "molecule"]),
+        "gaussian_cpu_s_max_molecule": str(df.loc[gaussian_max_idx, "molecule"]),
+        "gaussian_cpu_s_median": float(df["gaussian_freq_cpu_s"].median()),
         "classifier_cpu_s_range": (float(df["classifier_cpu_s"].min()),
                                     float(df["classifier_cpu_s"].max())),
+        "classifier_cpu_s_min_molecule": str(df.loc[classifier_min_idx, "molecule"]),
+        "classifier_cpu_s_max_molecule": str(df.loc[classifier_max_idx, "molecule"]),
+        "classifier_cpu_s_median": float(df["classifier_cpu_s"].median()),
         "ratio_gaussian_over_classifier": {
             "min": float(ratio.min()), "min_molecule": str(df.loc[ratio.idxmin(), "molecule"]),
             "median": float(ratio.median()),
@@ -1851,7 +1879,11 @@ def plot_cpu_time_benchmark(
         "gaussian_median_cpu_s_by_N": med["gaussian_freq_cpu_s"].to_dict(),
         "framing": ("empirical replacement/companion for the theoretical "
                     "Big-O 'Computational cost' section (tab:cost); PROPOSED "
-                    "label fig:cputime, not yet wired into the .tex."),
+                    "label fig:cputime, not yet wired into the .tex. Filtered "
+                    "to mp2_321g==True (2026-08-01) -- excludes "
+                    f"{n_excluded} molecules run at a different Gaussian "
+                    "method/basis, to avoid confounding CPU-time-vs-N with "
+                    "CPU-time-vs-method."),
     }
     return summary
 

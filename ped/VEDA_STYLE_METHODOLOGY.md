@@ -238,6 +238,42 @@ the user's own review, not resolved unilaterally here.
   explains why the two methods disagree; neither is asserted here to be
   the superior description of these modes' physical character.
 
+## 8. Decision (2026-08-01)
+
+After inspecting the actual atomic-displacement pattern behind the two
+disagreement modes with `11_inspect_coordinate.py`, the project decided
+**not** to promote this cross-check's numbers into the manuscript, and to
+keep the existing redundant-coordinate table (`benzene_PED_table.csv`/`.txt`,
+`tab:benzenemixed`) as the sole source used there. Reasoning:
+
+- The 1056.39 cm⁻¹ mode's "100% CCH bend" reassignment traces to a
+  coordinate (`CCH_bend_sym_E1_cos`) whose actual Cartesian motion is
+  **exactly zero hydrogen displacement** — a pure in-plane carbon-ring
+  deformation. The coordinate's *composition* is rigorous and its PED
+  value (76.8%) is a real, well-defined number, but the category label
+  inherited from its algebraic derivation ("CCH bend") no longer describes
+  its physical motion. This is not unique to this reimplementation: VEDA's
+  own documented workflow relies on manual, iterative user inspection
+  ("EDIT" key, "change-and-trial," repeated re-optimization) rather than
+  any automated guarantee that a coordinate's label tracks its post-mixing
+  physical character — see the discussion this section follows from in the
+  project's chat history, and Jamróz's own 2014 paper on exactly this class
+  of labeling ambiguity.
+- The existing redundant-coordinate table's category labels (CH/CC
+  stretch, CCC/CCH bend, out-of-plane) are fixed, individually-interpretable
+  local coordinates that were never subjected to a purity-chasing
+  optimization — they stay directly comparable to this project's own S/B/SB
+  convention used throughout the manuscript, without requiring a
+  coordinate-by-coordinate manual re-inspection to trust each label.
+- Higher EPm (the optimizer's own objective) is not equivalent to a more
+  chemically meaningful description, precisely because EPm has no
+  awareness of conventional stretch/bend/torsion vocabulary — it optimizes
+  purity, not label fidelity.
+
+This VEDA-style implementation and its comparison report remain in the
+repository as a documented, validated cross-check and a record of *why*
+the redundant-coordinate approach was kept, not as a discarded dead end.
+
 ## References
 
 - Jamróz, M. H. Vibrational Energy Distribution Analysis (VEDA): Scopes

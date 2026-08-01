@@ -27,7 +27,14 @@ Usage (from Github/scoring-functions/):
 
 Writes data/results/cpu_time_benchmark.csv with columns:
     molecule, N, gaussian_freq_cpu_s, classifier_cpu_s,
-    classifier_cpu_s_stddev, n_iterations
+    classifier_cpu_s_stddev, n_iterations, mp2_321g, method_basis
+
+mp2_321g / method_basis are joined in from data/mol_list_method.csv (the
+MP2_3-21G / current_method columns there) so downstream figure/manuscript
+code can control for the dataset's mixed methods/basis sets (e.g. AsBr3 ran
+at MP2/6-311G, not the library's standard MP2/3-21G). All molecules are kept
+in the written CSV -- filtering by mp2_321g, if desired, is left to whatever
+reads this file.
 """
 import glob
 import os
@@ -173,6 +180,15 @@ def main():
 
     import pandas as pd
     df = pd.DataFrame(rows).sort_values("N").reset_index(drop=True)
+
+    method_path = os.path.join(data_dir, "mol_list_method.csv")
+    method_df = pd.read_csv(method_path)[["molecule", "MP2_3-21G", "current_method"]]
+    df = df.merge(method_df, on="molecule", how="left")
+    df["mp2_321g"] = df["MP2_3-21G"].astype(bool)
+    df["method_basis"] = df.apply(
+        lambda r: "MP2/3-21G" if r["mp2_321g"] else r["current_method"], axis=1)
+    df = df.drop(columns=["MP2_3-21G", "current_method"])
+
     out_path = os.path.join(dirs["results"], "cpu_time_benchmark.csv")
     df.to_csv(out_path, index=False)
     print(f"\nWrote {len(df)}-row benchmark -> {out_path}")

@@ -10,11 +10,26 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-08-03 (**Dead-code/comment/structural refactor of `main.py`+`src/*.py`** — see
-> RESUME HERE below. **Also: `pytest` is currently 114/119, NOT 105/105 green** — 5 pre-existing failures
-> traced to stale test logic, not a scoring bug; see that entry before assuming a regression.)
+> Last updated: 2026-08-03 (**Dead-code/comment/structural refactor of `main.py`+`src/*.py`, then the
+> 5 stale-s_AB-sum test failures it surfaced were fixed** — `pytest` is 119/119 green again. See
+> RESUME HERE below.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-08-03 (fixed the 5 stale-s_AB-sum test failures, same-day follow-up):** Added `abs()` around
+> the signed `s_AB` summation in all 5 failing tests' own comparison logic (the tests, not the engine,
+> were stale since the 2026-07-30 signed-s_AB session below):
+> `test_scores.test_bond_decomposition_sums_to_vscore`, `test_classifier.test_water_normal_vibrations`,
+> `test_library_ingest.test_bond_scores_sum_to_v_stretch`,
+> `test_library_ingest.test_score_geometry_molecule_water_direct` all needed
+> `sum(b["s_AB"] for ...)` → `sum(abs(b["s_AB"]) for ...)` against `s[V_S]`/`V_Stretch` (which sum
+> magnitudes). `test_benzene_validation.test_benzene_mixed_bond_diagnostic_mode_19_uniform_across_ring`
+> was the interesting one: mode 19's 6 ring C-C `s_AB` values are `[-0.0438, +0.0438, -0.0438, +0.0438,
+> -0.0438, +0.0438]` (perfectly alternating stretch/compress, equal magnitude, by symmetry) — the raw
+> signed mean is exactly 0, so `std/mean` (coefficient of variation) divides by zero and gives `inf`.
+> Fixed by computing the CV on `abs(s_AB)` per bond instead — "uniform contribution across the ring" is
+> a magnitude property, not a raw-signed-value one; confirmed the 6 magnitudes are still exactly
+> uniform (0.0438 each) once sign is stripped. `pytest`: 119/119 green.
+>
 > **2026-08-03 (refactor session — dead code, narrative comments, structural fixes):** Three-part cleanup
 > of the core program (`main.py`+`src/*.py`; `ped/`, `scripts/`, `ped/archive_python_ped/` explicitly
 > out of scope — see that session's plan for why). Commits `d4ff4b0`/`a3419a8`/`5975a3a`.

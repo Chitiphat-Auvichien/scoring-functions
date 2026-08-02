@@ -203,11 +203,13 @@ def test_benzene_mixed_bond_diagnostic_ch_contributions_are_near_zero():
 
 def test_benzene_mixed_bond_diagnostic_mode_19_uniform_across_ring():
     """Mode 19 (1319.2678 cm-1) shows a perfectly uniform 6-fold-symmetric
-    C-C contribution -- computed as a low coefficient of variation across
-    the 6 ring bonds, not eyeballed."""
+    |C-C| contribution -- computed as a low coefficient of variation across
+    the 6 ring bonds, not eyeballed. s_AB is signed (stretch vs. compress);
+    mode 19 alternates sign around the ring with equal magnitude, so
+    uniformity is a magnitude property, not a raw-signed-value one."""
     bond_detail, _ = benzene_mixed_bond_diagnostic(_lib())
     row = bond_detail[bond_detail["mode_index"] == 19].iloc[0]
-    cc_vals = [row[f"s_AB[{b}]"] for b in
+    cc_vals = [abs(row[f"s_AB[{b}]"]) for b in
                ("C1-C2", "C2-C3", "C3-C4", "C4-C5", "C5-C6", "C1-C6")]
     cc_vals = pd.Series(cc_vals)
     cv = cc_vals.std() / cc_vals.mean()

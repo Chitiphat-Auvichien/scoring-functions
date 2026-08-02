@@ -69,7 +69,8 @@ def test_water_normal_externals_clean():
 
 
 def test_water_normal_vibrations():
-    """Vib1 = bend -> BENDING; Vib2/Vib3 = stretches -> STRETCHING, with s_AB summing to V."""
+    """Vib1 = bend -> BENDING; Vib2/Vib3 = stretches -> STRETCHING, with |s_AB| summing to V
+    (s_AB is signed; V sums magnitudes)."""
     t = _classify("H2O", "normal")
     assert t["Vib 1"]["classification"] == BENDING
     assert t["Vib 1"]["bonds"] == []  # bonds only attached for STRETCHING/MIXED_STRETCH_BEND
@@ -78,7 +79,7 @@ def test_water_normal_vibrations():
         assert t[name]["classification"] == STRETCHING
         bonds = t[name]["bonds"]
         assert len(bonds) == 2  # water has 2 O-H bonds
-        assert abs(sum(b["s_AB"] for b in bonds) - t[name]["V"]) < 1e-6
+        assert abs(sum(abs(b["s_AB"]) for b in bonds) - t[name]["V"]) < 1e-6
 
 
 def test_benzene_emit_34_35_mixed_external():

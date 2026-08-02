@@ -241,8 +241,9 @@ def test_external_rows_classify_clean_translation_rotation():
 
 
 def test_bond_scores_sum_to_v_stretch():
-    """Per-bond s_AB (parsed out of the semicolon-joined string) sums back to
-    V_Stretch for every internal row (eq:bondscore). Every internal row
+    """Per-bond |s_AB| (parsed out of the semicolon-joined string) sums back to
+    V_Stretch for every internal row (eq:bondscore). s_AB is signed (stretch
+    vs. compress); V_Stretch itself sums magnitudes. Every internal row
     carries bond detail regardless of label (score_geometry_molecule always
     calls score_bonds() directly, not classify_all_modes()'s filtered
     subset)."""
@@ -251,7 +252,7 @@ def test_bond_scores_sum_to_v_stretch():
     for _, row in df[df["kind"] == "internal"].iterrows():
         assert isinstance(row["s_AB"], str) and row["s_AB"], \
             (row["molecule"], row["mode_index"])
-        total = sum(float(part.split(":")[1]) for part in row["s_AB"].split(";"))
+        total = sum(abs(float(part.split(":")[1])) for part in row["s_AB"].split(";"))
         assert abs(total - row["V_Stretch"]) < 1e-3, (row["molecule"], row["mode_index"])
         checked += 1
     assert checked > 100, f"only checked {checked} rows -- unexpectedly few"
@@ -316,7 +317,8 @@ def test_score_geometry_molecule_water_direct():
         assert 0.0 <= r["V_Stretch"] <= 1.0
         assert isinstance(r["s_AB"], str) and r["s_AB"]
         assert r["delta_b_mean"] is not None and r["delta_b_mean"] >= 0.0
-        total = sum(float(part.split(":")[1]) for part in r["s_AB"].split(";"))
+        # s_AB is signed (stretch vs. compress); V_Stretch sums magnitudes.
+        total = sum(abs(float(part.split(":")[1])) for part in r["s_AB"].split(";"))
         assert abs(total - r["V_Stretch"]) < 1e-3
         # 2026-07-08 Gaussian-direct parser rework: real internal modes carry
         # engine-parsed mu/k/irrep.

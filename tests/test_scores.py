@@ -157,15 +157,17 @@ def test_score_ranges():
 
 
 def test_bond_decomposition_sums_to_vscore():
-    """Sum of per-bond s_AB equals s[V_S] for every mode (water + benzene)."""
+    """Sum of per-bond |s_AB| equals s[V_S] for every mode (water + benzene).
+    s_AB is signed (positive = stretching, negative = compressing); s[V_S]
+    itself sums magnitudes, so the comparison must too."""
     for mol in ["H2O", "C6H6"]:
         gp = GaussianParser(os.path.join(ROOT, "data", "logs", f"{mol}.log"))
         data = gp.parse(parse_modes=True)
         scorer = ModeScorer(data["atoms"], data["coords"], data["bonds"])
         for m in scorer.MIT(data["modes"], rotate_modes=True):
             scorer.calculate_scores(m["vector"])
-            total = sum(b["s_AB"] for b in scorer.score_bonds())
-            assert abs(total - scorer.Vscore()) < 1e-6, f"{mol}: Sum s_AB != s[V_S]"
+            total = sum(abs(b["s_AB"]) for b in scorer.score_bonds())
+            assert abs(total - scorer.Vscore()) < 1e-6, f"{mol}: Sum |s_AB| != s[V_S]"
 
 
 def test_parser_fails_loud_on_bad_emit():

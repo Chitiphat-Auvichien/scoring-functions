@@ -1830,15 +1830,15 @@ def plot_cpu_time_benchmark(
     ax.errorbar(x, df["classifier_cpu_s"], yerr=df["classifier_cpu_s_stddev"],
                 fmt="none", ecolor=COLORS["cost_classifier"], elinewidth=0.5,
                 alpha=0.35, zorder=2, capsize=0)
-    ax.scatter(x, df["gaussian_freq_cpu_s"], marker="o", s=20,
-               facecolors="none", edgecolors=COLORS["cost_gaussian"],
-               linewidths=0.9, alpha=0.85, zorder=3,
-               label="Gaussian frequency calculation")
+    ax.scatter(x, df["gaussian_freq_cpu_s"], marker="s", s=20,
+               facecolors="black", edgecolors="black",
+               linewidths=0.9, alpha=1.0, zorder=3,
+               label="MP2/3-21G (freq=hpmodes)")
     ax.scatter(x, df["classifier_cpu_s"], marker="^", s=20,
                facecolors=COLORS["cost_classifier"],
                edgecolors=COLORS["cost_classifier"],
                linewidths=0.5, alpha=0.85, zorder=3,
-               label="classification algorithm (this work)")
+               label="Classification algorithm")
 
     # Per-N median trend line (unjittered, true N on the x-axis) -- makes
     # the "barely grows with N" claim visible at a glance, not just implied
@@ -2003,9 +2003,9 @@ def plot_gaussian_nbasis_scaling(
 
     fig, ax = plt.subplots(figsize=(4.6, 3.9))
 
-    ax.scatter(df["n_basis"], df["gaussian_freq_cpu_s"], marker="o", s=24,
-               facecolors=COLORS["cost_gaussian"], edgecolors=COLORS["cost_gaussian"],
-               alpha=0.8, zorder=3, label="Gaussian frequency calculation")
+    ax.scatter(df["n_basis"], df["gaussian_freq_cpu_s"], marker="s", s=24,
+               facecolors="black", edgecolors="black",
+               alpha=1.0, zorder=3, label="MP2/3-21G (freq=hpmodes)")
 
     xx = np.linspace(df["n_basis"].min() * 0.9, df["n_basis"].max() * 1.1, 100)
     ax.plot(xx, np.exp(intercept) * xx ** slope, ls="--", lw=1.2,

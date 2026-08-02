@@ -1923,17 +1923,19 @@ def plot_gaussian_nbasis_scaling(
     """SI/diagnostic companion to fig:cputime: Gaussian's freq-only CPU time
     vs. N_basis (AO basis-function count, Gaussian's own ``NBasis=``).
 
-    FIT is restricted to the MP2/3-21G subset (``mp2_321g == True``, 50 of
-    68 molecules), matching fig:cputime's own filtering, and for the same
+    Restricted to the MP2/3-21G subset (``mp2_321g == True``, 50 of 68
+    molecules) -- matching fig:cputime's own filtering, and for the same
     reason: different methods/basis choices (MP2 vs. B3LYP vs. HF,
     correlation treatment, ECPs) have different cost *prefactors and
     exponents* even at matched N_basis, so a single power-law fit across
     mixed methods is confounded by method choice on top of N_basis --
-    verified visually (2026-08-02): the excluded "other method/basis" points
-    sit systematically ABOVE a fit line built from all 68, not scattered
-    around it. The 18 excluded molecules are still plotted, in light gray
-    background style (``COLORS["background"]``), as context only -- not
-    part of the fit, not included in the reported exponent/R^2.
+    verified visually (2026-08-02): plotting the excluded "other
+    method/basis" molecules showed them sitting systematically ABOVE a fit
+    line built from all 68, not scattered around it, i.e. genuinely
+    off-trend rather than just noisier. The 18 excluded molecules are
+    dropped entirely (not plotted at all, not just excluded from the fit) --
+    they're off a different cost curve, so showing them alongside the
+    MP2/3-21G trend doesn't add information, only clutter.
 
     ``scale`` picks both axes together: "log" (default, label
     "fig_gaussian_nbasis") shows the power-law fit as a straight line and is
@@ -1963,8 +1965,7 @@ def plot_gaussian_nbasis_scaling(
     _style()
     df_all = pd.read_csv(benchmark_csv).copy()
     df = df_all[df_all["mp2_321g"] == True].copy()  # noqa: E712 -- explicit bool filter
-    other = df_all[df_all["mp2_321g"] == False]  # noqa: E712
-    n_excluded = len(other)
+    n_excluded = len(df_all) - len(df)
 
     log_n, log_t = np.log(df["n_basis"].to_numpy(float)), np.log(df["gaussian_freq_cpu_s"].to_numpy(float))
     slope, intercept = np.polyfit(log_n, log_t, 1)
@@ -1973,13 +1974,9 @@ def plot_gaussian_nbasis_scaling(
 
     fig, ax = plt.subplots(figsize=(4.6, 3.9))
 
-    ax.scatter(other["n_basis"], other["gaussian_freq_cpu_s"], marker="o", s=20,
-               facecolors="none", edgecolors=COLORS["background"],
-               linewidths=0.8, alpha=0.7, zorder=2,
-               label="other method/basis (context only, excluded from fit)")
     ax.scatter(df["n_basis"], df["gaussian_freq_cpu_s"], marker="o", s=24,
                facecolors=COLORS["cost_gaussian"], edgecolors=COLORS["cost_gaussian"],
-               alpha=0.8, zorder=3, label="MP2/3-21G (fit)")
+               alpha=0.8, zorder=3, label="Gaussian frequency calculation")
 
     xx = np.linspace(df["n_basis"].min() * 0.9, df["n_basis"].max() * 1.1, 100)
     ax.plot(xx, np.exp(intercept) * xx ** slope, ls="--", lw=1.2,
@@ -1990,8 +1987,8 @@ def plot_gaussian_nbasis_scaling(
         ax.set_xscale("log")
         ax.set_yscale("log")
     else:
-        ax.set_ylim(0, df_all["gaussian_freq_cpu_s"].max() * 1.08)
-        ax.set_xlim(0, df_all["n_basis"].max() * 1.05)
+        ax.set_ylim(0, df["gaussian_freq_cpu_s"].max() * 1.15)
+        ax.set_xlim(0, df["n_basis"].max() * 1.08)
     ax.set_xlabel("Number of AO basis functions, $N_{basis}$")
     ax.set_ylabel("CPU time (s)")
     ax.legend(loc="upper left", frameon=False, handletextpad=0.4,

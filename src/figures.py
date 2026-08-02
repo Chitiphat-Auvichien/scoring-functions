@@ -1834,10 +1834,10 @@ def plot_cpu_time_benchmark(
                facecolors="black", edgecolors="black",
                linewidths=0.9, alpha=1.0, zorder=3,
                label="MP2/3-21G (freq=hpmodes)")
-    ax.scatter(x, df["classifier_cpu_s"], marker="^", s=20,
+    ax.scatter(x, df["classifier_cpu_s"], marker="s", s=20,
                facecolors=COLORS["cost_classifier"],
                edgecolors=COLORS["cost_classifier"],
-               linewidths=0.5, alpha=0.85, zorder=3,
+               linewidths=0.5, alpha=1.0, zorder=3,
                label="Classification algorithm")
 
     # Per-N median trend line (unjittered, true N on the x-axis) -- makes

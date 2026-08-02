@@ -1921,11 +1921,19 @@ def plot_gaussian_nbasis_scaling(
     scale="log",
 ):
     """SI/diagnostic companion to fig:cputime: Gaussian's freq-only CPU time
-    vs. N_basis (AO basis-function count, Gaussian's own ``NBasis=``),
-    all 68 library molecules (no mp2_321g filtering needed here -- unlike N,
-    n_basis already captures the basis-set-size effect that N confounds
-    with element identity, so mixing methods/bases adds much less noise;
-    filled/hollow marks the MP2/3-21G subset anyway for transparency).
+    vs. N_basis (AO basis-function count, Gaussian's own ``NBasis=``).
+
+    FIT is restricted to the MP2/3-21G subset (``mp2_321g == True``, 50 of
+    68 molecules), matching fig:cputime's own filtering, and for the same
+    reason: different methods/basis choices (MP2 vs. B3LYP vs. HF,
+    correlation treatment, ECPs) have different cost *prefactors and
+    exponents* even at matched N_basis, so a single power-law fit across
+    mixed methods is confounded by method choice on top of N_basis --
+    verified visually (2026-08-02): the excluded "other method/basis" points
+    sit systematically ABOVE a fit line built from all 68, not scattered
+    around it. The 18 excluded molecules are still plotted, in light gray
+    background style (``COLORS["background"]``), as context only -- not
+    part of the fit, not included in the reported exponent/R^2.
 
     ``scale`` picks both axes together: "log" (default, label
     "fig_gaussian_nbasis") shows the power-law fit as a straight line and is
@@ -1939,12 +1947,13 @@ def plot_gaussian_nbasis_scaling(
     classifier (whose cost genuinely depends on N -- geometry/mode-vector
     work) but not to Gaussian, whose SCF/MP2 cost depends on basis-function
     count, not atom count -- a single heavy/ECP-bearing atom can carry as
-    many basis functions as several light atoms. Fitting log(CPU) vs. log(N)
-    for Gaussian gives R^2 ~ 0.04 (pure noise); refitting against log(n_basis)
-    gives R^2 ~ 0.81-0.85 -- confirming n_basis, not N, is Gaussian's real
-    scaling variable. NOT extended to classifier_cpu_s: the classifier never
-    touches AO basis functions, so n_basis is not a meaningful covariate for
-    it (a category error) -- this figure is Gaussian-only by design.
+    many basis functions as several light atoms. Restricted to MP2/3-21G,
+    fitting log(CPU) vs. log(N) for Gaussian gives R^2 ~ 0.04 (pure noise);
+    refitting against log(n_basis) gives R^2 ~ 0.81 -- confirming n_basis,
+    not N, is Gaussian's real scaling variable within a fixed method/basis.
+    NOT extended to classifier_cpu_s: the classifier never touches AO basis
+    functions, so n_basis is not a meaningful covariate for it (a category
+    error) -- this figure is Gaussian-only by design.
     """
     if scale not in ("linear", "log"):
         raise ValueError(f"scale must be 'linear' or 'log', got {scale!r}")
@@ -1952,7 +1961,10 @@ def plot_gaussian_nbasis_scaling(
         label = "fig_gaussian_nbasis" if scale == "log" else "fig_gaussian_nbasis_linear"
 
     _style()
-    df = pd.read_csv(benchmark_csv).copy()
+    df_all = pd.read_csv(benchmark_csv).copy()
+    df = df_all[df_all["mp2_321g"] == True].copy()  # noqa: E712 -- explicit bool filter
+    other = df_all[df_all["mp2_321g"] == False]  # noqa: E712
+    n_excluded = len(other)
 
     log_n, log_t = np.log(df["n_basis"].to_numpy(float)), np.log(df["gaussian_freq_cpu_s"].to_numpy(float))
     slope, intercept = np.polyfit(log_n, log_t, 1)
@@ -1961,26 +1973,25 @@ def plot_gaussian_nbasis_scaling(
 
     fig, ax = plt.subplots(figsize=(4.6, 3.9))
 
-    mp2 = df[df["mp2_321g"] == True]   # noqa: E712 -- explicit bool filter
-    other = df[df["mp2_321g"] == False]  # noqa: E712
-    ax.scatter(mp2["n_basis"], mp2["gaussian_freq_cpu_s"], marker="o", s=24,
+    ax.scatter(other["n_basis"], other["gaussian_freq_cpu_s"], marker="o", s=20,
+               facecolors="none", edgecolors=COLORS["background"],
+               linewidths=0.8, alpha=0.7, zorder=2,
+               label="other method/basis (context only, excluded from fit)")
+    ax.scatter(df["n_basis"], df["gaussian_freq_cpu_s"], marker="o", s=24,
                facecolors=COLORS["cost_gaussian"], edgecolors=COLORS["cost_gaussian"],
-               alpha=0.75, zorder=3, label="MP2/3-21G")
-    ax.scatter(other["n_basis"], other["gaussian_freq_cpu_s"], marker="o", s=24,
-               facecolors="none", edgecolors=COLORS["cost_gaussian"],
-               linewidths=0.9, alpha=0.75, zorder=3, label="other method/basis")
+               alpha=0.8, zorder=3, label="MP2/3-21G (fit)")
 
     xx = np.linspace(df["n_basis"].min() * 0.9, df["n_basis"].max() * 1.1, 100)
     ax.plot(xx, np.exp(intercept) * xx ** slope, ls="--", lw=1.2,
-            color=COLORS["threshold"], zorder=2,
+            color=COLORS["threshold"], zorder=4,
             label=f"fit: $t \\propto N_{{basis}}^{{{slope:.2f}}}$ ($R^2$={r2:.2f})")
 
     if scale == "log":
         ax.set_xscale("log")
         ax.set_yscale("log")
     else:
-        ax.set_ylim(0, df["gaussian_freq_cpu_s"].max() * 1.08)
-        ax.set_xlim(0, df["n_basis"].max() * 1.05)
+        ax.set_ylim(0, df_all["gaussian_freq_cpu_s"].max() * 1.08)
+        ax.set_xlim(0, df_all["n_basis"].max() * 1.05)
     ax.set_xlabel("Number of AO basis functions, $N_{basis}$")
     ax.set_ylabel("CPU time (s)")
     ax.legend(loc="upper left", frameon=False, handletextpad=0.4,
@@ -1998,13 +2009,18 @@ def plot_gaussian_nbasis_scaling(
     return {
         "pdf": pdf_path, "png": png_path,
         "scale": scale,
-        "n_molecules": len(df),
-        "n_basis_range": (int(df["n_basis"].min()), int(df["n_basis"].max())),
+        "n_molecules_fit": len(df),
+        "n_excluded_non_mp2_321g": int(n_excluded),
+        "n_basis_range_fit": (int(df["n_basis"].min()), int(df["n_basis"].max())),
         "fit_vs_n_basis": {"exponent": float(slope), "r2": float(r2)},
         "fit_vs_N_for_comparison": {"exponent": float(slope_N), "r2": float(r2_N)},
         "framing": ("SI/diagnostic companion to fig:cputime, PROPOSED label "
-                    "fig:gaussian_nbasis, not yet wired into the .tex. Shows "
-                    "n_basis (not N) is Gaussian's real cost-scaling variable."),
+                    "fig:gaussian_nbasis, not yet wired into the .tex. Fit "
+                    "restricted to mp2_321g==True (2026-08-02) -- mixing "
+                    "methods confounds the N_basis fit the same way mixing "
+                    "methods confounded the N fit in fig:cputime. Shows "
+                    "n_basis (not N) is Gaussian's real cost-scaling "
+                    "variable within a fixed method/basis."),
     }
 
 

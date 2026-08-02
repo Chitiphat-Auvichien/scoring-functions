@@ -1757,12 +1757,21 @@ def plot_cpu_time_benchmark(
     out_dir="data/figures",
     label="fig_cputime",
 ):
-    """Build fig:cputime: empirical CPU time vs. atom count N, log-scale,
+    """Build fig:cputime: empirical CPU time vs. atom count N, LINEAR scale,
     for the classification algorithm (this framework) against the Gaussian
     frequency-calculation step that supplies its input -- one point per
     hydride-library molecule, restricted to the MP2/3-21G subset
     (``mp2_321g == True``, 50 of 68 molecules, N=3..12; benzene/C6H6 at N=12
     is the single largest case in this filtered subset).
+
+    Linear (not log) y-axis is deliberate: on this scale the classifier
+    series visually collapses to ~0 next to Gaussian's, which *is* the
+    point being made (classification cost is negligible against the
+    frequency calculation that supplies its input) -- a log axis makes the
+    same data legible but undersells the magnitude gap. The classifier's
+    own N-scaling (approx. N^1.7 empirically, log-log fit on per-N medians)
+    is not readable off this panel; that belongs in a separate/SI figure if
+    needed, not this one.
 
     FILTERING (added 2026-08-01): ``cpu_time_benchmark.csv`` now carries
     ``mp2_321g``/``method_basis`` joined from ``data/mol_list_method.csv`` --
@@ -1782,8 +1791,8 @@ def plot_cpu_time_benchmark(
     framework's classification CPU time (time.process_time(), timeit-
     calibrated against ``n_iterations`` to survive Windows' ~15.6 ms OS-tick
     granularity), with ``classifier_cpu_s_stddev`` plotted as a thin error
-    bar (usually invisible at this log-scale span -- included anyway, not
-    for visual effect).
+    bar (invisible at this linear scale/span -- included anyway, not for
+    visual effect).
 
     Small reproducible x-jitter (fixed seed) separates the many molecules
     sharing the same integer N -- N itself is not perturbed in the
@@ -1831,17 +1840,19 @@ def plot_cpu_time_benchmark(
     ax.plot(med.index, med["classifier_cpu_s"], color=COLORS["cost_classifier"],
             lw=1.1, ls="--", zorder=4, alpha=0.8)
 
-    ax.set_yscale("log")
     ax.set_xlabel("Number of atoms, $N$")
     ax.set_ylabel("CPU time (s)")
     n_by_N = df.groupby("N").size()
     ax.set_xticks(sorted(df["N"].unique()))
     ax.set_xlim(df["N"].min() - 0.6, df["N"].max() + 0.6)
-    # "upper right", not "upper left": the two highest-CPU-time Gaussian
-    # points (AsBr3, PBr3, both N=4) sit directly under an upper-left
-    # legend box and collide with its text -- verified by rendering. The
-    # upper-right corner (above the N=12 benzene point, the lone point at
-    # large N) is empty at this y-range.
+    # Headroom above the tallest point (BrH3, N=4, 55.3s) so the legend box
+    # sits in clear space rather than overlapping it -- verified by
+    # rendering. AsBr3/PBr3 (the far larger pre-filtering outliers an
+    # earlier version of this comment warned about) are MP2/6-311G, not
+    # MP2/3-21G, and are excluded from `df` by the mp2_321g filter above.
+    ax.set_ylim(0, df["gaussian_freq_cpu_s"].max() * 1.28)
+    # "upper right": nothing near N=12 (the lone large-N point, 19.1s)
+    # comes close to the y=55s N=3-4 ceiling, leaving that corner clear.
     ax.legend(loc="upper right", frameon=False, handletextpad=0.4,
               labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)
 

@@ -22,8 +22,10 @@ class Coordinate:
 class Atom:
     def __init__(self, element, x, y, z):
         self.symbol = element
-        # Retrieve mass using lowercase symbol key
-        self.rMass = float(atomicMass.get(self.symbol.lower(), 1.0))
+        key = self.symbol.lower()
+        if key not in atomicMass:
+            raise ValueError(f"Unrecognized element symbol '{element}': no atomic mass on file")
+        self.rMass = float(atomicMass[key])
         self.coord = Coordinate(x, y, z)
         # These will be updated for each mode
         self.dispVec = np.zeros(3)
@@ -198,7 +200,7 @@ class ModeScorer:
             vec[:, i] = 1.0
 
             flat_norm = np.linalg.norm(vec)
-            if flat_norm > 1e-9:
+            if flat_norm > EPS_NORM:
                 vec = vec / flat_norm
 
             modes.append({
@@ -230,7 +232,7 @@ class ModeScorer:
 
         for vecs, lbl in zip([rx_vecs, ry_vecs, rz_vecs], labels):
             flat_norm = np.linalg.norm(vecs)
-            if flat_norm > 1e-9:
+            if flat_norm > EPS_NORM:
                 vecs = vecs / flat_norm
             
             modes.append({
@@ -258,14 +260,13 @@ class ModeScorer:
     @staticmethod
     def _assert_score_ranges(scores):
         """Range-invariant guards from the spec: s[T],s[R] in [-1,1]; s[V_S] in [0,1]."""
-        for axis, val in scores["T"].items():
-            assert -1.0 - RANGE_TOL <= val <= 1.0 + RANGE_TOL, \
-                f"s[T_{axis}]={val} out of [-1,1]"
-        for axis, val in scores["R"].items():
-            assert -1.0 - RANGE_TOL <= val <= 1.0 + RANGE_TOL, \
-                f"s[R_{axis}]={val} out of [-1,1]"
+        for kind in ("T", "R"):
+            for axis, val in scores[kind].items():
+                if not (-1.0 - RANGE_TOL <= val <= 1.0 + RANGE_TOL):
+                    raise ValueError(f"s[{kind}_{axis}]={val} out of [-1,1]")
         vs = scores["V"]
-        assert -RANGE_TOL <= vs <= 1.0 + RANGE_TOL, f"s[V_S]={vs} out of [0,1]"
+        if not (-RANGE_TOL <= vs <= 1.0 + RANGE_TOL):
+            raise ValueError(f"s[V_S]={vs} out of [0,1]")
 
     def Tscore(self):
         """Calculates Translational Scores (Tx, Ty, Tz)."""
@@ -401,6 +402,24 @@ class ModeScorer:
 
         total = sum(abs(bd["s_AB"]) for bd in bonds)
         vs = self.Vscore()
-        assert abs(total - vs) <= 1e-6, \
-            f"Sum of |per-bond s_AB| ({total}) != s[V_S] ({vs})"
+        if abs(total - vs) > 1e-6:
+            raise ValueError(f"Sum of |per-bond s_AB| ({total}) != s[V_S] ({vs})")
         return bonds
+
+
+def format_bond_map(bonds, value_key, dp=4):
+    """Semicolon-joined 'iLabel-jLabel:value' string from a score_bonds()-
+    style list of dicts, e.g. 'C1-C2:0.0342;C1-C6:0.0539'."""
+    return ";".join(f"{b['i_label']}-{b['j_label']}:{b[value_key]:.{dp}f}" for b in bonds)
+
+
+def parse_bond_string(s):
+    """Inverse of format_bond_map: '"C1-C2:0.0342;C1-C6:0.0539;..."' ->
+    {'C1-C2': 0.0342, ...}."""
+    out = {}
+    if not isinstance(s, str) or not s:
+        return out
+    for part in s.split(";"):
+        atoms, val = part.split(":")
+        out[atoms] = float(val)
+    return out

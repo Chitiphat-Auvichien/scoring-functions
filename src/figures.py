@@ -57,8 +57,7 @@ import matplotlib.patheffects as pe
 from scipy.optimize import curve_fit
 
 from src.classifier import (
-    Thresholds, vib_label, classification_bucket,
-    STRETCHING, BENDING, MIXED_STRETCH_BEND,
+    Thresholds, classification_bucket,
     is_clean_external, is_mixed_external, external_axis,
 )
 
@@ -200,13 +199,6 @@ CATEGORY_LABEL = {
     "Rx": "Rx", "Ry": "Ry", "Rz": "Rz",
     "T/R": "T/R",
 }
-
-# Calibrated classifier thresholds (data/results/thresholds.json), used for
-# the reference dashed lines in fig_benzene_normal and kept consistent with
-# every other figure/classification that reads Thresholds.calibrated().
-_TAU = Thresholds.calibrated()
-TAU_S = _TAU.tau_S
-TAU_B = _TAU.tau_B
 
 # Named font-size overrides: the ONLY permitted exceptions to _style()'s
 # rcParams defaults, tuned for dense panels (crowded legends / thin bar
@@ -499,6 +491,8 @@ def plot_benzene_normal_modes(
     """
     _style()
     normal = pd.read_csv(normal_csv)
+    thresholds = Thresholds.calibrated()
+    TAU_S, TAU_B = thresholds.tau_S, thresholds.tau_B
 
     # Width 7.2in leaves horizontal room to manually composite depicted
     # normal-mode panel images beside the scatter.

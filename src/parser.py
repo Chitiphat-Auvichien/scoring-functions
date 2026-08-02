@@ -1,7 +1,8 @@
 import re
 import os
+import warnings
 import numpy as np
-from .utils import get_symbol, get_atomic_number
+from .utils import get_symbol, get_atomic_number, find_file
 
 # --- Shared Gaussian frequency-block helpers ---------------------------
 # Both "HP" (Coord Atom Element:, 3-dash) and "Standard" (Atom AN, 2-dash)
@@ -148,13 +149,7 @@ class GaussianParser:
         data_dir = os.path.dirname(os.path.dirname(self.filepath))
         gjf_dir = os.path.join(data_dir, "gjf")
 
-        input_file = None
-        for ext in ['.com', '.gjf']:
-            candidate = os.path.join(gjf_dir, base_name + ext)
-            if os.path.exists(candidate):
-                input_file = candidate
-                break
-
+        input_file = find_file(gjf_dir, base_name, ('.com', '.gjf'))
         if not input_file: return
 
         try:
@@ -189,7 +184,8 @@ class GaussianParser:
                                 self.bonds.append(pair)
                         except ValueError: pass
                 idx += 1
-        except Exception: pass
+        except (OSError, UnicodeDecodeError, IndexError) as e:
+            warnings.warn(f"Failed to parse connectivity from {input_file}: {e}")
 
     def _parse_modes(self):
         # Gaussian prints "Coord Atom Element:" for High-Precision (HP) modes.

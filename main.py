@@ -7,6 +7,7 @@ from src.parser import GaussianParser, EMITParser, IntermediateIO
 from src.scoring import ModeScorer
 from src.classifier import classify_all_modes, classify_to_rows, is_linear
 from src.projection import build_reference_basis, project_emit
+from src.utils import find_file
 
 # Column order for the results table / CSV.
 _SCORE_COLS = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_Stretch"]
@@ -22,11 +23,10 @@ def resolve_dirs(data_dir="data"):
 
 
 def _find_log(logs_dir, mol_name):
-    for ext in (".log", ".out"):
-        p = os.path.join(logs_dir, f"{mol_name}{ext}")
-        if os.path.exists(p):
-            return p
-    raise FileNotFoundError(f"No log file for '{mol_name}' in {logs_dir} (expected .log or .out)")
+    p = find_file(logs_dir, mol_name, (".log", ".out"))
+    if p is None:
+        raise FileNotFoundError(f"No log file for '{mol_name}' in {logs_dir} (expected .log or .out)")
+    return p
 
 
 def _find_emit(emit_dir, mol_name):
@@ -39,11 +39,7 @@ def _find_emit(emit_dir, mol_name):
 
 
 def _find_gjf(gjf_dir, mol_name):
-    for ext in (".com", ".gjf"):
-        p = os.path.join(gjf_dir, f"{mol_name}{ext}")
-        if os.path.exists(p):
-            return p
-    return None
+    return find_file(gjf_dir, mol_name, (".com", ".gjf"))
 
 
 def intermediate_path(dirs, mol_name, mode_type):

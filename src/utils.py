@@ -1,3 +1,16 @@
+import os
+
+
+def find_file(directory, base_name, extensions):
+    """Return the first `directory/base_name<ext>` that exists for `ext` in
+    `extensions` (checked in order), or None if none exist."""
+    for ext in extensions:
+        candidate = os.path.join(directory, f"{base_name}{ext}")
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
 # Full atomic masses dictionary
 atomicMass = {
     'al':26.981538, 'sb':121.76, 'ar':39.948, 'as':74.9216, 'ba':137.327, 

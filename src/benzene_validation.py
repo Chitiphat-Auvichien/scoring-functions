@@ -35,6 +35,8 @@ import numpy as np
 import pandas as pd
 
 from src.classifier import classification_bucket
+from src.library_ingest import load_library_scores
+from src.scoring import parse_bond_string
 
 MOLECULE = "C6H6"
 
@@ -54,12 +56,6 @@ _CC_RING_BONDS = ("C1-C2", "C2-C3", "C3-C4", "C4-C5", "C5-C6", "C1-C6")
 _CH_BONDS = ("C1-H7", "C2-H8", "C3-H9", "C4-H10", "C5-H11", "C6-H12")
 
 
-def _load_lib(lib_df, data_dir):
-    if lib_df is not None:
-        return lib_df
-    return pd.read_csv(os.path.join(data_dir, "results", "library_scores.csv"))
-
-
 # --------------------------------------------------------------------------
 # Task A: primary classification-vs-reference validation
 # --------------------------------------------------------------------------
@@ -77,7 +73,7 @@ def benzene_normal_reference_detail(lib_df=None, data_dir="data"):
     Raises ValueError if benzene has no ref_label rows (ingest not run) or
     if any ref_label row lacks a predicted_label (incomplete geometry merge).
     """
-    df = _load_lib(lib_df, data_dir)
+    df = load_library_scores(data_dir, lib_df)
     b = df[(df["molecule"] == MOLECULE) & df["ref_label"].notna()].copy()
     if b.empty:
         raise ValueError(
@@ -214,17 +210,6 @@ def run_benzene_internal_confusion(lib_df=None, data_dir="data", write=True):
 # Task B: bond-contribution / degenerate-pair diagnostic for the mixed modes
 # --------------------------------------------------------------------------
 
-def _parse_bond_string(s):
-    """'"C1-C2:0.0342;C1-C6:0.0539;..."' -> {'C1-C2': 0.0342, ...}."""
-    out = {}
-    if not isinstance(s, str) or not s:
-        return out
-    for part in s.split(";"):
-        atoms, val = part.split(":")
-        out[atoms] = float(val)
-    return out
-
-
 def _is_cc_bond(label):
     a, b = label.split("-")
     return a[0] == "C" and b[0] == "C"
@@ -235,7 +220,7 @@ def _bond_row_stats(r):
     V_Stretch, cc_total, ch_total, cc_fraction_of_V, one 's_AB[<bond>]' per
     C-C ring bond) from one `library_scores.csv` row -- shared by both bond
     diagnostics below so they can't silently drift apart."""
-    bonds = _parse_bond_string(r["s_AB"])
+    bonds = parse_bond_string(r["s_AB"])
     # s_AB is signed (positive = stretching, negative = compressing); these
     # roll-up totals want magnitude sums (no cancellation between bonds), so
     # cc_fraction_of_V keeps its previously-validated meaning.
@@ -282,7 +267,7 @@ def benzene_mixed_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0):
             f"No MIXED_STRETCH_BEND {MOLECULE} normal modes found -- nothing "
             "to diagnose (has calibration or the reference labels changed?).")
 
-    df = _load_lib(lib_df, data_dir)
+    df = load_library_scores(data_dir, lib_df)
     mixed_modes_str = {str(m) for m in mixed_modes}
     lib_rows = df[(df["molecule"] == MOLECULE) &
                   df["mode_index"].astype(str).isin(mixed_modes_str)]
@@ -291,7 +276,7 @@ def benzene_mixed_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0):
     bond_vectors = {}
     for _, r in lib_rows.iterrows():
         row = _bond_row_stats(r)
-        bonds = _parse_bond_string(r["s_AB"])
+        bonds = parse_bond_string(r["s_AB"])
         # s_AB is signed; this correlation measures magnitude-pattern
         # complementarity between near-degenerate partners (which C-C bonds
         # are strongly vs. weakly perturbed), not phase/sign agreement, so
@@ -382,7 +367,7 @@ def benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data"):
     internal_detail["mode_index"] = internal_detail["mode_index"].astype(int)
     detail_by_mode = internal_detail.set_index("mode_index")
 
-    df = _load_lib(lib_df, data_dir)
+    df = load_library_scores(data_dir, lib_df)
     target_modes_str = {str(m) for m in sb_modes + contrast_modes}
     lib_rows = df[(df["molecule"] == MOLECULE) &
                   df["mode_index"].astype(str).isin(target_modes_str)]
@@ -437,7 +422,7 @@ def benzene_worked_examples(lib_df=None, data_dir="data", freq_tol=1.0):
 
     Raises ValueError if fewer than 2 STRETCHING-labeled modes exist.
     """
-    df = _load_lib(lib_df, data_dir)
+    df = load_library_scores(data_dir, lib_df)
     internal = df[(df["molecule"] == MOLECULE) & (df["kind"] == "internal")].copy()
     internal["mode_index"] = internal["mode_index"].astype(int)
     internal["predicted_bucket"] = internal["predicted_label"].map(classification_bucket)
@@ -453,7 +438,7 @@ def benzene_worked_examples(lib_df=None, data_dir="data", freq_tol=1.0):
     ch_row = stretch.iloc[-1]
 
     def _bond_stats(row):
-        bonds = _parse_bond_string(row["s_AB"])
+        bonds = parse_bond_string(row["s_AB"])
         # s_AB is signed; these totals want magnitude sums (see
         # _bond_row_stats above for the same rationale).
         cc_total = sum(abs(v) for k, v in bonds.items() if _is_cc_bond(k))

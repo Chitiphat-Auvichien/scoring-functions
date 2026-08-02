@@ -44,6 +44,8 @@ import pandas as pd
 
 from src import csv_label_ingest
 from src.parser import GaussianParser
+from src.scoring import format_bond_map
+from src.utils import find_file
 
 _EXTERNAL_SLOTS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 
@@ -75,6 +77,14 @@ def load_mol_roster(data_dir="data"):
     if missing_cols:
         raise ValueError(f"mol_list_method.csv missing required column(s): {missing_cols}")
     return df
+
+
+def load_library_scores(data_dir="data", lib_df=None):
+    """Pass through `lib_df` if already loaded, else read
+    data/results/library_scores.csv fresh."""
+    if lib_df is not None:
+        return lib_df
+    return pd.read_csv(os.path.join(data_dir, "results", "library_scores.csv"))
 
 
 def check_roster_disk_consistency(roster, data_dir="data"):
@@ -202,8 +212,8 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None, mol_type=Non
         # i_label/j_label are ModeScorer.score_bonds()'s own atom-symbol +
         # 1-based-index labels (e.g. "C1", "H7"), matching the convention
         # src/benzene_validation.py's C-C/C-H bond-type parsing relies on.
-        s_ab_str = ";".join(f"{b['i_label']}-{b['j_label']}:{b['s_AB']:.4f}" for b in bonds)
-        rel_db_str = ";".join(f"{b['i_label']}-{b['j_label']}:{b['rel_db']:.4f}" for b in bonds)
+        s_ab_str = format_bond_map(bonds, "s_AB")
+        rel_db_str = format_bond_map(bonds, "rel_db")
         delta_b_mean = float(np.mean([abs(b["rel_db"]) for b in bonds])) if bonds else None
 
         d_ca = float(np.linalg.norm(mode_vec[central_idx])) if central_idx is not None else None
@@ -455,11 +465,7 @@ def run_ingest_pipeline(data_dir="data", thresholds=None, write=True):
 
 def _resolve_log_path(base, data_dir="data"):
     """basename -> full path to its .log/.out file, or None if neither exists."""
-    for ext in (".log", ".out"):
-        candidate = os.path.join(data_dir, "logs", base + ext)
-        if os.path.exists(candidate):
-            return candidate
-    return None
+    return find_file(os.path.join(data_dir, "logs"), base, (".log", ".out"))
 
 
 def _fmt_trim(value, dp=4):

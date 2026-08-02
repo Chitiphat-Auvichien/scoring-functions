@@ -44,6 +44,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
+from src.scoring import format_bond_map
+
 # Phase-3 calibration output (src/calibrate.py); Thresholds() below is the
 # explicit hardcoded fallback used if this file doesn't exist yet.
 DEFAULT_CALIBRATION_PATH = os.path.join("data", "results", "thresholds.json")
@@ -281,9 +283,7 @@ def classify_to_rows(scored):
     rows = []
     for m in scored:
         is_emit = m["is_emit"]
-        bonds_str = ";".join(
-            f"{b['i_label']}-{b['j_label']}:{b['s_AB']:.4f}" for b in m["bonds"]
-        )
+        bonds_str = format_bond_map(m["bonds"], "s_AB")
         rows.append({
             "Mode": m["name"],
             ("Eigenvalue" if is_emit else "Freq"): m["frequency"],

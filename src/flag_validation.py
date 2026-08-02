@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from src.classifier import Thresholds, is_mixed_external
+from src.library_ingest import load_library_scores
 
 # Ground-truth thresholds on the projection-derived max external fraction.
 GT_EXT_LO = 0.05
@@ -125,8 +126,7 @@ def library_external_flag_confusion(data_dir="data", lib_df=None):
     subset of library_scores.csv; stats is _confusion_from_bools() output
     (TP=FN=0 by construction; only FP/TN are informative).
     """
-    if lib_df is None:
-        lib_df = pd.read_csv(os.path.join(data_dir, "results", "library_scores.csv"))
+    lib_df = load_library_scores(data_dir, lib_df)
     ext = lib_df[(lib_df["kind"] == "external") & (lib_df["has_geometry"])].copy()
     pred_pos = ext["predicted_label"].apply(is_mixed_external).to_numpy()
     gt_pos = np.zeros(len(ext), dtype=bool)  # exact completeness -> ground truth always CLEAN

@@ -155,10 +155,11 @@ def project_emit(ref, final_emit, sum_tol=0.05):
         row["C2_VMix"] = totals[MIXED_STRETCH_BEND]
 
         total = sum(v for k, v in row.items() if k not in ("Mode", "Eigenvalue"))
-        assert abs(total - 1.0) <= sum_tol, (
-            f"{name}: projected fractions sum to {total:.4f}, expected ~1.0 "
-            f"(Q may not be a near-orthonormal basis -- check inputs)."
-        )
+        if abs(total - 1.0) > sum_tol:
+            raise ValueError(
+                f"{name}: projected fractions sum to {total:.4f}, expected ~1.0 "
+                f"(Q may not be a near-orthonormal basis -- check inputs)."
+            )
         rows.append(row)
 
         full_row = {"Mode": name, "Eigenvalue": eig}

@@ -1755,23 +1755,26 @@ def plot_sensitivity(
 def plot_cpu_time_benchmark(
     benchmark_csv="data/results/cpu_time_benchmark.csv",
     out_dir="data/figures",
-    label="fig_cputime",
+    label=None,
+    scale="linear",
 ):
-    """Build fig:cputime: empirical CPU time vs. atom count N, LINEAR scale,
-    for the classification algorithm (this framework) against the Gaussian
+    """Build fig:cputime: empirical CPU time vs. atom count N, for the
+    classification algorithm (this framework) against the Gaussian
     frequency-calculation step that supplies its input -- one point per
     hydride-library molecule, restricted to the MP2/3-21G subset
     (``mp2_321g == True``, 50 of 68 molecules, N=3..12; benzene/C6H6 at N=12
     is the single largest case in this filtered subset).
 
-    Linear (not log) y-axis is deliberate: on this scale the classifier
-    series visually collapses to ~0 next to Gaussian's, which *is* the
-    point being made (classification cost is negligible against the
-    frequency calculation that supplies its input) -- a log axis makes the
-    same data legible but undersells the magnitude gap. The classifier's
-    own N-scaling (approx. N^1.7 empirically, log-log fit on per-N medians)
-    is not readable off this panel; that belongs in a separate/SI figure if
-    needed, not this one.
+    ``scale`` picks the y-axis: "linear" (default, label "fig_cputime") or
+    "log" (label "fig_cputime_log" unless overridden). Both are generated
+    and shown side by side per standing instruction -- neither alone tells
+    the full story. Linear collapses the classifier series to ~0 next to
+    Gaussian's, which dramatizes the magnitude gap (classification cost is
+    negligible against the frequency calculation that supplies its input)
+    but hides the classifier's own N-scaling. Log keeps both series legible
+    and closer to showing the classifier's ~N^1.7 empirical trend (log-log
+    fit on per-N medians), but undersells the magnitude gap. ``label``
+    overrides the scale-based default if given.
 
     FILTERING (added 2026-08-01): ``cpu_time_benchmark.csv`` now carries
     ``mp2_321g``/``method_basis`` joined from ``data/mol_list_method.csv`` --
@@ -1804,6 +1807,11 @@ def plot_cpu_time_benchmark(
     being rewritten around this empirical benchmark. Caption text and .tex
     wiring are a separate step -- this function only builds the artifact.
     """
+    if scale not in ("linear", "log"):
+        raise ValueError(f"scale must be 'linear' or 'log', got {scale!r}")
+    if label is None:
+        label = "fig_cputime" if scale == "linear" else "fig_cputime_log"
+
     _style()
     df_all = pd.read_csv(benchmark_csv)
     n_total = len(df_all)
@@ -1845,14 +1853,20 @@ def plot_cpu_time_benchmark(
     n_by_N = df.groupby("N").size()
     ax.set_xticks(sorted(df["N"].unique()))
     ax.set_xlim(df["N"].min() - 0.6, df["N"].max() + 0.6)
-    # Headroom above the tallest point (BrH3, N=4, 55.3s) so the legend box
-    # sits in clear space rather than overlapping it -- verified by
-    # rendering. AsBr3/PBr3 (the far larger pre-filtering outliers an
-    # earlier version of this comment warned about) are MP2/6-311G, not
-    # MP2/3-21G, and are excluded from `df` by the mp2_321g filter above.
-    ax.set_ylim(0, df["gaussian_freq_cpu_s"].max() * 1.28)
+    if scale == "linear":
+        # Headroom above the tallest point (BrH3, N=4, 55.3s) so the legend
+        # box sits in clear space rather than overlapping it -- verified by
+        # rendering. AsBr3/PBr3 (the far larger pre-filtering outliers an
+        # earlier version of this comment warned about) are MP2/6-311G, not
+        # MP2/3-21G, and are excluded from `df` by the mp2_321g filter above.
+        ax.set_ylim(0, df["gaussian_freq_cpu_s"].max() * 1.28)
+    else:
+        ax.set_yscale("log")
+        ax.set_ylim(df["classifier_cpu_s"].min() * 0.5,
+                    df["gaussian_freq_cpu_s"].max() * 1.8)
     # "upper right": nothing near N=12 (the lone large-N point, 19.1s)
     # comes close to the y=55s N=3-4 ceiling, leaving that corner clear.
+    # Also clear on log scale -- verified by rendering.
     ax.legend(loc="upper right", frameon=False, handletextpad=0.4,
               labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)
 
@@ -1867,6 +1881,7 @@ def plot_cpu_time_benchmark(
 
     summary = {
         "pdf": pdf_path, "png": png_path,
+        "scale": scale,
         "n_molecules": len(df),
         "n_excluded_non_mp2_321g": int(n_excluded),
         "N_range": (int(df["N"].min()), int(df["N"].max())),
@@ -1902,14 +1917,23 @@ def plot_cpu_time_benchmark(
 def plot_gaussian_nbasis_scaling(
     benchmark_csv="data/results/cpu_time_benchmark.csv",
     out_dir="data/figures",
-    label="fig_gaussian_nbasis",
+    label=None,
+    scale="log",
 ):
     """SI/diagnostic companion to fig:cputime: Gaussian's freq-only CPU time
     vs. N_basis (AO basis-function count, Gaussian's own ``NBasis=``),
-    log-log, all 68 library molecules (no mp2_321g filtering needed here --
-    unlike N, n_basis already captures the basis-set-size effect that N
-    confounds with element identity, so mixing methods/bases adds much less
-    noise; filled/hollow marks the MP2/3-21G subset anyway for transparency).
+    all 68 library molecules (no mp2_321g filtering needed here -- unlike N,
+    n_basis already captures the basis-set-size effect that N confounds
+    with element identity, so mixing methods/bases adds much less noise;
+    filled/hollow marks the MP2/3-21G subset anyway for transparency).
+
+    ``scale`` picks both axes together: "log" (default, label
+    "fig_gaussian_nbasis") shows the power-law fit as a straight line and is
+    the more legible/quantitative view; "linear" (label
+    "fig_gaussian_nbasis_linear") shows the same fit as a steep upward curve
+    and makes the cost explosion at large N_basis visually dramatic instead.
+    Both are generated per standing instruction. ``label`` overrides the
+    scale-based default if given.
 
     Motivation: fig:cputime's "CPU time vs. N" comparison is fair to the
     classifier (whose cost genuinely depends on N -- geometry/mode-vector
@@ -1922,6 +1946,11 @@ def plot_gaussian_nbasis_scaling(
     touches AO basis functions, so n_basis is not a meaningful covariate for
     it (a category error) -- this figure is Gaussian-only by design.
     """
+    if scale not in ("linear", "log"):
+        raise ValueError(f"scale must be 'linear' or 'log', got {scale!r}")
+    if label is None:
+        label = "fig_gaussian_nbasis" if scale == "log" else "fig_gaussian_nbasis_linear"
+
     _style()
     df = pd.read_csv(benchmark_csv).copy()
 
@@ -1946,8 +1975,12 @@ def plot_gaussian_nbasis_scaling(
             color=COLORS["threshold"], zorder=2,
             label=f"fit: $t \\propto N_{{basis}}^{{{slope:.2f}}}$ ($R^2$={r2:.2f})")
 
-    ax.set_xscale("log")
-    ax.set_yscale("log")
+    if scale == "log":
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+    else:
+        ax.set_ylim(0, df["gaussian_freq_cpu_s"].max() * 1.08)
+        ax.set_xlim(0, df["n_basis"].max() * 1.05)
     ax.set_xlabel("Number of AO basis functions, $N_{basis}$")
     ax.set_ylabel("CPU time (s)")
     ax.legend(loc="upper left", frameon=False, handletextpad=0.4,
@@ -1964,6 +1997,7 @@ def plot_gaussian_nbasis_scaling(
 
     return {
         "pdf": pdf_path, "png": png_path,
+        "scale": scale,
         "n_molecules": len(df),
         "n_basis_range": (int(df["n_basis"].min()), int(df["n_basis"].max())),
         "fit_vs_n_basis": {"exponent": float(slope), "r2": float(r2)},
@@ -1997,7 +2031,14 @@ def regenerate_all(verbose=True):
         ("fig:modemixing", plot_mode_mixing),
         ("SI irrep-degeneracy coupling (no fig: label yet)", plot_irrep_coupling),
         ("fig:sensitivity", plot_sensitivity),
-        ("fig:cputime (proposed, not yet in .tex)", plot_cpu_time_benchmark),
+        ("fig:cputime linear (proposed, not yet in .tex)",
+         lambda: plot_cpu_time_benchmark(scale="linear")),
+        ("fig:cputime log (proposed, not yet in .tex)",
+         lambda: plot_cpu_time_benchmark(scale="log")),
+        ("fig:gaussian_nbasis log (SI/diagnostic, not yet in .tex)",
+         lambda: plot_gaussian_nbasis_scaling(scale="log")),
+        ("fig:gaussian_nbasis linear (SI/diagnostic, not yet in .tex)",
+         lambda: plot_gaussian_nbasis_scaling(scale="linear")),
     ]
     results = {}
     for tex_label, fn in fns:

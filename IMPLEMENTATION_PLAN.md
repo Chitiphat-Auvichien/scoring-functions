@@ -1835,6 +1835,8 @@ library scores from the Excel file.
       as a diagnostic/introspection accessor only — Decision 8 retracts the requirement that the
       classifier consume axis-degeneracy blocks for assignment; `classifier.py` uses plain
       `linear_sum_assignment` over the full score table with no block-consumption step.
+      **Update (2026-08 cleanup):** `axis_blocks()`/`DEGEN_TOL` deleted as confirmed-dead code;
+      `principal_axes()` retained (live, used by `classifier.is_linear()`).
 
 ## Phase 1 — Score engine + score-level regression  (data: water, benzene, CO₂)  — **DO NOW**
 - [x] **`Rscore` = consensus form, confirmed/kept (FINAL 2026-06-30).** `s[R_Q]=(1/(N−N_Q)) Σ
@@ -2759,7 +2761,8 @@ library scores from the Excel file.
   let that noise leak through `Tscore` as full-weight unit-vector contributions (confirmed by direct
   reproduction of both code paths — confined entirely to Tx/Ty/Tz columns and to degenerate blocks,
   exactly as observed, because `Rscore`/`Vscore` already used the stricter `EPS_DENOM` floor).
-  `axis_blocks()`/`principal_axes()` are confirmed dead code (not called anywhere in the scoring path),
+  `axis_blocks()` was confirmed dead code (not called anywhere in the scoring path; deleted in the
+  2026-08 cleanup pass -- `principal_axes()` itself is live, used by `classifier.is_linear()`),
   ruling out an axis-choice explanation. **Fix:** `Tscore()` now gates on `EPS_DENOM` instead of
   `EPS_DISP`; added `test_tscore_ignores_subthreshold_noise` (synthetic reproduction) and a golden pin on
   benzene EMIT 3's Tz. Regenerated `benzene_EMIT_scores.csv`/`water_EMIT_scores.csv`; diff against the

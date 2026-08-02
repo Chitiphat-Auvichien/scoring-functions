@@ -1,5 +1,3 @@
-import numpy as np
-
 # Full atomic masses dictionary
 atomicMass = {
     'al':26.981538, 'sb':121.76, 'ar':39.948, 'as':74.9216, 'ba':137.327, 
@@ -49,10 +47,3 @@ def get_atomic_number(symbol):
     Returns None for an unrecognized symbol (e.g. the 'X' placeholder
     get_symbol() itself returns for an unknown atomic number)."""
     return _symbolToNumber.get(symbol.lower())
-
-def get_unit_vector(vec):
-    """Returns the unit vector of a given vector."""
-    norm = np.linalg.norm(vec)
-    if norm < 1e-6:
-        return np.zeros_like(vec)
-    return vec / norm

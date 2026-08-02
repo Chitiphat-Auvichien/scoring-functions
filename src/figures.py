@@ -479,18 +479,6 @@ def plot_benzene_stress_test(
 # a descriptive worked-example gallery, not a second accuracy report).
 # --------------------------------------------------------------------------
 
-# The 3 worked-example modes (ring-breathing/mixed-SB/C-H-stretch) plus
-# mode 19 (SB example). Frequencies/V_Stretch are read live from
-# ``normal_csv``; this dict only supplies descriptive name + callout anchor.
-# Currently unused (annotations were pulled from the rendered figure; kept
-# for future manual pointing annotations) -- safe to delete if unneeded.
-_WORKED_EXAMPLE_MODES = {
-    "Vib 12": {"short": "12", "name": "ring-breathing", "callout": (0.68, 0.95)},
-    "Vib 19": {"short": "19", "name": "mixed S/B", "callout": (0.66, 0.46)},
-    "Vib 30": {"short": "30", "name": "C-H stretch", "callout": (0.55, 0.62)},
-}
-
-
 def plot_benzene_normal_modes(
     normal_csv="data/results/benzene_normal_classified.csv",
     out_dir="data/figures",
@@ -587,12 +575,6 @@ def plot_benzene_normal_modes(
         "freq_range": (float(normal["Freq"].min()), float(normal["Freq"].max())),
         "vs_range": (float(normal["V_Stretch"].min()), float(normal["V_Stretch"].max())),
         "tau_S": TAU_S, "tau_B": TAU_B,
-        "worked_example_annotations": ("REMOVED 2026-07-02 (author visual "
-                                        "review, follow-up correction) -- "
-                                        "modes 12/19/30 are no longer "
-                                        "highlighted/annotated in this "
-                                        "figure; pointing annotations will "
-                                        "be added manually later."),
     }
     return summary
 

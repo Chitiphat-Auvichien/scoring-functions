@@ -6,19 +6,12 @@ from .utils import atomicMass
 EPS_DISP = 1e-8    # spec eps_disp: |d_A| <= this -> zero-motion (unit(0):=0)
 EPS_NORM = 1e-9    # vector-normalization guard (unit(0):=0)
 EPS_DENOM = 1e-6   # V-score denominator guard (Sigma|db|^2 near zero -> score 0)
-DEGEN_TOL = 1e-3   # relative tol for grouping degenerate inertia moments into axis blocks
 RANGE_TOL = 1e-6   # tolerance for the range-invariant score asserts
 
 # --- Helper Classes to mimic atom.py structure ---
 
 def sizeVec(v):
     return math.sqrt(np.dot(v, v))
-
-def normalize(v):
-    norm = sizeVec(v)
-    if norm < EPS_NORM:
-        return v
-    return v / norm
 
 class Coordinate:
     def __init__(self, x, y, z):
@@ -109,7 +102,7 @@ class ModeScorer:
 
     def _build_inertia_tensor(self):
         """Build the moment-of-inertia tensor at the current geometry (shared
-        by MIT() and the principal_axes/axis_blocks accessors)."""
+        by MIT() and the principal_axes() accessor)."""
         XX = YY = ZZ = 0.0
         XY = XZ = YZ = 0.0
         for atom in self.atoms:
@@ -136,26 +129,6 @@ class ModeScorer:
         tensor = self._build_inertia_tensor()
         moments, axes = np.linalg.eigh(tensor)
         return moments, axes
-
-    def axis_blocks(self, rel_tol=DEGEN_TOL):
-        """Group principal axes (indices into principal_axes()'s ascending
-        order) into blocks of equal moment within `rel_tol` -- symmetric/
-        spherical tops, where per-axis rotation assignment is ill-defined."""
-        moments, _ = self.principal_axes()
-        order = list(np.argsort(moments))
-        scale = max(float(np.max(np.abs(moments))), 1e-12)
-        blocks = []
-        current = [order[0]]
-        for k in range(1, len(order)):
-            prev = moments[order[k - 1]]
-            cur = moments[order[k]]
-            if abs(cur - prev) <= rel_tol * scale:
-                current.append(order[k])
-            else:
-                blocks.append(current)
-                current = [order[k]]
-        blocks.append(current)
-        return blocks
 
     def MIT(self, modes=None, rotate_modes=True):
         """Rotates the molecule (and, if rotate_modes, the mode displacement

@@ -181,21 +181,6 @@ def score_modes(raw, mode_type):
     return rows
 
 
-def run_pipeline(mol_name, mode_type, data_dir="data", write=True):
-    """Headless end-to-end pipeline: load inputs -> score -> optionally write CSV.
-
-    Returns (DataFrame, output_path). Raises on any missing input, missing bonds,
-    or wrong mode count. No prompts, so reproduce.py and tests can call it directly.
-    """
-    raw, dirs = load_inputs(mol_name, mode_type, data_dir)
-    df = pd.DataFrame(score_modes(raw, mode_type))
-    suffix = "normal" if mode_type == "normal" else "EMIT"
-    output_file = os.path.join(dirs["results"], f"{mol_name}_{suffix}_scores.csv")
-    if write:
-        df.to_csv(output_file, index=False, float_format="%.4f")
-    return df, output_file
-
-
 def run_classify_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, write=True):
     """Headless pipeline: load inputs -> classify_all_modes (Algorithm 1) -> CSV."""
     raw, dirs = load_inputs(mol_name, mode_type, data_dir)

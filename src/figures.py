@@ -2028,7 +2028,7 @@ def plot_gaussian_nbasis_scaling(
     xx = np.linspace(df["n_basis"].min() * 0.9, df["n_basis"].max() * 1.1, 100)
     ax.plot(xx, np.exp(intercept) * xx ** slope, ls="--", lw=1.2,
             color=COLORS["threshold"], zorder=4,
-            label=f"log-log fit: $t \\propto N_{{basis}}^{{{slope:.2f}}}$ ($R^2$={r2:.2f})")
+            label=f"log-log fit: $t \\propto N_{{\\mathrm{{basis}}}}^{{{slope:.2f}}}$ ($R^2$={r2:.2f})")
     if scale == "linear":
         # Distinct dash pattern (dotted, not dashed) + plain black (not a
         # COLORS entry -- this is a one-off diagnostic overlay, not a
@@ -2036,7 +2036,7 @@ def plot_gaussian_nbasis_scaling(
         # visually distinguishable.
         ax.plot(xx, _powerlaw(xx, a_lin, b_lin), ls=":", lw=1.6,
                 color="black", zorder=4,
-                label=f"linear-space fit: $t \\propto N_{{basis}}^{{{b_lin:.2f}}}$ ($R^2$={r2_lin:.2f})")
+                label=f"linear-space fit: $t \\propto N_{{\\mathrm{{basis}}}}^{{{b_lin:.2f}}}$ ($R^2$={r2_lin:.2f})")
 
     if scale == "log":
         ax.set_xscale("log")
@@ -2044,7 +2044,7 @@ def plot_gaussian_nbasis_scaling(
     else:
         ax.set_ylim(0, df["gaussian_freq_cpu_s"].max() * 1.15)
         ax.set_xlim(0, df["n_basis"].max() * 1.08)
-    ax.set_xlabel("Number of AO basis functions, $N_{basis}$")
+    ax.set_xlabel(r"Number of AO basis functions, $N_{\mathrm{basis}}$")
     ax.set_ylabel("CPU time (s)")
     ax.legend(loc="upper left", frameon=False, handletextpad=0.4,
               labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)

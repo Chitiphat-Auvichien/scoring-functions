@@ -207,8 +207,8 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
     # Q and Theta are only frame-consistent because both parses read the SAME
     # log geometry and MIT()'s eigendecomposition is deterministic -- assert
     # it rather than relying on that silently.
-    coords_n = np.array([[a.x(), a.y(), a.z()] for a in scorer_n.atoms])
-    coords_e = np.array([[a.x(), a.y(), a.z()] for a in scorer_e.atoms])
+    coords_n = scorer_n.coords
+    coords_e = scorer_e.coords
     if not np.allclose(coords_n, coords_e, atol=1e-6):
         raise ValueError(
             f"'{mol_name}': the 'normal' and 'emit' parses of the log geometry "

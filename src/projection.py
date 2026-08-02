@@ -36,9 +36,8 @@ _VIB_GROUPS = (STRETCHING, BENDING, MIXED_STRETCH_BEND)
 
 def mass_weights_from_scorer(scorer):
     """sqrt(mass_A) per atom, repeated x3 (length 3N, atom order), read from
-    the scorer's Atom objects so masses stay a single source of truth."""
-    masses = np.array([atom.rMass for atom in scorer.atoms], dtype=float)
-    return np.repeat(np.sqrt(masses), 3)
+    the scorer's own masses array so masses stay a single source of truth."""
+    return np.repeat(np.sqrt(scorer.masses), 3)
 
 
 def _mass_weighted_unit_columns(mode_list, weights):

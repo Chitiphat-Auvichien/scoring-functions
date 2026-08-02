@@ -10,11 +10,43 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-08-03 (**Dead-code/comment/structural refactor of `main.py`+`src/*.py`, then the
-> 5 stale-s_AB-sum test failures it surfaced were fixed** — `pytest` is 119/119 green again. See
-> RESUME HERE below.)
+> Last updated: 2026-08-03 (**`scoring.py`'s `Atom`/`Coordinate` classes vectorized** — the numerical-
+> core item explicitly deferred out of the same-day refactor session below is now done. `pytest`
+> 119/119 green; `library_scores.csv`/`thresholds.json`/every figure PNG re-verified. See RESUME HERE.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-08-03 (Atom/Coordinate vectorization, same-day follow-up to the refactor session below):**
+> Replaced `scoring.py`'s per-atom `Atom`/`Coordinate` objects (camelCase, `.x()/.y()/.z()` method-call
+> accessors, Python for-loops in `COM()`/`MIT()`/`Tscore()`/`Rscore()`/`_build_inertia_tensor()`) with
+> plain `ModeScorer` attributes: `self.coords` (N,3), `self.masses` (N,), `self.symbols` (list[str]),
+> `self.dispVecs`/`self.dispLengths` (updated per mode in `calculate_scores()`). `MIT()`'s rotation is
+> now `self.coords @ rot` / `mode['vector'] @ rot` instead of nested per-atom loops; `COM()`/
+> `_build_inertia_tensor()`/`Tscore()`/`Rscore()`/`construct_R()` are all vectorized numpy the same way.
+> Also renamed `sizeVec` -> `size_vec` (only used internally, verified zero external callers before
+> renaming). Left `self.n`/`self.bList`/`self.nBond`/`self.bVec` and the public method names
+> (`Tscore`/`Rscore`/`Vscore`/`COM`/`MIT`/etc.) untouched — `self.n`/`self.bList` are read externally
+> by `library_ingest._central_atom_index`, and the method names are the manuscript's own eq: naming
+> convention, referenced throughout `tests/`.
+> **One real bug caught by this pass, not by the earlier grep-based dead-code audit:**
+> `main.py:210-211`'s `run_projection_pipeline` did `[[a.x(),a.y(),a.z()] for a in scorer.atoms]` — a
+> second, unflagged external consumer of the old per-atom interface the original research pass's
+> `\.atoms\[` grep pattern missed (no `[` immediately after `.atoms`). Fixed to `scorer.coords` directly.
+> Also updated `projection.mass_weights_from_scorer` (the one other external consumer, of
+> `atom.rMass`) to read `scorer.masses`.
+> **Verification:** `pytest` 119/119 (no change). `thresholds.json` byte-identical. Every figure PNG
+> byte-identical (PDF metadata/timestamps differ as always, not committed). `library_scores.csv` is
+> NOT byte-identical -- differences are confined to the `Tx..Rz` columns of internal/vibrational rows,
+> at ~1e-15 relative / 1e-17-1e-22 absolute magnitude (i.e. floating-point reassociation noise in
+> quantities that are already ~machine-zero for a genuine internal mode, from vectorized-numpy vs.
+> sequential-Python-loop summation order) -- every `Mode`/`freq`/`ref_label`/`V_Stretch`/`s_AB`/
+> `rel_db` value is unchanged, confirmed by isolating and diffing C6H6 (the most degenerate case,
+> D6h with a doubly-degenerate in-plane inertia eigenvalue) row-by-row. `C6H6_EMIT_classified.csv`
+> (containing the historically-scrutinized EMIT 34-36 flag/blind-spot result) is committed-byte-
+> identical after a fresh `--classify --mode emit` run. Regenerated `library_scores.csv` committed
+> (was already the established practice for keeping tracked artifacts in sync with code, see Part 2
+> of the refactor session below); figure PDFs' metadata-only churn not committed, per that same
+> precedent.
+>
 > **2026-08-03 (fixed the 5 stale-s_AB-sum test failures, same-day follow-up):** Added `abs()` around
 > the signed `s_AB` summation in all 5 failing tests' own comparison logic (the tests, not the engine,
 > were stale since the 2026-07-30 signed-s_AB session below):

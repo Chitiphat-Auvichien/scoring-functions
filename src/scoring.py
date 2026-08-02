@@ -8,38 +8,10 @@ EPS_NORM = 1e-9    # vector-normalization guard (unit(0):=0)
 EPS_DENOM = 1e-6   # V-score denominator guard (Sigma|db|^2 near zero -> score 0)
 RANGE_TOL = 1e-6   # tolerance for the range-invariant score asserts
 
-# --- Helper Classes to mimic atom.py structure ---
 
-def sizeVec(v):
+def size_vec(v):
     return math.sqrt(np.dot(v, v))
 
-class Coordinate:
-    def __init__(self, x, y, z):
-        self.X = x
-        self.Y = y
-        self.Z = z
-
-class Atom:
-    def __init__(self, element, x, y, z):
-        self.symbol = element
-        key = self.symbol.lower()
-        if key not in atomicMass:
-            raise ValueError(f"Unrecognized element symbol '{element}': no atomic mass on file")
-        self.rMass = float(atomicMass[key])
-        self.coord = Coordinate(x, y, z)
-        # These will be updated for each mode
-        self.dispVec = np.zeros(3)
-        self.dispLength = 0.0
-
-    # Helper accessors used in atom.py calculations
-    def x(self): return self.coord.X
-    def y(self): return self.coord.Y
-    def z(self): return self.coord.Z
-
-    def translation(self, XC, YC, ZC):
-        self.coord.X -= XC
-        self.coord.Y -= YC
-        self.coord.Z -= ZC
 
 # --- Main Scorer Class ---
 
@@ -47,19 +19,25 @@ class ModeScorer:
     def __init__(self, atom_symbols, coords, bonds):
         """Initialize from parser output (atom symbols, coords, 0-based bond index pairs)."""
         self.n = len(atom_symbols)
-        self.atoms = []
-        
-        # Create Atom objects
-        for i in range(self.n):
-            sym = atom_symbols[i]
-            x, y, z = coords[i]
-            self.atoms.append(Atom(sym, x, y, z))
-            
+        self.symbols = list(atom_symbols)
+
+        masses = []
+        for sym in self.symbols:
+            key = sym.lower()
+            if key not in atomicMass:
+                raise ValueError(f"Unrecognized element symbol '{sym}': no atomic mass on file")
+            masses.append(atomicMass[key])
+        self.masses = np.array(masses, dtype=float)
+
+        self.coords = np.array(coords, dtype=float)  # (n, 3)
+        self.dispVecs = np.zeros((self.n, 3))         # updated per mode, see calculate_scores()
+        self.dispLengths = np.zeros(self.n)
+
         # Bond Setup
         self.nBond = len(bonds)
         self.bList = bonds
         self.bVec = []
-        
+
         # Initial bond calculation
         self.update_bond_vectors()
 
@@ -68,55 +46,30 @@ class ModeScorer:
 
     def update_bond_vectors(self):
         """Recalculate bond vectors based on current atom positions."""
-        self.bVec = []
-        for (i, j) in self.bList:
-            vec = np.array([
-                self.atoms[j].x() - self.atoms[i].x(),
-                self.atoms[j].y() - self.atoms[i].y(),
-                self.atoms[j].z() - self.atoms[i].z()
-            ])
-            self.bVec.append(vec)
+        self.bVec = [self.coords[j] - self.coords[i] for (i, j) in self.bList]
 
     def COM(self):
         """Calculate Center of Mass and translate molecule."""
-        totalMass = 0.0
-        XMass = 0.0
-        YMass = 0.0
-        ZMass = 0.0
-        
-        for atom in self.atoms:
-            rMass = atom.rMass
-            totalMass += rMass
-            XMass += rMass * atom.x()
-            YMass += rMass * atom.y()
-            ZMass += rMass * atom.z()
-        
-        if totalMass > 0:
-            XMass /= totalMass
-            YMass /= totalMass
-            ZMass /= totalMass
+        total_mass = self.masses.sum()
+        weighted = (self.masses[:, None] * self.coords).sum(axis=0)
+        com = weighted / total_mass if total_mass > 0 else weighted
+        self.coords = self.coords - com
 
-        for atom in self.atoms:
-            atom.translation(XMass, YMass, ZMass)
-        
         # Update bonds after translation (vectors shouldn't change, but good practice)
         self.update_bond_vectors()
 
     def _build_inertia_tensor(self):
         """Build the moment-of-inertia tensor at the current geometry (shared
         by MIT() and the principal_axes() accessor)."""
-        XX = YY = ZZ = 0.0
-        XY = XZ = YZ = 0.0
-        for atom in self.atoms:
-            rMass = atom.rMass
-            x, y, z = atom.x(), atom.y(), atom.z()
+        x, y, z = self.coords[:, 0], self.coords[:, 1], self.coords[:, 2]
+        m = self.masses
 
-            XX += rMass * (y**2 + z**2)
-            YY += rMass * (x**2 + z**2)
-            ZZ += rMass * (x**2 + y**2)
-            XY -= rMass * x * y
-            XZ -= rMass * x * z
-            YZ -= rMass * y * z
+        XX = np.sum(m * (y**2 + z**2))
+        YY = np.sum(m * (x**2 + z**2))
+        ZZ = np.sum(m * (x**2 + y**2))
+        XY = -np.sum(m * x * y)
+        XZ = -np.sum(m * x * z)
+        YZ = -np.sum(m * y * z)
 
         return np.array([
             [XX, XY, XZ],
@@ -141,50 +94,21 @@ class ModeScorer:
         # Sign-fix heuristic (ported from legacy atom.py, not independently
         # derived here): orient axes so the heaviest atom's projected
         # coordinates sum positive.
-        heaviest_idx = 0
-        max_mass = -1.0
-        for i, atom in enumerate(self.atoms):
-            if atom.rMass > max_mass:
-                max_mass = atom.rMass
-                heaviest_idx = i
-
-        h_atom = self.atoms[heaviest_idx]
-        h_x = h_atom.x()
-        h_y = h_atom.y()
-        h_z = h_atom.z()
-
-        new_h_x = h_x * rot[0, 0] + h_y * rot[1, 0] + h_z * rot[2, 0]
-        new_h_y = h_x * rot[0, 1] + h_y * rot[1, 1] + h_z * rot[2, 1]
-        new_h_z = h_x * rot[0, 2] + h_y * rot[1, 2] + h_z * rot[2, 2]
-
-        if (new_h_x + new_h_y + new_h_z) < 0.0:
+        heaviest_idx = int(np.argmax(self.masses))  # first max on ties, matches a plain scan
+        h_new = self.coords[heaviest_idx] @ rot
+        if h_new.sum() < 0.0:
             rot = -rot
 
-        for atom in self.atoms:
-            x, y, z = atom.x(), atom.y(), atom.z()
-            atom.coord.X = x * rot[0, 0] + y * rot[1, 0] + z * rot[2, 0]
-            atom.coord.Y = x * rot[0, 1] + y * rot[1, 1] + z * rot[2, 1]
-            atom.coord.Z = x * rot[0, 2] + y * rot[1, 2] + z * rot[2, 2]
-
+        self.coords = self.coords @ rot
         self.update_bond_vectors()  # recompute rather than rotate existing vectors
 
         if modes is not None:
             if rotate_modes:
                 rotated_modes = []
                 for mode in modes:
-                    vecs = mode['vector']  # shape (N, 3)
-                    new_vecs = np.zeros_like(vecs)
-
-                    for a in range(self.n):
-                        x, y, z = vecs[a][0], vecs[a][1], vecs[a][2]
-                        new_vecs[a][0] = x * rot[0, 0] + y * rot[1, 0] + z * rot[2, 0]
-                        new_vecs[a][1] = x * rot[0, 1] + y * rot[1, 1] + z * rot[2, 1]
-                        new_vecs[a][2] = x * rot[0, 2] + y * rot[1, 2] + z * rot[2, 2]
-
                     new_mode = mode.copy()
-                    new_mode['vector'] = new_vecs
+                    new_mode['vector'] = mode['vector'] @ rot  # shape (N, 3) @ (3, 3)
                     rotated_modes.append(new_mode)
-
                 return rotated_modes
             else:
                 return modes
@@ -217,18 +141,11 @@ class ModeScorer:
         modes = []
         labels = ['Rx', 'Ry', 'Rz']
 
-        rx_vecs = np.zeros((self.n, 3))
-        ry_vecs = np.zeros((self.n, 3))
-        rz_vecs = np.zeros((self.n, 3))
-
-        for a in range(self.n):
-            x = self.atoms[a].x()
-            y = self.atoms[a].y()
-            z = self.atoms[a].z()
-
-            rx_vecs[a] = np.array([0.0, -z, y])
-            ry_vecs[a] = np.array([z, 0.0, -x])
-            rz_vecs[a] = np.array([-y, x, 0.0])
+        x, y, z = self.coords[:, 0], self.coords[:, 1], self.coords[:, 2]
+        zeros = np.zeros(self.n)
+        rx_vecs = np.stack([zeros, -z, y], axis=1)
+        ry_vecs = np.stack([z, zeros, -x], axis=1)
+        rz_vecs = np.stack([-y, x, zeros], axis=1)
 
         for vecs, lbl in zip([rx_vecs, ry_vecs, rz_vecs], labels):
             flat_norm = np.linalg.norm(vecs)
@@ -245,9 +162,8 @@ class ModeScorer:
 
     def calculate_scores(self, mode_vector):
         """Load a mode's displacement vector (N_atoms, 3) and calculate all scores."""
-        for i in range(self.n):
-            self.atoms[i].dispVec = mode_vector[i]
-            self.atoms[i].dispLength = sizeVec(mode_vector[i])
+        self.dispVecs = np.asarray(mode_vector, dtype=float)
+        self.dispLengths = np.sqrt(np.sum(self.dispVecs**2, axis=1))
 
         scores = {
             "T": self.Tscore(),
@@ -271,19 +187,16 @@ class ModeScorer:
     def Tscore(self):
         """Calculates Translational Scores (Tx, Ty, Tz)."""
         n = self.n
-        Tx, Ty, Tz = 0.0, 0.0, 0.0
+        # EPS_DENOM (not the looser EPS_DISP) is the noise floor here:
+        # EPS_DISP=1e-8 is too permissive against the ~1e-8-1e-6 noise
+        # Gaussian prints for atoms symmetry-required to be exactly zero
+        # in degenerate EMIT eigenvectors, which would otherwise be
+        # promoted to a full-weight unit-vector contribution.
+        mask = self.dispLengths > EPS_DENOM
+        unit_disp = np.zeros((n, 3))
+        unit_disp[mask] = self.dispVecs[mask] / self.dispLengths[mask, None]
+        Tx, Ty, Tz = unit_disp.sum(axis=0)
 
-        for atom in self.atoms:
-            # EPS_DENOM (not the looser EPS_DISP) is the noise floor here:
-            # EPS_DISP=1e-8 is too permissive against the ~1e-8-1e-6 noise
-            # Gaussian prints for atoms symmetry-required to be exactly zero
-            # in degenerate EMIT eigenvectors, which would otherwise be
-            # promoted to a full-weight unit-vector contribution.
-            if atom.dispLength > EPS_DENOM:
-                Tx += atom.dispVec[0] / atom.dispLength
-                Ty += atom.dispVec[1] / atom.dispLength
-                Tz += atom.dispVec[2] / atom.dispLength
-        
         return {
             'x': Tx * (1.0/float(n)),
             'y': Ty * (1.0/float(n)),
@@ -305,18 +218,16 @@ class ModeScorer:
                 np.array([0.0, 0.0, 1.0]))
         out = {}
         for key, Q in zip('xyz', axes):
-            total = 0.0
-            n_off = 0  # off-axis atom count = N - N_Q
-            for atom in self.atoms:
-                r = np.array([atom.x(), atom.y(), atom.z()])
-                r_perp = r - np.dot(r, Q) * Q
-                lr = sizeVec(r_perp)
-                if lr <= EPS_DENOM:                # on the axis -> excluded (N_Q)
-                    continue
-                n_off += 1
-                ld = atom.dispLength
-                if ld > EPS_DENOM:                 # unit(0):=0 otherwise
-                    total += np.dot(np.cross(r_perp, atom.dispVec), Q) / (lr * ld)
+            r_perp = self.coords - np.outer(self.coords @ Q, Q)
+            lr = np.sqrt(np.sum(r_perp**2, axis=1))
+            off_mask = lr > EPS_DENOM              # on the axis -> excluded (N_Q)
+            n_off = int(np.sum(off_mask))
+
+            ld = self.dispLengths
+            d_mask = off_mask & (ld > EPS_DENOM)    # unit(0):=0 otherwise
+            cross = np.cross(r_perp[d_mask], self.dispVecs[d_mask])
+            total = np.sum((cross @ Q) / (lr[d_mask] * ld[d_mask]))
+
             out[key] = total / n_off if n_off > 0 else 0.0
         return out
 
@@ -343,14 +254,12 @@ class ModeScorer:
         rel_db = []
         for b in range(self.nBond):
             idx1, idx2 = self.bList[b]
-            atom1 = self.atoms[idx1]
-            atom2 = self.atoms[idx2]
 
             bVec_curr = self.bVec[b]  # equilibrium bond vector
-            bLength = sizeVec(bVec_curr)
+            bLength = size_vec(bVec_curr)
 
-            delDisp = atom2.dispVec - atom1.dispVec
-            delDispLength = sizeVec(delDisp)
+            delDisp = self.dispVecs[idx2] - self.dispVecs[idx1]
+            delDispLength = size_vec(delDisp)
 
             dot_val = np.dot(delDisp, bVec_curr)
 
@@ -359,7 +268,7 @@ class ModeScorer:
             sqdisps.append(delDispLength**2)
 
             if bLength > EPS_NORM:
-                rel_db.append((sizeVec(bVec_curr + delDisp) - bLength) / bLength)
+                rel_db.append((size_vec(bVec_curr + delDisp) - bLength) / bLength)
             else:
                 rel_db.append(0.0)
         return terms, signed_terms, sqdisps, rel_db
@@ -396,8 +305,8 @@ class ModeScorer:
             s_AB = signed_terms[b] / denom if denom > EPS_DENOM else 0.0
             bonds.append({
                 "i": idx1, "j": idx2, "s_AB": s_AB, "rel_db": rel_db[b],
-                "i_label": f"{self.atoms[idx1].symbol}{idx1 + 1}",
-                "j_label": f"{self.atoms[idx2].symbol}{idx2 + 1}",
+                "i_label": f"{self.symbols[idx1]}{idx1 + 1}",
+                "j_label": f"{self.symbols[idx2]}{idx2 + 1}",
             })
 
         total = sum(abs(bd["s_AB"]) for bd in bonds)

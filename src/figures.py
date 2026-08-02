@@ -1842,12 +1842,20 @@ def plot_cpu_time_benchmark(
 
     # Per-N median trend line (unjittered, true N on the x-axis) -- makes
     # the "barely grows with N" claim visible at a glance, not just implied
-    # by the scatter cloud.
-    med = df.groupby("N")[["gaussian_freq_cpu_s", "classifier_cpu_s"]].median()
-    ax.plot(med.index, med["gaussian_freq_cpu_s"], color=COLORS["cost_gaussian"],
+    # by the scatter cloud. Colored to match each series' own marker (black
+    # for Gaussian, green for the classifier), not the old orange, so line
+    # and marker read as the same series.
+    med = df.groupby("N")[["gaussian_freq_cpu_s", "classifier_cpu_s"]].mean()
+    ax.plot(med.index, med["gaussian_freq_cpu_s"], color="black",
             lw=1.1, ls="--", zorder=4, alpha=0.8)
     ax.plot(med.index, med["classifier_cpu_s"], color=COLORS["cost_classifier"],
             lw=1.1, ls="--", zorder=4, alpha=0.8)
+    # Proxy legend entry (no real data) explaining what the dashed lines
+    # are -- a per-N summary statistic, not a fit -- and how many molecules
+    # went into each N's point, since that varies a lot (N=4: 24 molecules,
+    # N=12: 1 molecule) and changes how much the median should be trusted.
+    median_handle = Line2D([0], [0], color="gray", lw=1.1, ls="--",
+                            label=(f"Mean"))
 
     ax.set_xlabel("Number of atoms, $N$")
     ax.set_ylabel("CPU time (s)")
@@ -1860,7 +1868,13 @@ def plot_cpu_time_benchmark(
         # rendering. AsBr3/PBr3 (the far larger pre-filtering outliers an
         # earlier version of this comment warned about) are MP2/6-311G, not
         # MP2/3-21G, and are excluded from `df` by the mp2_321g filter above.
-        ax.set_ylim(0, df["gaussian_freq_cpu_s"].max() * 1.28)
+        # Bottom is a small NEGATIVE offset, not 0: the classifier series
+        # (~0.002-0.03s) sits so close to zero that markers centered right
+        # on the y=0 axis line get half-swallowed by it and read as
+        # invisible -- lowering the axis floor below zero lifts them
+        # visually clear of the line (nothing is actually plotted <0).
+        y_top = df["gaussian_freq_cpu_s"].max() * 1.28
+        ax.set_ylim(-0.06 * y_top, y_top)
     else:
         ax.set_yscale("log")
         ax.set_ylim(df["classifier_cpu_s"].min() * 0.5,
@@ -1868,8 +1882,12 @@ def plot_cpu_time_benchmark(
     # "upper right": nothing near N=12 (the lone large-N point, 19.1s)
     # comes close to the y=55s N=3-4 ceiling, leaving that corner clear.
     # Also clear on log scale -- verified by rendering.
-    ax.legend(loc="upper right", frameon=False, handletextpad=0.4,
-              labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)
+    handles, labels = ax.get_legend_handles_labels()
+    handles.append(median_handle)
+    labels.append(median_handle.get_label())
+    ax.legend(handles=handles, labels=labels, loc="upper right", frameon=False,
+              handletextpad=0.4, labelspacing=0.35, borderaxespad=0.3,
+              fontsize=LEGEND_FONTSIZE)
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -1902,8 +1920,8 @@ def plot_cpu_time_benchmark(
             "median": float(ratio.median()),
             "max": float(ratio.max()), "max_molecule": str(df.loc[ratio.idxmax(), "molecule"]),
         },
-        "classifier_median_cpu_s_by_N": med["classifier_cpu_s"].to_dict(),
-        "gaussian_median_cpu_s_by_N": med["gaussian_freq_cpu_s"].to_dict(),
+        "classifier_mean_cpu_s_by_N": med["classifier_cpu_s"].to_dict(),
+        "gaussian_mean_cpu_s_by_N": med["gaussian_freq_cpu_s"].to_dict(),
         "framing": ("empirical replacement/companion for the theoretical "
                     "Big-O 'Computational cost' section (tab:cost); PROPOSED "
                     "label fig:cputime, not yet wired into the .tex. Filtered "

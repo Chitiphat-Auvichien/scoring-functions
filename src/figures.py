@@ -562,15 +562,12 @@ def plot_benzene_normal_modes(
         "pdf": pdf_path, "png": png_path,
         "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL for the "
                                "full T/R/S/B/SB scheme -- same mapping as "
-                               "fig:benzene panel (a); a NEW figure, "
-                               "fig:benzene itself is untouched. ONE marker "
-                               "shape (circle) for all points, all rendered "
-                               "hollow (IDEAL_STYLE['no']) -- consistency fix, "
-                               "2026-07-02 follow-up: CATEGORY_MARKER's "
-                               "per-category shapes are no longer used here "
-                               "(color is the only category encoding, "
-                               "matching fig:bondscores/fig:boxplots/"
-                               "fig:modemixing's convention)."),
+                               "fig:benzene panel (a). ONE marker shape "
+                               "(circle) for all points, all rendered "
+                               "hollow (IDEAL_STYLE['no']); color is the "
+                               "only category encoding, matching "
+                               "fig:bondscores/fig:boxplots/fig:modemixing's "
+                               "convention."),
         "n_points": len(normal),
         "freq_range": (float(normal["Freq"].min()), float(normal["Freq"].max())),
         "vs_range": (float(normal["V_Stretch"].min()), float(normal["V_Stretch"].max())),
@@ -815,13 +812,12 @@ def plot_confusion_matrix(
         "pdf": pdf_path, "png": png_path,
         "nonideal_footer_text": footer_text,
         "layout": ("Single panel: joint external (Tx..Rz) + internal "
-                   "(stretch/bend/mixed) confusion matrix -- restructured "
-                   "this session from an internal-only 1x2 heatmap+bars "
-                   "layout. Retention/migration bars (formerly panel (b)) "
-                   "moved to plot_confusion_retention_migration (SI, not "
-                   "main text). No divider line between the external and "
-                   "internal blocks, and no mixed_external ('T/R*') column "
-                   "(author decision, 2026-07-09; the column was empty)."),
+                   "(stretch/bend/mixed) confusion matrix. Retention/"
+                   "migration bars live separately in "
+                   "plot_confusion_retention_migration (SI, not main text). "
+                   "No divider line between the external and internal "
+                   "blocks, and no mixed_external ('T/R*') column (empty "
+                   "for this dataset)."),
         "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL for "
                                "STRETCHING/BENDING/MIXED_STRETCH_BEND and the "
                                "6 individual-axis entries -- same mapping as "
@@ -896,9 +892,8 @@ def plot_confusion_retention_migration(
         "nonideal_n": n_nonideal,
         "nonideal_retention": dict(zip(cats_n, retention_n)),
         "nonideal_migration_to_mixed": dict(zip(cats_n, migration_n)),
-        "framing": ("SI companion, split out of plot_confusion_matrix "
-                     "(fig:confusion) this session -- same numbers, just "
-                     "moved out of the main-text figure since Figure 6's own "
+        "framing": ("SI companion to plot_confusion_matrix (fig:confusion); "
+                     "kept out of the main-text figure since Figure 6's own "
                      "mode-count breakdown and the manuscript prose already "
                      "state the retention numbers."),
     }
@@ -1060,11 +1055,11 @@ def plot_benzene_internal_confusion(
         "crossover_ext_ref_to_internal_pred": crossover_ext_ref_to_internal_pred,
         "crossover_internal_ref_to_ext_pred": crossover_internal_ref_to_ext_pred,
         "note": ("4x4 joint matrix: benzene's 6 external T/R modes collapsed "
-                 "to a single T/R row/column (2026-07-09, author decision -- "
-                 "per-axis detail lives in fig:confusion instead), turning "
-                 "the prose's '6/6 recovered exactly' claim into an actual "
-                 "checked matrix cell without repeating fig:confusion's "
-                 "per-axis breakdown. No divider line and no mixed_external "
+                 "to a single T/R row/column (per-axis detail lives in "
+                 "fig:confusion instead), turning the prose's '6/6 recovered "
+                 "exactly' claim into an actual checked matrix cell without "
+                 "repeating fig:confusion's per-axis breakdown. No divider "
+                 "line and no mixed_external "
                  "('T/R*') column (verified empty). Precision/recall bar "
                  "panel remains split out to plot_benzene_confusion_"
                  "precision_recall (SI, not main text; unaffected by this "
@@ -1460,13 +1455,10 @@ def plot_mode_mixing(
         "n_ideal_modes": n_ideal,
         "n_nonideal_modes": n_nonideal,
         "tau_S": th.tau_S, "tau_B": th.tau_B,
-        "irrep_degeneracy_panel": ("NOT BUILT in this figure -- see the new, "
+        "irrep_degeneracy_panel": ("NOT BUILT in this figure -- see the "
                                    "separate SI figure plot_irrep_coupling "
-                                   "(fig_irrep_coupling) below, added "
-                                   "2026-07-06 once the molecule/panel form "
-                                   "was confirmed (AB3 trigonal-planar / AB2 "
-                                   "bent series, reproducing the group's "
-                                   "earlier report's Figures 3c/3d)."),
+                                   "(fig_irrep_coupling) below (AB3 "
+                                   "trigonal-planar / AB2 bent series)."),
     }
     return summary
 
@@ -1625,9 +1617,9 @@ def plot_irrep_coupling(
     summary = {
         "pdf": pdf_path, "png": png_path,
         "shared_categories": ("reuses CATEGORY_COLOR's bending/stretching "
-                               "hues; ALL markers unfilled/hollow (2026-07-06 "
-                               "revision -- fill no longer encodes anything "
-                               "here). Marker SHAPE now encodes irrep identity: "
+                               "hues; ALL markers unfilled/hollow (fill does "
+                               "not encode anything in this figure). Marker "
+                               "SHAPE encodes irrep identity: "
                                "panel (a) A2″=circle, E'=triangle (shared "
                                "between bend/stretch), A1'=square; panel (b) "
                                "A1=diamond (shared between bend/stretch), "
@@ -1759,8 +1751,8 @@ def plot_cpu_time_benchmark(
     fit on per-N medians), but undersells the magnitude gap. ``label``
     overrides the scale-based default if given.
 
-    FILTERING (added 2026-08-01): ``cpu_time_benchmark.csv`` now carries
-    ``mp2_321g``/``method_basis`` joined from ``data/mol_list_method.csv`` --
+    FILTERING: ``cpu_time_benchmark.csv`` carries ``mp2_321g``/
+    ``method_basis`` joined from ``data/mol_list_method.csv`` --
     18 of the 68 library molecules were run at a different Gaussian
     method/basis (e.g. MP2/6-311G) for SCF-convergence or symmetry reasons,
     confounding a bare "CPU time vs. N" reading with "CPU time vs. method".
@@ -1846,10 +1838,9 @@ def plot_cpu_time_benchmark(
     ax.set_xlim(df["N"].min() - 0.6, df["N"].max() + 0.6)
     if scale == "linear":
         # Headroom above the tallest point (BrH3, N=4, 55.3s) so the legend
-        # box sits in clear space rather than overlapping it -- verified by
-        # rendering. AsBr3/PBr3 (the far larger pre-filtering outliers an
-        # earlier version of this comment warned about) are MP2/6-311G, not
-        # MP2/3-21G, and are excluded from `df` by the mp2_321g filter above.
+        # box sits in clear space rather than overlapping it. AsBr3/PBr3 (the
+        # far larger MP2/6-311G outliers) are excluded from `df` by the
+        # mp2_321g filter above.
         # Bottom is a small NEGATIVE offset, not 0: the classifier series
         # (~0.002-0.03s) sits so close to zero that markers centered right
         # on the y=0 axis line get half-swallowed by it and read as
@@ -1907,7 +1898,7 @@ def plot_cpu_time_benchmark(
         "framing": ("empirical replacement/companion for the theoretical "
                     "Big-O 'Computational cost' section (tab:cost); PROPOSED "
                     "label fig:cputime, not yet wired into the .tex. Filtered "
-                    "to mp2_321g==True (2026-08-01) -- excludes "
+                    "to mp2_321g==True, excluding "
                     f"{n_excluded} molecules run at a different Gaussian "
                     "method/basis, to avoid confounding CPU-time-vs-N with "
                     "CPU-time-vs-method."),
@@ -1929,14 +1920,13 @@ def plot_gaussian_nbasis_scaling(
     reason: different methods/basis choices (MP2 vs. B3LYP vs. HF,
     correlation treatment, ECPs) have different cost *prefactors and
     exponents* even at matched N_basis, so a single power-law fit across
-    mixed methods is confounded by method choice on top of N_basis --
-    verified visually (2026-08-02): plotting the excluded "other
-    method/basis" molecules showed them sitting systematically ABOVE a fit
-    line built from all 68, not scattered around it, i.e. genuinely
-    off-trend rather than just noisier. The 18 excluded molecules are
-    dropped entirely (not plotted at all, not just excluded from the fit) --
-    they're off a different cost curve, so showing them alongside the
-    MP2/3-21G trend doesn't add information, only clutter.
+    mixed methods is confounded by method choice on top of N_basis: the
+    excluded "other method/basis" molecules sit systematically ABOVE a fit
+    line built from all 68, not scattered around it -- genuinely off-trend
+    rather than just noisier. The 18 excluded molecules are dropped
+    entirely (not plotted at all, not just excluded from the fit) -- they're
+    off a different cost curve, so showing them alongside the MP2/3-21G
+    trend doesn't add information, only clutter.
 
     ``scale`` picks both axes together: "log" (default, label
     "fig_gaussian_nbasis") shows a single fit -- log-log OLS (``np.polyfit``
@@ -2051,11 +2041,11 @@ def plot_gaussian_nbasis_scaling(
         "fit_vs_N_for_comparison": {"exponent": float(slope_N), "r2": float(r2_N)},
         "framing": ("SI/diagnostic companion to fig:cputime, PROPOSED label "
                     "fig:gaussian_nbasis, not yet wired into the .tex. Fit "
-                    "restricted to mp2_321g==True (2026-08-02) -- mixing "
-                    "methods confounds the N_basis fit the same way mixing "
-                    "methods confounded the N fit in fig:cputime. Shows "
-                    "n_basis (not N) is Gaussian's real cost-scaling "
-                    "variable within a fixed method/basis."),
+                    "restricted to mp2_321g==True -- mixing methods "
+                    "confounds the N_basis fit the same way mixing methods "
+                    "confounded the N fit in fig:cputime. Shows n_basis "
+                    "(not N) is Gaussian's real cost-scaling variable "
+                    "within a fixed method/basis."),
     }
 
 

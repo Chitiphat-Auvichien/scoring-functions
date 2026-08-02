@@ -266,13 +266,11 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
     # Exclude any ref_label outside the 4 recognized categories: a literal
     # literature "SB" (genuine mixed) label, e.g. benzene modes 21/22, would
     # otherwise inflate a category's n_pred (precision's denominator)
-    # without ever contributing a true positive -- this previously corrupted
-    # bend precision from 1.000 to 0.99267 (commit 69d549e) before this
-    # filter was added. "SB" answers a different question (does the
-    # literature call this mode genuinely mixed?) than this function's
-    # retention/precision accounting (did a stretch/bend keep its label
-    # under non-ideal mass effects?) -- see src/benzene_validation.py for
-    # the former's own 3-class table.
+    # without ever contributing a true positive. "SB" answers a different
+    # question (does the literature call this mode genuinely mixed?) than
+    # this function's retention/precision accounting (did a stretch/bend
+    # keep its label under non-ideal mass effects?) -- see
+    # src/benzene_validation.py for the former's own 3-class table.
     _KNOWN_REF_LABELS = ("stretch", "bend", "translation", "rotation")
     df = df[df["ref_label"].isin(_KNOWN_REF_LABELS)]
 

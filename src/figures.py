@@ -54,6 +54,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import matplotlib.patheffects as pe
+from scipy.optimize import curve_fit
 
 from src.classifier import (
     Thresholds, vib_label, classification_bucket,
@@ -1938,11 +1939,24 @@ def plot_gaussian_nbasis_scaling(
     MP2/3-21G trend doesn't add information, only clutter.
 
     ``scale`` picks both axes together: "log" (default, label
-    "fig_gaussian_nbasis") shows the power-law fit as a straight line and is
-    the more legible/quantitative view; "linear" (label
-    "fig_gaussian_nbasis_linear") shows the same fit as a steep upward curve
-    and makes the cost explosion at large N_basis visually dramatic instead.
-    Both are generated per standing instruction. ``label`` overrides the
+    "fig_gaussian_nbasis") shows a single fit -- log-log OLS (``np.polyfit``
+    on ln(t) vs. ln(N_basis)), which appears as a straight line here, the
+    standard way to report a power-law exponent. "linear" (label
+    "fig_gaussian_nbasis_linear") shows TWO fits: that same log-log-OLS fit
+    (transformed back to linear space) plus a second fit computed by
+    nonlinear least squares directly in linear space (``scipy.curve_fit``,
+    minimizing actual CPU-second residuals, not log residuals). These
+    disagree (exponent ~2.0 vs. ~3.2) because log-log OLS minimizes
+    *relative* error uniformly across ~2 orders of magnitude of CPU time, so
+    it is not drawn toward matching the largest-N_basis points in absolute
+    (second) terms the way a human eye judging a linear plot expects; the
+    linear-space fit is the one that actually minimizes visual vertical
+    distance on that panel. Both are legitimate, answering different
+    questions ("what's the exponent, weighting all points by relative
+    error" vs. "what curve best tracks absolute CPU-time on this axis") --
+    shown together so the reader sees the disagreement rather than one
+    fit presented as if it were the only answer. Both scale variants are
+    generated per standing instruction. ``label`` overrides the
     scale-based default if given.
 
     Motivation: fig:cputime's "CPU time vs. N" comparison is fair to the
@@ -1967,10 +1981,25 @@ def plot_gaussian_nbasis_scaling(
     df = df_all[df_all["mp2_321g"] == True].copy()  # noqa: E712 -- explicit bool filter
     n_excluded = len(df_all) - len(df)
 
-    log_n, log_t = np.log(df["n_basis"].to_numpy(float)), np.log(df["gaussian_freq_cpu_s"].to_numpy(float))
+    n_basis_arr = df["n_basis"].to_numpy(float)
+    t_arr = df["gaussian_freq_cpu_s"].to_numpy(float)
+    log_n, log_t = np.log(n_basis_arr), np.log(t_arr)
+
+    # Fit 1: log-log OLS -- minimizes relative/log-space error, the
+    # conventional way to report a power-law exponent.
     slope, intercept = np.polyfit(log_n, log_t, 1)
     pred = slope * log_n + intercept
     r2 = 1 - np.sum((log_t - pred) ** 2) / np.sum((log_t - log_t.mean()) ** 2)
+
+    # Fit 2: nonlinear least squares directly in linear (CPU-second) space --
+    # minimizes the actual vertical distance a reader judges on a linear
+    # plot. p0 seeded from Fit 1 so curve_fit starts near the right basin.
+    def _powerlaw(n, a, b):
+        return a * n ** b
+    (a_lin, b_lin), _ = curve_fit(_powerlaw, n_basis_arr, t_arr,
+                                   p0=[np.exp(intercept), slope])
+    pred_lin = _powerlaw(n_basis_arr, a_lin, b_lin)
+    r2_lin = 1 - np.sum((t_arr - pred_lin) ** 2) / np.sum((t_arr - t_arr.mean()) ** 2)
 
     fig, ax = plt.subplots(figsize=(4.6, 3.9))
 
@@ -1981,7 +2010,15 @@ def plot_gaussian_nbasis_scaling(
     xx = np.linspace(df["n_basis"].min() * 0.9, df["n_basis"].max() * 1.1, 100)
     ax.plot(xx, np.exp(intercept) * xx ** slope, ls="--", lw=1.2,
             color=COLORS["threshold"], zorder=4,
-            label=f"fit: $t \\propto N_{{basis}}^{{{slope:.2f}}}$ ($R^2$={r2:.2f})")
+            label=f"log-log fit: $t \\propto N_{{basis}}^{{{slope:.2f}}}$ ($R^2$={r2:.2f})")
+    if scale == "linear":
+        # Distinct dash pattern (dotted, not dashed) + plain black (not a
+        # COLORS entry -- this is a one-off diagnostic overlay, not a
+        # reusable classification-category encoding) so the two fits stay
+        # visually distinguishable.
+        ax.plot(xx, _powerlaw(xx, a_lin, b_lin), ls=":", lw=1.6,
+                color="black", zorder=4,
+                label=f"linear-space fit: $t \\propto N_{{basis}}^{{{b_lin:.2f}}}$ ($R^2$={r2_lin:.2f})")
 
     if scale == "log":
         ax.set_xscale("log")
@@ -2009,7 +2046,8 @@ def plot_gaussian_nbasis_scaling(
         "n_molecules_fit": len(df),
         "n_excluded_non_mp2_321g": int(n_excluded),
         "n_basis_range_fit": (int(df["n_basis"].min()), int(df["n_basis"].max())),
-        "fit_vs_n_basis": {"exponent": float(slope), "r2": float(r2)},
+        "fit_vs_n_basis_loglog": {"exponent": float(slope), "r2": float(r2)},
+        "fit_vs_n_basis_linear_space": {"exponent": float(b_lin), "r2_linear": float(r2_lin)},
         "fit_vs_N_for_comparison": {"exponent": float(slope_N), "r2": float(r2_N)},
         "framing": ("SI/diagnostic companion to fig:cputime, PROPOSED label "
                     "fig:gaussian_nbasis, not yet wired into the .tex. Fit "

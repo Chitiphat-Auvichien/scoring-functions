@@ -10,13 +10,54 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-08-01 (**Empirical CPU-time benchmark added** — new `scripts/benchmark_cpu_time.py`
-> compares Gaussian's freq-only job-step CPU time against `classify_all_modes`' own CPU time across all
-> 69 `data/logs/*.log` molecules (N=3..12) -> `data/results/cpu_time_benchmark.csv`. Meant to replace the
-> manuscript's theoretical Big-O "Computational cost" section (§8/`JCC_SI_computational_cost.tex`) with a
-> measured one. See RESUME HERE below.)
+> Last updated: 2026-08-03 (**Dead-code/comment/structural refactor of `main.py`+`src/*.py`** — see
+> RESUME HERE below. **Also: `pytest` is currently 114/119, NOT 105/105 green** — 5 pre-existing failures
+> traced to stale test logic, not a scoring bug; see that entry before assuming a regression.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-08-03 (refactor session — dead code, narrative comments, structural fixes):** Three-part cleanup
+> of the core program (`main.py`+`src/*.py`; `ped/`, `scripts/`, `ped/archive_python_ped/` explicitly
+> out of scope — see that session's plan for why). Commits `d4ff4b0`/`a3419a8`/`5975a3a`.
+> **Part 1 (dead code):** deleted `scoring.normalize()`, `scoring.axis_blocks()`+`DEGEN_TOL`,
+> `utils.get_unit_vector()`, `figures._WORKED_EXAMPLE_MODES`, `main.run_pipeline()` — all confirmed
+> zero-caller via grep across `main.py`/`src/`/`tests/`/`scripts/`, both before AND after deletion.
+> **Correction to a stale claim at (see "2026-06-30" Tscore-fix entry below): `principal_axes()` is
+> NOT dead — `classifier.is_linear()` calls it; only `axis_blocks()`/`DEGEN_TOL` were dead.**
+> **Part 2:** stripped dated/narrative comments (`REMOVED <date>`, `<date> revision/follow-up`, a
+> comment narrating a previous version of itself) from `figures.py`'s per-figure summary dicts/docstrings
+> and `calibrate.py`'s SB-filter comment (dropped commit-hash archaeology, kept the why). Also caught
+> `data/figures/*` stale since 2026-07-23 relative to code (one real content diff: the `d87f142` session's
+> `_LEGEND_MERGE_TEXT` "clean T/R"→"T/R" rewording had never been regenerated into the PNG/PDF) —
+> regenerated and committed.
+> **Part 3 (structural):** new `utils.find_file()` (replaces 4 duplicate extension-probe
+> implementations), new `scoring.format_bond_map()`/`parse_bond_string()` (replaces 2 duplicate
+> builders + 1 duplicate parser of the `"iLabel-jLabel:value"` bond-string format), new
+> `library_ingest.load_library_scores()` (replaces 2 duplicate `lib_df-or-read-csv` idioms in
+> `benzene_validation.py`/`flag_validation.py`). `scoring.Atom.__init__` now raises on an unrecognized
+> element symbol instead of silently defaulting to mass 1.0. `parser._parse_connectivity`'s bare
+> `except Exception: pass` narrowed to `(OSError, UnicodeDecodeError, IndexError)` + `warnings.warn`.
+> `scoring._assert_score_ranges`/`score_bonds` and `projection.project_emit`'s bare `assert` invariant
+> checks converted to explicit `raise ValueError` (matches the rest of the codebase, survives
+> `python -O`). `figures.plot_benzene_normal_modes` now reads `Thresholds.calibrated()` live inside the
+> function instead of baking `TAU_S`/`TAU_B` into module globals at import time. Verified
+> `library_scores.csv`/`thresholds.json` byte-identical and every figure PNG byte-identical before/after
+> (only regenerated-PDF metadata/timestamps differ, not committed). `ModeScorer`'s `Atom`/`Coordinate`
+> representation (camelCase, legacy-`atom.py`-style method accessors) is INTENTIONALLY left untouched —
+> real fix touches the numerical core directly; deferred to its own future pass, not bundled here.
+> **Pre-existing test-failure finding (not fixed this session, diagnosed only):** `pytest` is 114/119,
+> not the 105/105 last recorded (2026-07-24 entry below) — reproduces identically on a clean pre-refactor
+> checkout, so NOT caused by this session's edits. All 5 failures
+> (`test_bond_decomposition_sums_to_vscore`, `test_bond_scores_sum_to_v_stretch`,
+> `test_water_normal_vibrations`, `test_score_geometry_molecule_water_direct`,
+> `test_benzene_mixed_bond_diagnostic_mode_19...`) trace to the SAME root cause: `s_AB` became signed in
+> the 2026-07-30 "Make per-bond s_AB signed" session (below), but these tests still do
+> `sum(b["s_AB"] for b in scorer.score_bonds())` with no `abs()` — summing signed values no longer equals
+> `s[V_S]` (which sums magnitudes) unless every bond in a mode happens to share one sign.
+> `ModeScorer.score_bonds()`'s OWN internal invariant check (`Σ|s_AB| == s[V_S]`, converted to
+> `raise ValueError` this session, see Part 3 above) does NOT fire — the actual scoring invariant still
+> holds; only these 5 tests' own summation is stale. Fix (not done here, next session's pickup): add
+> `abs()` in the 5 call sites' sum expressions and re-verify the pinned expected values.
+>
 > **2026-08-01 (empirical CPU-time benchmark session):** Added `scripts/benchmark_cpu_time.py` (new
 > `scripts/` directory — no prior precedent in the repo for one-off analysis scripts, so this establishes
 > the convention). It reads the atom count `N` from each molecule's parsed geometry and its Gaussian

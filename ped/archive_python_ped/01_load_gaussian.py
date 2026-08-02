@@ -16,10 +16,10 @@ import os
 import sys
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.parser import GaussianParser
 
-LOG_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'logs',
+LOG_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'logs',
                          'C6H6.log')
 
 parser = GaussianParser(LOG_PATH)

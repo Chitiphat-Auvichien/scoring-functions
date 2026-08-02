@@ -1,4 +1,6 @@
 #!/bin/bash
+# NOTE (archived 2026-08-02): this pipeline was moved into archive_python_ped/
+# -- run this script from INSIDE archive_python_ped/, not from ped/ directly.
 set -e
 echo "=== Step 1: load Gaussian geometry + normal modes ==="
 python3 01_load_gaussian.py

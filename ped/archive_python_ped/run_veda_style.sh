@@ -1,4 +1,7 @@
 #!/bin/bash
+# NOTE (archived 2026-08-02): this pipeline was moved into archive_python_ped/
+# -- run this script from INSIDE archive_python_ped/ (it self-locates via
+# BASH_SOURCE below, so it also works if invoked from elsewhere).
 set -e
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"

@@ -47,13 +47,13 @@ import math
 import numpy as np
 import scipy.constants as sc
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.utils import atomicMass
 from src.parser import _values_after_dash_marker
 
 HERE = os.path.dirname(__file__)
-LOG_PATH = os.path.join(HERE, '..', 'data', 'logs', 'C6H6.log')
-VEDA_DIR = os.path.join(HERE, '..', '..', '..', 'veda4')
+LOG_PATH = os.path.join(HERE, '..', '..', 'data', 'logs', 'C6H6.log')
+VEDA_DIR = os.path.join(HERE, '..', '..', '..', '..', 'veda4')
 C_CM_PER_S = 2.99792458e10
 LABEL_WIDTH = 15  # " Frequencies --" etc, measured from A1-91.FMT
 

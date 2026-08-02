@@ -1,94 +1,103 @@
-# Benzene PED (Potential Energy Distribution) from the real JCC data
+# Building VEDA4 input files
 
-Reproduces a full Wilson-Decius-Cross / Pulay redundant-internal-coordinate
-normal mode analysis of benzene, using the **actual Gaussian calculation
-behind the JCC manuscript's benzene results**
-(`data/logs/C6H6.log`, MP2/3-21G, D6h, `freq=hpmodes`) — not
-an independently-optimized geometry/Hessian from a separate quantum
-chemistry run.
+Given a Gaussian-computed geometry/frequency log for any molecule in `data/logs/`,
+this folder builds a VEDA4-readable `.fmt` file, so PED (Potential Energy
+Distribution) analysis comes from the **real VEDA4 program**, not from this
+repo's own from-scratch calculation. `ped/build_veda_fmt.py` is the one script
+you run.
 
-No literature PED table is used as input, and no VEDA4/`.chk`/`formchk`
-detour is needed either: the Gaussian log never prints the literal "Force
-constants in Cartesian coordinates" block VEDA4 requires, but that block
-turns out to be unnecessary. Given all 3N-6 vibrational frequencies and
-their full Cartesian displacement vectors (already in the log, parsed by
-the repo's own `src/parser.py`), the full Cartesian Hessian is exactly
-recoverable by mass-weighted eigendecomposition inversion.
+## What a `.fmt` file is, and why VEDA4 needs it
 
-## Setup
+VEDA4 has no custom Hessian/coordinate input format of its own -- it only ingests
+a Gaussian-log-shaped text excerpt (a `.fmt` file, per `veda4/Veda_use.doc`)
+containing exactly three blocks: (1) one geometry `"...orientation:"` table,
+(2) the Gaussian "Standard" (3-modes-per-group, `"Atom  AN"` header)
+harmonic-frequency/normal-coordinate block, and (3) a `"Force constants in
+Cartesian coordinates:"` lower-triangle Hessian dump in Fortran D-notation.
+VEDA4 auto-perceives connectivity from the geometry itself (confirmed from a
+real VEDA4 session log), so no bond list needs to be encoded anywhere in the
+`.fmt` file.
 
-```bash
-pip install numpy
-```
+## Two frameworks for supplying the Hessian (block 3)
 
-No other dependencies — pure numpy, reusing `src/parser.py` and
-`src/utils.py` from the parent `scoring-functions` repo (added to
-`sys.path` at the top of step 1).
+Blocks 1 and 2 always come verbatim from `data/logs/<mol>.log`, regardless of
+framework. Only block 3 (the Hessian) differs:
 
-## Run
-
-```bash
-bash run_all.sh
-```
-
-or run the five scripts individually in order — each one prints its own
-sanity checks and saves `.npy`/`.txt` files consumed by the next step:
-
-| Script | What it does | Key output |
+| Framework | Source | Requires |
 |---|---|---|
-| `01_load_gaussian.py` | Parses `data/logs/C6H6.log` via the repo's `GaussianParser` — geometry, all 30 HP-precision vibrational modes, connectivity | `opt_coords_ang.npy`, `l_raw.npy`, `vibfreq.npy`, `reduced_mass.npy`, `bonds.txt` |
-| `02_reconstruct_hessian.py` | Reconstructs the full Cartesian Hessian directly from Gaussian's own frequencies + displacement vectors (no VEDA, no `.chk`); validates by re-diagonalizing and recovering Gaussian's own frequencies | `H_cart.npy`, `L.npy` |
-| `03_build_internal_coords.py` | Detects the ring + substituents generically from the parsed bonds graph; defines 42 redundant internal coordinates (6 C-C str, 6 C-H str, 6 C-C-C bend, 12 C-C-H bend, 6 ring torsions, 6 C-H wags) and builds the Wilson B-matrix by finite differences | `B.npy` |
-| `04_compute_ped.py` | F_q = (B⁺)ᵀ H B⁺ (Moore-Penrose pseudoinverse handles the redundancy); PED[n,μ] = D[n,μ]·(F_qD)[n,μ]/λ_μ | `PED_group_pct.npy` |
-| `05_final_table.py` | Groups categories, merges the out-of-plane ambiguity, averages degenerate pairs, prints the final table | stdout |
+| `reconstruct` (Framework 1) | Recovers the full Cartesian Hessian purely from the log's own printed frequencies + Cartesian displacement eigenvectors (mass-weighted eigendecomposition inversion) | `data/logs/<mol>.log` only |
+| `fchk` (Framework 2) | Parses the Hessian directly out of a Gaussian formatted checkpoint | `data/logs/<mol>.log` **and** `data/fchk/<mol>.fchk` (or `data/logs/<mol>.fchk`) |
 
-## Things to check / verify yourself
+**Honest caveat:** Framework 2 has **zero real test data** in this repo right
+now -- no `.fchk` file exists anywhere in it. Its parsing logic is only
+exercised by a synthetic, hand-built fixture in
+`tests/test_veda_fmt_regression.py`. Treat it with suspicion on first real use,
+until it's been run against a genuine Gaussian `.fchk` and independently
+cross-checked (e.g. against Framework 1's reconstruction for the same job, or
+against VEDA4's own recomputed frequencies).
 
-- **Step 2's real correctness proof is the frequency round-trip**: it
-  reconstructs the Hessian from Gaussian's own eigenvectors/eigenvalues,
-  then independently re-diagonalizes it and confirms the same 30
-  frequencies come back out (should agree to well under 1 cm⁻¹ — a much
-  tighter bound than a from-scratch independent calculation could offer,
-  since this is a mathematical round-trip, not two separate calculations).
-  It also prints a mass-weighted-orthonormality residual for Gaussian's
-  *as-printed* eigenvectors — a nonzero but small residual there (~1e-4)
-  is expected and harmless, coming from finite print precision on
-  degenerate E-symmetry mode pairs, not from an error in the
-  reconstruction.
-- **Step 4** prints the per-mode PED column sums — should all equal
-  1.00. This is the actual correctness proof of the whole PED
-  calculation, not a cosmetic check.
-- **The out-of-plane ambiguity is real, not a bug.** For a planar
-  hexagonal ring, "ring torsion" and "C-H out-of-plane wag" are not
-  orthogonal internal coordinates, so their individual PED contributions
-  can come out negative or >100% for out-of-plane modes. This is a
-  known, published issue in benzene PED analysis (see Jamróz, M. H. "On the
-  Internal Coordinates in the Potential Energy Distribution (PED) Analysis:
-  Bending or Torsion?" *Enliven: Bioinformatics* 1(4), 006 (2014),
-  doi:10.18650/2376-9416.14006). Script 5 merges them into one "out-of-plane"
-  category rather than reporting a misleading split.
-- **No frequency scale factor is applied.** There is no verified,
-  citable published scale factor for MP2/3-21G (unlike, e.g., Scott &
-  Radom's well-known 0.8929 for HF/6-31G(d)) — asserting one without a
-  verified source would repeat a citation mistake from earlier in this
-  project's development. PED percentages don't depend on scaling anyway;
-  only the displayed cm⁻¹ column would change. The reported frequencies
-  are Gaussian's own computed (unscaled) harmonic values.
-- Mass units (amu vs. kg) and the absolute scale of λ are both provably
-  irrelevant to the final PED ratio (cancels out algebraically as long
-  as used consistently) — so everything here stays in Gaussian's native
-  amu/Å units throughout, no SI unit conversion needed or performed.
+## How to produce a `.fchk`
 
-## Things you can change to see the numbers respond
+Add `%chk=<name>.chk` to the Gaussian route of the `freq` job, then, after the
+job finishes, run Gaussian's `formchk <name>.chk <name>.fchk` utility to
+convert the binary checkpoint into the text `.fchk` format `ped/hessian_fchk.py`
+parses. (A less portable alternative is requesting a Hessian-printing route
+option directly in the `.log` itself, avoiding the `.fchk` detour entirely --
+but that's not what this module parses.)
 
-- **Internal coordinate definitions**: script 03 uses a *redundant*
-  set + pseudoinverse. You could instead build a strictly
-  non-redundant 30-coordinate set (removing the linear dependencies at
-  each sp² carbon by hand) and compare — the PED percentages should be
-  very close but not always identical, since redundant vs.
-  non-redundant PED definitions aren't mathematically forced to agree
-  exactly for coupled/degenerate modes.
-- **Level of theory**: to compare against a different Gaussian
-  calculation, point `LOG_PATH` in `01_load_gaussian.py` at a different
-  `freq=hpmodes` log (same atom-ordering/connectivity assumptions in
-  step 3 apply to any single-ring, one-H-per-carbon benzene job).
+## Usage
+
+```bash
+# Auto-detect: uses fchk if a .fchk resolves for the molecule, else reconstruct.
+python ped/build_veda_fmt.py --molecule C6H6
+
+# Force a specific framework (errors loudly if its required file is missing).
+python ped/build_veda_fmt.py --molecule C6H6 --framework reconstruct
+python ped/build_veda_fmt.py --molecule C6H6 --framework fchk
+
+# Point at a .fchk explicitly instead of the default data/fchk/ search.
+python ped/build_veda_fmt.py --molecule C6H6 --framework fchk --fchk-path /path/to/C6H6.fchk
+```
+
+Output `.fmt` files are written to `ped/output/` (gitignored, regenerable) by
+default; override with `--output-dir`. A best-effort convenience copy is also
+made to `--veda-dir` (default `../../../veda4` relative to `ped/`) if that
+directory exists on disk -- never fatal if it doesn't.
+
+## Verification
+
+`tests/test_veda_fmt_regression.py` automatically checks: the round-trip
+frequency discrepancy stays under 2.0 cm⁻¹, the freshly built C6H6 `.fmt`'s
+Hessian floats match `ped/reference/C6H6.fmt` numerically, `blocks.fortran_d`
+reproduces byte-exact reference values, and `molecule.resolve_molecule`'s
+dual-extension (`.com`/`.gjf`) lookup works.
+
+What it does **not** check automatically -- and can't -- is whether VEDA4
+itself accepts the file: that requires manually opening the `.fmt` (or its
+`_with_dummy_raman` variant) in `veda4e1.exe` and confirming it parses cleanly
+and reproduces the reference frequencies in VEDA4's own recomputation.
+
+## Relationship to the manuscript
+
+The JCC manuscript's Table 6 previously reported PED percentages from this
+repo's **own** redundant-internal-coordinate calculation (now archived in
+`ped/archive_python_ped/`, which explicitly claimed no VEDA pass was needed).
+**Project policy changed today (2026-08-02):** real VEDA4 is now the
+authoritative PED source going forward. Table 6 is being updated separately to
+reflect that (a parallel task, not part of this reorganization).
+
+The archived Python calculation remains a valuable, documented cross-check: 3
+of the 4 manuscript-cited modes agreed closely with real VEDA4, with one
+genuine disagreement at 1056.39 cm⁻¹ (CCC-bend/CCH-bend character swapped
+between the two methods -- a real rotation-ambiguity effect for a degenerate
+mode pair, not an error in either method). See
+`ped/archive_python_ped/ARCHIVE_NOTE.md` and
+`ped/archive_python_ped/VEDA_STYLE_METHODOLOGY.md`/`PED_METHODOLOGY.md` for the
+full historical record.
+
+## Superseded pipeline
+
+The prior from-scratch Python PED pipeline (redundant-coordinate `01`-`05`, the
+abandoned VEDA-style reimplementation `06`-`11`, and the original benzene-only
+VEDA4 bridge `12`-`14`) lives in `ped/archive_python_ped/` -- see that
+directory's own `ARCHIVE_NOTE.md`.

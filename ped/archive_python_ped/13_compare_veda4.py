@@ -48,7 +48,7 @@ import csv
 import numpy as np
 
 HERE = os.path.dirname(__file__)
-VEDA_DIR = os.path.join(HERE, '..', '..', '..', 'veda4')
+VEDA_DIR = os.path.join(HERE, '..', '..', '..', '..', 'veda4')
 VED_PATH = os.path.join(VEDA_DIR, 'c6h6_reconstructed.ved')
 VDF_PATH = os.path.join(VEDA_DIR, 'c6h6_reconstructed.vdf')
 

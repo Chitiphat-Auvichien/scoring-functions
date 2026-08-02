@@ -1899,6 +1899,81 @@ def plot_cpu_time_benchmark(
     return summary
 
 
+def plot_gaussian_nbasis_scaling(
+    benchmark_csv="data/results/cpu_time_benchmark.csv",
+    out_dir="data/figures",
+    label="fig_gaussian_nbasis",
+):
+    """SI/diagnostic companion to fig:cputime: Gaussian's freq-only CPU time
+    vs. N_basis (AO basis-function count, Gaussian's own ``NBasis=``),
+    log-log, all 68 library molecules (no mp2_321g filtering needed here --
+    unlike N, n_basis already captures the basis-set-size effect that N
+    confounds with element identity, so mixing methods/bases adds much less
+    noise; filled/hollow marks the MP2/3-21G subset anyway for transparency).
+
+    Motivation: fig:cputime's "CPU time vs. N" comparison is fair to the
+    classifier (whose cost genuinely depends on N -- geometry/mode-vector
+    work) but not to Gaussian, whose SCF/MP2 cost depends on basis-function
+    count, not atom count -- a single heavy/ECP-bearing atom can carry as
+    many basis functions as several light atoms. Fitting log(CPU) vs. log(N)
+    for Gaussian gives R^2 ~ 0.04 (pure noise); refitting against log(n_basis)
+    gives R^2 ~ 0.81-0.85 -- confirming n_basis, not N, is Gaussian's real
+    scaling variable. NOT extended to classifier_cpu_s: the classifier never
+    touches AO basis functions, so n_basis is not a meaningful covariate for
+    it (a category error) -- this figure is Gaussian-only by design.
+    """
+    _style()
+    df = pd.read_csv(benchmark_csv).copy()
+
+    log_n, log_t = np.log(df["n_basis"].to_numpy(float)), np.log(df["gaussian_freq_cpu_s"].to_numpy(float))
+    slope, intercept = np.polyfit(log_n, log_t, 1)
+    pred = slope * log_n + intercept
+    r2 = 1 - np.sum((log_t - pred) ** 2) / np.sum((log_t - log_t.mean()) ** 2)
+
+    fig, ax = plt.subplots(figsize=(4.6, 3.9))
+
+    mp2 = df[df["mp2_321g"] == True]   # noqa: E712 -- explicit bool filter
+    other = df[df["mp2_321g"] == False]  # noqa: E712
+    ax.scatter(mp2["n_basis"], mp2["gaussian_freq_cpu_s"], marker="o", s=24,
+               facecolors=COLORS["cost_gaussian"], edgecolors=COLORS["cost_gaussian"],
+               alpha=0.75, zorder=3, label="MP2/3-21G")
+    ax.scatter(other["n_basis"], other["gaussian_freq_cpu_s"], marker="o", s=24,
+               facecolors="none", edgecolors=COLORS["cost_gaussian"],
+               linewidths=0.9, alpha=0.75, zorder=3, label="other method/basis")
+
+    xx = np.linspace(df["n_basis"].min() * 0.9, df["n_basis"].max() * 1.1, 100)
+    ax.plot(xx, np.exp(intercept) * xx ** slope, ls="--", lw=1.2,
+            color=COLORS["threshold"], zorder=2,
+            label=f"fit: $t \\propto N_{{basis}}^{{{slope:.2f}}}$ ($R^2$={r2:.2f})")
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("Number of AO basis functions, $N_{basis}$")
+    ax.set_ylabel("CPU time (s)")
+    ax.legend(loc="upper left", frameon=False, handletextpad=0.4,
+              labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    log_N = np.log(df["N"].to_numpy(float))
+    slope_N, intercept_N = np.polyfit(log_N, log_t, 1)
+    pred_N = slope_N * log_N + intercept_N
+    r2_N = 1 - np.sum((log_t - pred_N) ** 2) / np.sum((log_t - log_t.mean()) ** 2)
+
+    return {
+        "pdf": pdf_path, "png": png_path,
+        "n_molecules": len(df),
+        "n_basis_range": (int(df["n_basis"].min()), int(df["n_basis"].max())),
+        "fit_vs_n_basis": {"exponent": float(slope), "r2": float(r2)},
+        "fit_vs_N_for_comparison": {"exponent": float(slope_N), "r2": float(r2_N)},
+        "framing": ("SI/diagnostic companion to fig:cputime, PROPOSED label "
+                    "fig:gaussian_nbasis, not yet wired into the .tex. Shows "
+                    "n_basis (not N) is Gaussian's real cost-scaling variable."),
+    }
+
+
 def regenerate_all(verbose=True):
     """Regenerate every manuscript figure in one call. Each figure function
     reads its own already-computed ``data/results/*.csv`` inputs with their

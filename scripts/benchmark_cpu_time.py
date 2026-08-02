@@ -26,7 +26,7 @@ Usage (from Github/scoring-functions/):
     py scripts/benchmark_cpu_time.py
 
 Writes data/results/cpu_time_benchmark.csv with columns:
-    molecule, N, gaussian_freq_cpu_s, classifier_cpu_s,
+    molecule, N, n_basis, gaussian_freq_cpu_s, classifier_cpu_s,
     classifier_cpu_s_stddev, n_iterations, mp2_321g, method_basis
 
 mp2_321g / method_basis are joined in from data/mol_list_method.csv (the
@@ -35,6 +35,18 @@ code can control for the dataset's mixed methods/basis sets (e.g. AsBr3 ran
 at MP2/6-311G, not the library's standard MP2/3-21G). All molecules are kept
 in the written CSV -- filtering by mp2_321g, if desired, is left to whatever
 reads this file.
+
+n_basis (added 2026-08-02, see gaussian_n_basis()) is Gaussian's own
+``NBasis=`` count of AO basis functions -- the covariate that actually
+drives SCF/MP2 cost. N (atom count) confounds heavy-element/ECP effects
+into "size"; a molecule can have small N but a huge basis (e.g. one Xe
+atom with diffuse/polarization functions) or vice versa. Included so
+Gaussian's CPU-time fit can be checked against n_basis instead of N
+without re-running the (slow) classifier timing. NOT meaningful for
+classifier_cpu_s -- the classifier never touches AO basis functions, its
+cost depends on N (geometry/mode-vector work) only. Plotting classifier
+cost against n_basis would be a category error: n_basis is a property of
+Gaussian's method/basis choice, not of the molecule's geometry.
 """
 import glob
 import os
@@ -64,6 +76,8 @@ _N_BATCHES = 10
 _JOB_CPU_TIME_RE = re.compile(
     r"Job cpu time:\s*(\d+)\s*days\s+(\d+)\s*hours\s+(\d+)\s*minutes\s+([\d.]+)\s*seconds"
 )
+
+_NBASIS_RE = re.compile(r"NBasis=\s*(\d+)")
 
 
 def _job_cpu_time_lines_to_seconds(log_text):
@@ -95,6 +109,29 @@ def gaussian_freq_cpu_seconds(log_path):
             f"job), found {len(times)}"
         )
     return times[-1]
+
+
+def gaussian_n_basis(log_path):
+    """Extract the number of AO basis functions (Gaussian's ``NBasis=``) from
+    a log, for use as a covariate that isolates basis-set size (driven by
+    heavy/ECP-bearing elements and the chosen basis set) from atom count N.
+
+    ``NBasis=`` is printed once per SCF cycle (dozens of times per job step),
+    but is constant for a given molecule/method/basis -- both job steps (opt
+    and the Link1 freq-only restart) use the same basis, so every occurrence
+    in the file is expected to agree. Raises ValueError if the log has no
+    ``NBasis=`` line, or if occurrences disagree (would indicate a
+    basis-changing multi-step job this benchmark's assumptions don't cover),
+    so a mismatch is reported/skipped rather than silently averaged over.
+    """
+    with open(log_path, "r", errors="replace") as f:
+        text = f.read()
+    values = {int(m.group(1)) for m in _NBASIS_RE.finditer(text)}
+    if not values:
+        raise ValueError("no 'NBasis=' line found")
+    if len(values) > 1:
+        raise ValueError(f"inconsistent NBasis= values across the log: {sorted(values)}")
+    return values.pop()
 
 
 def benchmark_classifier(mol_name, data_dir="data", thresholds=None,
@@ -145,6 +182,7 @@ def main():
 
         try:
             gaussian_cpu_s = gaussian_freq_cpu_seconds(log_path)
+            n_basis = gaussian_n_basis(log_path)
         except ValueError as e:
             pattern_mismatches.append((mol_name, str(e)))
             print(f"[SKIP] {mol_name}: log pattern mismatch -- {e}")
@@ -170,12 +208,14 @@ def main():
         rows.append({
             "molecule": mol_name,
             "N": n_atoms,
+            "n_basis": n_basis,
             "gaussian_freq_cpu_s": gaussian_cpu_s,
             "classifier_cpu_s": mean_s,
             "classifier_cpu_s_stddev": stddev_s,
             "n_iterations": n_iter,
         })
-        print(f"[OK]   {mol_name}: N={n_atoms:3d}  gaussian_freq={gaussian_cpu_s:9.4f}s  "
+        print(f"[OK]   {mol_name}: N={n_atoms:3d}  n_basis={n_basis:4d}  "
+              f"gaussian_freq={gaussian_cpu_s:9.4f}s  "
               f"classifier={mean_s*1e3:9.4f}ms +/- {stddev_s*1e3:.4f}ms  (n={n_iter})")
 
     import pandas as pd

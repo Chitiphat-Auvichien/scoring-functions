@@ -1197,7 +1197,7 @@ def plot_benzene_emit_counts(
 
     fig, ax = plt.subplots(figsize=(6.2, 3.8))
     x = np.arange(len(present))
-    ax.bar(x, bar_counts, color=bar_colors, edgecolor="black", linewidth=0.5)
+    ax.bar(x, bar_counts, color=bar_colors)
     ax.set_xticks(x)
     ax.set_xticklabels(present)  # matches canonical_order left-to-right
     ax.set_ylabel("Number of EMIT modes")

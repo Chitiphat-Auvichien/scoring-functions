@@ -96,16 +96,13 @@ COLORS = {
     # elsewhere in this module (this figure doesn't encode a T/R/S/B
     # category, so the "one color = one category everywhere" rule above
     # doesn't apply to it). Gaussian's own points are colored by a
-    # continuous cividis gradient keyed to n_basis (built inline in
+    # continuous inferno gradient keyed to n_basis (built inline in
     # ``plot_cpu_time_benchmark``, not a fixed COLORS entry -- there is no
-    # single "Gaussian color" anymore). "cost_classifier" is solid black
-    # (deliberately never touched by the gradient, since classifier cost
-    # doesn't depend on AO basis-function count) and "cost_gaussian_trend"
-    # is a neutral gray for Gaussian's per-N mean line, distinct from both
-    # black (now the classifier's color) and "threshold" (a different
-    # reference-line role elsewhere) so no two lines/series share a hue.
-    "cost_classifier": "#000000",      # black -- classifier CPU time
-    "cost_gaussian_trend": "#404040",  # dark gray -- Gaussian per-N mean line
+    # single "Gaussian color" anymore); its per-N mean trend line is plain
+    # black. "cost_classifier" (Okabe-Ito bluish green) is untouched by the
+    # gradient, since classifier cost doesn't depend on AO basis-function
+    # count.
+    "cost_classifier": "#009E73",   # bluish green -- classifier CPU time
 }
 
 # Reference-label / predicted-bucket -> shared classification-CATEGORY name.
@@ -1859,24 +1856,21 @@ def plot_cpu_time_benchmark(
     sharing the same integer N -- N itself is not perturbed in the
     underlying data, only the plotted x-position.
 
-    COLOR ENCODING: Gaussian points are colored by a continuous "cividis"
+    COLOR ENCODING: Gaussian points are colored by a continuous "inferno"
     gradient keyed to ``n_basis`` (Gaussian's own AO basis-function count,
     ``NBasis=``), not a flat color -- N alone barely explains Gaussian's CPU
     time (see ``plot_gaussian_nbasis_scaling``: log-log R^2~0.04 vs. N,
     R^2~0.81 vs. n_basis), so the gradient gives a reader an at-a-glance
     reason for the vertical scatter within each N without requiring a
-    separate figure. cividis (Nunez, Anderton & Renslow, PLOS ONE 2018) is
-    used specifically because it is perceptually uniform, distinguishable
-    under protanopia/deuteranopia, and degrades to a monotonic light->dark
-    ramp in grayscale print -- it also never reaches true black, so it stays
-    visually distinct from the classifier series below. Marker SHAPE (not
-    just color) distinguishes the two series -- circles for Gaussian,
-    squares for the classifier -- so identity survives grayscale/B&W print
-    even though color no longer encodes series identity for the Gaussian
-    points. The classifier series is solid black (``COLORS["cost_classifier"]``)
-    since its cost does not depend on n_basis; the Gaussian per-N mean line
-    uses a neutral gray (``COLORS["cost_gaussian_trend"]``) rather than black,
-    now that black belongs to the classifier.
+    separate figure. The classifier series is Okabe-Ito bluish green
+    (``COLORS["cost_classifier"]``), unchanged since its cost does not
+    depend on n_basis. Both series use square markers, undifferentiated by
+    shape -- author decision; identity relies on the legend and the color
+    contrast between green and the gradient, not on marker shape. Markers
+    and the colorbar are drawn without edge borders (author preference
+    against overusing borders); the legend's Gaussian swatch uses a
+    mid-gradient tone with no "colored by..." qualifier in its label, since
+    the colorbar alone carries that mapping.
 
     Not one of the 6 named JCC figures in this module's existing scope (see
     module docstring / IMPLEMENTATION_PLAN.md); added because the
@@ -1909,43 +1903,38 @@ def plot_cpu_time_benchmark(
                 fmt="none", ecolor=COLORS["cost_classifier"], elinewidth=0.5,
                 alpha=0.35, zorder=2, capsize=0)
     gaussian_pts = ax.scatter(x, df["gaussian_freq_cpu_s"], c=df["n_basis"],
-               cmap="cividis", norm=n_basis_norm, marker="o", s=22,
-               edgecolors="black", linewidths=0.4, alpha=1.0, zorder=3)
+               cmap="inferno", norm=n_basis_norm, marker="s", s=20,
+               edgecolors="none", alpha=1.0, zorder=3)
     ax.scatter(x, df["classifier_cpu_s"], marker="s", s=20,
                facecolors=COLORS["cost_classifier"],
-               edgecolors=COLORS["cost_classifier"],
-               linewidths=0.5, alpha=1.0, zorder=3,
+               edgecolors="none", alpha=1.0, zorder=3,
                label="Classification algorithm")
 
     cbar = fig.colorbar(gaussian_pts, ax=ax, pad=0.02, fraction=0.06)
-    cbar.set_label(r"Number of AO basis functions, $N_{\mathrm{basis}}$",
-                    fontsize=LEGEND_FONTSIZE)
+    cbar.set_label(r"$N_{\mathrm{basis}}$", fontsize=LEGEND_FONTSIZE)
     cbar.ax.tick_params(labelsize=LEGEND_FONTSIZE)
+    cbar.outline.set_visible(False)
 
     # Per-N median trend line (unjittered, true N on the x-axis) -- makes
     # the "barely grows with N" claim visible at a glance, not just implied
-    # by the scatter cloud. Gaussian's line is a neutral gray (not black --
-    # black is now the classifier's color) since Gaussian points themselves
-    # are colored by n_basis, not a single hue; classifier's stays black to
-    # match its markers.
+    # by the scatter cloud. Gaussian's line is plain black; classifier's
+    # matches its own green markers.
     med = df.groupby("N")[["gaussian_freq_cpu_s", "classifier_cpu_s"]].mean()
-    ax.plot(med.index, med["gaussian_freq_cpu_s"], color=COLORS["cost_gaussian_trend"],
+    ax.plot(med.index, med["gaussian_freq_cpu_s"], color="black",
             lw=1.1, ls="--", zorder=4, alpha=0.8)
     ax.plot(med.index, med["classifier_cpu_s"], color=COLORS["cost_classifier"],
             lw=1.1, ls="--", zorder=4, alpha=0.8)
     # Proxy legend entries (no real data): the Gaussian series can't show
-    # its gradient in a legend swatch, so a mid-cividis-toned circle stands
-    # in, with the color meaning spelled out in the label text (the colorbar
-    # carries the actual mapping) -- plus the dashed-line explainer for what
-    # the "Mean" lines are (a per-N summary statistic, not a fit) and how
-    # many molecules went into each N's point, since that varies a lot
-    # (N=4: 24 molecules, N=12: 1 molecule) and changes how much the median
-    # should be trusted.
-    gaussian_handle = Line2D([0], [0], marker="o", linestyle="none",
-                              markersize=5, markeredgecolor="black",
-                              markeredgewidth=0.4,
-                              markerfacecolor=matplotlib.colormaps["cividis"](0.5),
-                              label=r"MP2/3-21G (freq=hpmodes), colored by $N_{\mathrm{basis}}$")
+    # its gradient in a legend swatch, so a mid-inferno-toned square stands
+    # in (the colorbar carries the actual n_basis mapping, not the legend
+    # label) -- plus the dashed-line explainer for what the "Mean" lines are
+    # (a per-N summary statistic, not a fit) and how many molecules went
+    # into each N's point, since that varies a lot (N=4: 24 molecules,
+    # N=12: 1 molecule) and changes how much the median should be trusted.
+    gaussian_handle = Line2D([0], [0], marker="s", linestyle="none",
+                              markersize=5, markeredgecolor="none",
+                              markerfacecolor=matplotlib.colormaps["inferno"](0.5),
+                              label="MP2/3-21G (freq=hpmodes)")
     median_handle = Line2D([0], [0], color="gray", lw=1.1, ls="--",
                             label=(f"Mean"))
 
@@ -2134,7 +2123,7 @@ def plot_gaussian_nbasis_scaling(
     else:
         ax.set_ylim(0, df["gaussian_freq_cpu_s"].max() * 1.15)
         ax.set_xlim(0, df["n_basis"].max() * 1.08)
-    ax.set_xlabel(r"Number of AO basis functions, $N_{\mathrm{basis}}$")
+    ax.set_xlabel(r"$N_{\mathrm{basis}}$")
     ax.set_ylabel("CPU time (s)")
     ax.legend(loc="upper left", frameon=False, handletextpad=0.4,
               labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)

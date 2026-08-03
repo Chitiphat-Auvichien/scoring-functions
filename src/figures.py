@@ -8,6 +8,8 @@ house style (``_style()``), writes a vector PDF + >=300 dpi PNG under
 ``data/figures/``, and returns a summary dict (paths + sanity numbers).
 
 Main-text figures: ``plot_benzene_stress_test`` (fig:benzene),
+``plot_benzene_emit_counts`` (fig:benzeneemitcounts, overview bar chart of
+how benzene's 36 EMIT modes classify across T/R axes and S/B/SB),
 ``plot_confusion_matrix`` (fig:confusion, single-tier non-ideal layout --
 the genuine non-circular validation; thresholds are fixed on the ideal
 population and applied without retuning), ``plot_bond_scores``
@@ -1147,6 +1149,84 @@ def plot_benzene_confusion_precision_recall(
 
 
 # --------------------------------------------------------------------------
+# fig:benzeneemitcounts -- benzene EMIT mode classification overview
+# --------------------------------------------------------------------------
+
+def plot_benzene_emit_counts(
+    emit_csv="data/results/benzene_EMIT_classified.csv",
+    out_dir="data/figures",
+    label="fig_benzene_emit_counts",
+):
+    """Build fig:benzeneemitcounts: an overview bar chart of how benzene's
+    36 EMIT modes classify -- one bar per clean/starred external axis
+    (Tx..Rz, Tx*..Rz*) and per internal bucket (S/B/SB).
+
+    Presentation only: reads the already-computed ``label`` column of raw
+    classifier-output strings from ``emit_csv`` via ``value_counts()`` --
+    never recomputes scores. Categories plotted are exactly whatever is
+    present in the data (not a hardcoded set), so the chart stays correct
+    if the classification changes as more EMIT diagnostics land.
+    """
+    _style()
+    df = pd.read_csv(emit_csv)
+    counts = df["label"].value_counts()
+
+    # Canonical order: T-axis, then R-axis (clean before starred within an
+    # axis), then internal S/B/SB -- filtered down to categories present.
+    canonical_order = [
+        "Tx", "Tx*", "Ty", "Ty*", "Tz", "Tz*",
+        "Rx", "Rx*", "Ry", "Ry*", "Rz", "Rz*",
+        "S", "B", "SB",
+    ]
+    present = [c for c in canonical_order if c in counts.index]
+    unexpected = [c for c in counts.index if c not in canonical_order]
+    if unexpected:
+        raise ValueError(
+            f"benzene EMIT label(s) not in the canonical T/R/S/B/SB order: "
+            f"{unexpected} -- extend canonical_order, don't silently drop them."
+        )
+
+    # T/R (clean or starred) share one gray; S/B/SB use the classification-
+    # algorithm's own predicted-label colors (not the *_ref literature pair).
+    internal_color = {
+        "S": COLORS["stretching"], "B": COLORS["bending"], "SB": COLORS["mixed"],
+    }
+    bar_colors = [internal_color.get(c, COLORS["external"]) for c in present]
+    bar_counts = [int(counts[c]) for c in present]
+
+    fig, ax = plt.subplots(figsize=(5.2, 4.4))
+    y = np.arange(len(present))
+    ax.barh(y, bar_counts, color=bar_colors, edgecolor="black", linewidth=0.5)
+    ax.set_yticks(y)
+    ax.set_yticklabels(present)
+    ax.invert_yaxis()  # Tx at top, SB at bottom -- matches canonical_order
+    ax.set_xlabel("Number of EMIT modes")
+    ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    ax.set_xlim(0, max(bar_counts) * 1.18)
+    for yi, n in zip(y, bar_counts):
+        ax.text(n + max(bar_counts) * 0.02, yi, str(n), va="center", ha="left",
+                 fontsize=ANNOTATION_FONTSIZE)
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    n_total = int(sum(bar_counts))
+    if n_total != len(df):
+        raise ValueError(
+            f"plotted EMIT mode count {n_total} != len(df) {len(df)} -- "
+            "a category/counting bug in this function, not a data change."
+        )
+
+    summary_dict = {
+        "pdf": pdf_path, "png": png_path,
+        "n_total": n_total,
+        "counts": {c: int(counts[c]) for c in present},
+    }
+    return summary_dict
+
+
+# --------------------------------------------------------------------------
 # fig:bondscores -- bond score vs relative Delta-bond-length
 # --------------------------------------------------------------------------
 
@@ -2061,6 +2141,7 @@ def regenerate_all(verbose=True):
         ("SI rigorous-tier consistency check (no fig: label yet)", plot_rigorous_tier_check),
         ("fig:benzeneconfusion", plot_benzene_internal_confusion),
         ("SI benzene precision/recall (no fig: label yet)", plot_benzene_confusion_precision_recall),
+        ("fig:benzeneemitcounts", plot_benzene_emit_counts),
         ("fig:bondscores", plot_bond_scores),
         ("fig:boxplots", plot_boxplots),
         ("fig:modemixing", plot_mode_mixing),

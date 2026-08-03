@@ -1939,7 +1939,7 @@ def plot_cpu_time_benchmark(
     gaussian_handle = Line2D([0], [0], marker="o", linestyle="none",
                               markersize=5, markeredgecolor="none",
                               markerfacecolor=matplotlib.colormaps["inferno"](0.5),
-                              label="MP2/3-21G (freq=hpmodes)")
+                              label="Freq=hpmodes (MP2/3-21G)")
     median_handle = Line2D([0], [0], color="gray", lw=1.1, ls="--",
                             label=(f"Mean"))
 
@@ -2107,7 +2107,7 @@ def plot_gaussian_nbasis_scaling(
 
     ax.scatter(df["n_basis"], df["gaussian_freq_cpu_s"], marker="s", s=24,
                facecolors="black", edgecolors="black",
-               alpha=1.0, zorder=3, label="MP2/3-21G (freq=hpmodes)")
+               alpha=1.0, zorder=3, label="Freq=hpmodes (MP2/3-21G)")
 
     xx = np.linspace(df["n_basis"].min() * 0.9, df["n_basis"].max() * 1.1, 100)
     ax.plot(xx, np.exp(intercept) * xx ** slope, ls="--", lw=1.2,

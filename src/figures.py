@@ -761,8 +761,8 @@ def plot_confusion_matrix(
     joint_df = pd.concat([nonideal_df, nonideal_external_df], ignore_index=True)
 
     # "mixed_external" ("T/R*") dropped: verified empty on this population.
-    ref_order_n = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "stretch", "bend"]
-    pred_order_n = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "stretch", "bend", "mixed"]
+    ref_order_n = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "bend", "stretch"]
+    pred_order_n = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "bend", "mixed", "stretch"]
     tbl_n = _joint_confusion_table(joint_df, ref_order_n, pred_order_n)
     n_nonideal = int(tbl_n.values.sum())
 
@@ -928,7 +928,7 @@ def plot_rigorous_tier_check(
     # For acceptance_floor/floor_met (coarse 4-bucket construction check).
     stats_r = confusion_matrix_stats(rigorous_df, thresholds)
 
-    cats_r = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "stretch", "bend"]
+    cats_r = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "bend", "stretch"]
     tbl_r = _joint_confusion_table(rigorous_df, cats_r, cats_r)
     n_rigorous = int(tbl_r.values.sum())
     rows = _per_category_from_table(tbl_r, cats_r)
@@ -1021,8 +1021,8 @@ def plot_benzene_internal_confusion(
     # Collapsed to a single "T/R" row/column: per-axis detail is already
     # shown in fig:confusion's non-ideal matrix. "mixed_external" dropped
     # (verified empty on benzene's 6 external modes).
-    ref_order = ["T/R", "bend", "stretch", "SB"]
-    pred_order = ["T/R", "bend", "stretch", "mixed"]
+    ref_order = ["T/R", "bend", "SB", "stretch"]
+    pred_order = ["T/R", "bend", "mixed", "stretch"]
     tbl = _joint_confusion_table(detail, ref_order, pred_order, collapse_external=True)
     n_total = int(tbl.values.sum())
 
@@ -1090,13 +1090,13 @@ def plot_benzene_confusion_precision_recall(
     tbl = pd.read_csv(matrix_csv, index_col=0)
     summary = pd.read_csv(summary_csv).set_index("ref_label")
 
-    ref_order = ["bend", "stretch", "SB"]
-    pred_order = ["bend", "stretch", "mixed"]
+    ref_order = ["bend", "SB", "stretch"]
+    pred_order = ["bend", "mixed", "stretch"]
     tbl = tbl.reindex(index=ref_order, columns=pred_order, fill_value=0)
 
     # Each category pairs one reference row with one predicted column:
     # bend<->bend, stretch<->stretch, SB(reference)<->mixed(predicted).
-    cats = ["bend", "stretch", "mixed"]
+    cats = ["bend", "mixed", "stretch"]
     row_for_cat = {"bend": "bend", "stretch": "stretch", "mixed": "SB"}
     precisions, recalls = [], []
     for cat in cats:
@@ -1172,11 +1172,12 @@ def plot_benzene_emit_counts(
     counts = df["label"].value_counts()
 
     # Canonical order: T-axis, then R-axis (clean before starred within an
-    # axis), then internal S/B/SB -- filtered down to categories present.
+    # axis), then internal B/SB/S in ascending-frequency order (bending is
+    # lowest frequency, stretching highest) -- filtered to categories present.
     canonical_order = [
         "Tx", "Tx*", "Ty", "Ty*", "Tz", "Tz*",
         "Rx", "Rx*", "Ry", "Ry*", "Rz", "Rz*",
-        "S", "B", "SB",
+        "B", "SB", "S",
     ]
     present = [c for c in canonical_order if c in counts.index]
     unexpected = [c for c in counts.index if c not in canonical_order]
@@ -1194,17 +1195,16 @@ def plot_benzene_emit_counts(
     bar_colors = [internal_color.get(c, COLORS["external"]) for c in present]
     bar_counts = [int(counts[c]) for c in present]
 
-    fig, ax = plt.subplots(figsize=(5.2, 4.4))
-    y = np.arange(len(present))
-    ax.barh(y, bar_counts, color=bar_colors, edgecolor="black", linewidth=0.5)
-    ax.set_yticks(y)
-    ax.set_yticklabels(present)
-    ax.invert_yaxis()  # Tx at top, SB at bottom -- matches canonical_order
-    ax.set_xlabel("Number of EMIT modes")
-    ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
-    ax.set_xlim(0, max(bar_counts) * 1.18)
-    for yi, n in zip(y, bar_counts):
-        ax.text(n + max(bar_counts) * 0.02, yi, str(n), va="center", ha="left",
+    fig, ax = plt.subplots(figsize=(6.2, 3.8))
+    x = np.arange(len(present))
+    ax.bar(x, bar_counts, color=bar_colors, edgecolor="black", linewidth=0.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(present)  # matches canonical_order left-to-right
+    ax.set_ylabel("Number of EMIT modes")
+    ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    ax.set_ylim(0, max(bar_counts) * 1.18)
+    for xi, n in zip(x, bar_counts):
+        ax.text(xi, n + max(bar_counts) * 0.02, str(n), va="bottom", ha="center",
                  fontsize=ANNOTATION_FONTSIZE)
 
     fig.tight_layout()

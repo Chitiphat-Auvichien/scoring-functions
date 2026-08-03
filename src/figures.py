@@ -1864,13 +1864,12 @@ def plot_cpu_time_benchmark(
     reason for the vertical scatter within each N without requiring a
     separate figure. The classifier series is Okabe-Ito bluish green
     (``COLORS["cost_classifier"]``), unchanged since its cost does not
-    depend on n_basis. Both series use square markers, undifferentiated by
-    shape -- author decision; identity relies on the legend and the color
-    contrast between green and the gradient, not on marker shape. Markers
-    and the colorbar are drawn without edge borders (author preference
-    against overusing borders); the legend's Gaussian swatch uses a
-    mid-gradient tone with no "colored by..." qualifier in its label, since
-    the colorbar alone carries that mapping.
+    depend on n_basis. Marker SHAPE distinguishes the two series -- circles
+    for Gaussian, squares for the classifier. Markers and the colorbar are
+    drawn without edge borders (author preference against overusing
+    borders); the legend's Gaussian swatch uses a mid-gradient tone with no
+    "colored by..." qualifier in its label, since the colorbar alone
+    carries that mapping.
 
     Not one of the 6 named JCC figures in this module's existing scope (see
     module docstring / IMPLEMENTATION_PLAN.md); added because the
@@ -1903,7 +1902,7 @@ def plot_cpu_time_benchmark(
                 fmt="none", ecolor=COLORS["cost_classifier"], elinewidth=0.5,
                 alpha=0.35, zorder=2, capsize=0)
     gaussian_pts = ax.scatter(x, df["gaussian_freq_cpu_s"], c=df["n_basis"],
-               cmap="inferno", norm=n_basis_norm, marker="s", s=20,
+               cmap="inferno", norm=n_basis_norm, marker="o", s=20,
                edgecolors="none", alpha=1.0, zorder=3)
     ax.scatter(x, df["classifier_cpu_s"], marker="s", s=20,
                facecolors=COLORS["cost_classifier"],
@@ -1931,7 +1930,7 @@ def plot_cpu_time_benchmark(
     # (a per-N summary statistic, not a fit) and how many molecules went
     # into each N's point, since that varies a lot (N=4: 24 molecules,
     # N=12: 1 molecule) and changes how much the median should be trusted.
-    gaussian_handle = Line2D([0], [0], marker="s", linestyle="none",
+    gaussian_handle = Line2D([0], [0], marker="o", linestyle="none",
                               markersize=5, markeredgecolor="none",
                               markerfacecolor=matplotlib.colormaps["inferno"](0.5),
                               label="MP2/3-21G (freq=hpmodes)")

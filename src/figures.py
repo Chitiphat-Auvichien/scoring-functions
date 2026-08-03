@@ -1897,6 +1897,11 @@ def plot_cpu_time_benchmark(
     fig, ax = plt.subplots(figsize=(5.3, 3.9))
 
     n_basis_norm = mcolors.Normalize(vmin=df["n_basis"].min(), vmax=df["n_basis"].max())
+    # A dark, fixed point on the same inferno ramp used for the Gaussian
+    # points -- ties the trend line to its own series' color family instead
+    # of an unrelated black, while staying dark enough (low end of inferno)
+    # to read clearly as a line rather than blend into the marker cloud.
+    gaussian_trend_color = matplotlib.colormaps["inferno"](0.25)
 
     ax.errorbar(x, df["classifier_cpu_s"], yerr=df["classifier_cpu_s_stddev"],
                 fmt="none", ecolor=COLORS["cost_classifier"], elinewidth=0.5,
@@ -1916,10 +1921,11 @@ def plot_cpu_time_benchmark(
 
     # Per-N median trend line (unjittered, true N on the x-axis) -- makes
     # the "barely grows with N" claim visible at a glance, not just implied
-    # by the scatter cloud. Gaussian's line is plain black; classifier's
+    # by the scatter cloud. Gaussian's line uses a dark inferno tone (its
+    # own series' color family, not an unrelated black); classifier's
     # matches its own green markers.
     med = df.groupby("N")[["gaussian_freq_cpu_s", "classifier_cpu_s"]].mean()
-    ax.plot(med.index, med["gaussian_freq_cpu_s"], color="black",
+    ax.plot(med.index, med["gaussian_freq_cpu_s"], color=gaussian_trend_color,
             lw=1.1, ls="--", zorder=4, alpha=0.8)
     ax.plot(med.index, med["classifier_cpu_s"], color=COLORS["cost_classifier"],
             lw=1.1, ls="--", zorder=4, alpha=0.8)

@@ -111,6 +111,22 @@ python ped/merge_ped_scores.py --all \
     --combined-output data/results/combined_ped_vs_scores.csv
 ```
 
+The same functionality is also wired into `main.py`'s flag dispatch, alongside
+`--classify`/`--emit-projection`/`--library`/`--calibrate`/`--figures`, so it
+doesn't require calling this script directly:
+
+```bash
+# Per-molecule (equivalent to --molecule above); requires -m.
+python main.py -m CH4 --ped-merge
+
+# Roster batch + combined table (equivalent to --all above); global, ignores -m.
+python main.py --ped-merge-all --combined-output data/results/combined_ped_vs_scores.csv
+```
+
+`--classify` and `--ped-merge` can be combined in one invocation (fixed
+dispatch order runs `--classify` first, so `--ped-merge` finds the
+classified.csv it just wrote): `python main.py -m CH4 --classify --mode normal --ped-merge`.
+
 **Category rule:** VEDA4's `STRE` coordinate type maps to stretch; every
 other type (`BEND`, `TORS`, `OUT`, `LIN`, ...) maps to bend. **Only the `TED`
 table is used** (`"TED: sum = 100"` in the `.ved` file), never `PED`

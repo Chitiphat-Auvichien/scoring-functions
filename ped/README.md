@@ -77,14 +77,78 @@ itself accepts the file: that requires manually opening the `.fmt` (or its
 `_with_dummy_raman` variant) in `veda4e1.exe` and confirming it parses cleanly
 and reproduces the reference frequencies in VEDA4's own recomputation.
 
+## Merging real VEDA4 PED into this repo's mode-scoring output
+
+Once you've opened a `.fmt` file in `veda4e1.exe` (see above) and it has
+converged, VEDA4 leaves a `<something>.ved` (full numeric PED/TED matrices)
+and a paired `<something>.vdf` (abbreviated summary + per-internal-coordinate
+type definitions) in its own working folder -- ignore the various
+`skra.vdf`/`mskra.vdf`/`wskra.vdf`/etc. duplicates VEDA4 also drops there from
+earlier internal optimization cycles; only the final, named pair matters.
+
+Copy that `.ved` + `.vdf` pair into **`data/ved/<mol>.ved`** and
+**`data/ved/<mol>.vdf`** (same basename convention as `data/logs/`,
+`data/gjf/`, `data/fchk/` -- one pair per molecule). `ped/merge_ped_scores.py`
+then combines them with this repo's own
+`data/results/<mol>_normal_classified.csv` (T/R/V scores + S/B/M
+classification label, from `python main.py -m <mol> --classify --mode
+normal`) into a per-mode table of V-score vs. real %stretch/%bend character:
+
+```bash
+# Single molecule -- writes data/results/<mol>_normal_classified_ped.csv
+# (the original _classified.csv is never modified; two columns are appended:
+# PED_Stretch_pct, PED_Bend_pct). Fails loud if inputs are missing.
+python ped/merge_ped_scores.py --molecule CH4
+
+# Several molecules, plus one combined table for correlating V-score against
+# real PED %stretch across all of them. Molecules missing a .ved/.vdf pair
+# are skipped with a message, not fatal to the batch.
+python ped/merge_ped_scores.py --molecules CH4 H2O C6H6 \
+    --combined-output data/results/combined_ped_vs_scores.csv
+
+# Every molecule in data/mol_list_method.csv's roster that has a .ved/.vdf pair.
+python ped/merge_ped_scores.py --all \
+    --combined-output data/results/combined_ped_vs_scores.csv
+```
+
+**Category rule:** VEDA4's `STRE` coordinate type maps to stretch; every
+other type (`BEND`, `TORS`, `OUT`, `LIN`, ...) maps to bend. **Only the `TED`
+table is used** (`"TED: sum = 100"` in the `.ved` file), never `PED`
+(`"PED: sign = direction"`) -- this project already learned the hard way
+(`ped/archive_python_ped/13_compare_veda4.py`) that PED encodes sign/phase
+information, not the summable %character VEDA4 itself reports as
+authoritative. `%stretch`/`%bend` are the raw (signed) per-category TED sums,
+not absolute-valued -- each TED row already sums to ~100 by construction
+(small deviations, e.g. 98 or 101, and small negative cross-term entries, are
+normal rounding, not a bug).
+
+VEDA4's own mode-row order need not match `_classified.csv`'s `Vib N` row
+order (e.g. VEDA4 often prints descending frequency; this repo's parse order
+is typically ascending) -- `merge_ped_scores.py` matches modes by nearest
+recomputed frequency (greedy, warns above 2.0 cm⁻¹ residual -- the same
+round-trip tolerance convention `build_veda_fmt.py` uses), not by row
+position, and fails loud if the Vib-row count and VEDA mode-row count differ.
+
+The first real cross-check (CH4, `fchk` framework, 2026-08-05) validated the
+whole story qualitatively: the two CH-stretch frequency groups (~3086,
+~3195 cm⁻¹) score `V_Stretch` ≈ 0.995-1.0 and land at `PED_Stretch_pct` ≈
+98-101%; the two degenerate bending groups (~1457, ~1668 cm⁻¹) score
+`V_Stretch` ≈ 0.03 or lower and land at `PED_Bend_pct` ≈ 99-101%. The same
+held for C6H6's mixed-character modes (e.g. the two `1056.39` cm⁻¹ modes,
+labeled `SB` by this repo's classifier, show intermediate `PED_Stretch_pct`
+of 1% and 87%). `data/ved/CH4.ved`/`.vdf` and `data/ved/C6H6.ved`/`.vdf` are
+committed as genuine ground-truth regression fixtures (see
+`tests/test_merge_ped_scores.py`), not throwaway output.
+
 ## Relationship to the manuscript
 
 The JCC manuscript's Table 6 previously reported PED percentages from this
 repo's **own** redundant-internal-coordinate calculation (now archived in
 `ped/archive_python_ped/`, which explicitly claimed no VEDA pass was needed).
 **Project policy changed today (2026-08-02):** real VEDA4 is now the
-authoritative PED source going forward. Table 6 is being updated separately to
-reflect that (a parallel task, not part of this reorganization).
+authoritative PED source going forward. Table 6 has been updated accordingly
+to report VEDA4's TED values (see `JCC/JCC_man_scoring/JCC_SI_PED_benzene.tex`
+for the full methodology and validation).
 
 The archived Python calculation remains a valuable, documented cross-check: 3
 of the 4 manuscript-cited modes agreed closely with real VEDA4, with one

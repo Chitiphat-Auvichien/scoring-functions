@@ -1,0 +1,25 @@
+abbreviation of: c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\ch4\ch4_reconstructed_fchk.ved
+IR spectrum from file: C:\Users\User\OneDrive\Chulalongkorn University\Research\Classifying modes of motion\veda4\CH4\ch4_reconstructed_fchk.fmt
+diagonality factor = 91.95   <EPm> = 97.76
+    IR      CM-1
+  22.65  3194.67   s3 98
+  22.65  3194.67   s2 99
+  22.65  3194.67   s1 99
+   0.00  3086.46   s4 100
+   0.00  1667.79   s5 100
+   0.00  1667.79   s6 100
+  18.31  1456.68   s9 -93
+  18.31  1456.68   s7 93
+  18.31  1456.68   s8 -98
+
+Frequencies/PED calculated by Veda
+definitions of modes c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\ch4\ch4_reconstructed_fchk.dd2
+s  1   STRE CH   f3195 99
+s  2   STRE CH   f3195 99
+s  3   STRE CH   f3195 98
+s  4   STRE CH   f3086 100
+s  5   BEND HCH   f1668 100
+s  6   BEND HCH   f1668 100
+s  7   BEND HCH   f1457 93
+s  8   OUT  CHHH   f1457 -98
+s  9   OUT  CHHH   f1457 -93

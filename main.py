@@ -241,17 +241,21 @@ def _run_flag_pipelines(args):
     """Handle the --classify / --emit-projection / --library / --calibrate /
     --figures CLI flags by wiring up the existing headless pipeline functions.
 
-      - --library/--calibrate/--figures are GLOBAL and ignore -m/--molecule.
-      - --classify/--emit-projection are PER-MOLECULE and require -m;
-        --classify additionally requires --mode (normal|emit).
+      - --library/--calibrate/--figures/--ped-merge-all are GLOBAL and ignore
+        -m/--molecule.
+      - --classify/--emit-projection/--ped-merge are PER-MOLECULE and
+        require -m; --classify additionally requires --mode (normal|emit).
       - Combined flags run in fixed order: --library, --calibrate, --classify,
-        --emit-projection, --figures. Fails loud on a bad combination rather
-        than silently doing nothing.
+        --emit-projection, --ped-merge, --ped-merge-all, --figures. This lets
+        --classify and --ped-merge be combined in one invocation (--ped-merge
+        reads the classified.csv --classify just wrote). Fails loud on a bad
+        combination rather than silently doing nothing.
 
     Returns True if at least one flag was handled (caller should stop),
     False otherwise (caller falls through to the interactive/--mode path).
     """
-    any_flag = args.library or args.calibrate or args.classify or args.emit_projection or args.figures
+    any_flag = (args.library or args.calibrate or args.classify or args.emit_projection
+                or args.figures or args.ped_merge or args.ped_merge_all)
     if not any_flag:
         return False
 
@@ -312,6 +316,30 @@ def _run_flag_pipelines(args):
         print("(per-reference-mode full detail is wide -- not echoed here; "
               f"see the CSV) Wrote {len(df_full)}-row full projection detail -> {path_full}")
 
+    if args.ped_merge:
+        if not args.molecule:
+            print("Error: --ped-merge requires -m/--molecule.")
+            return True
+        from ped.merge_ped_scores import merge_molecule_ped
+        try:
+            _df, vib_rows, path = merge_molecule_ped(args.molecule)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"Error running --ped-merge for '{args.molecule}': {e}")
+            return True
+        print(f"Wrote {len(vib_rows)}-mode PED merge -> {path}")
+
+    if args.ped_merge_all:
+        if args.molecule and not args.ped_merge:
+            print("Note: --ped-merge-all is global and ignores -m/--molecule.")
+        from ped.merge_ped_scores import build_combined_table, _read_roster, _REPO_ROOT
+        molecules = _read_roster(_REPO_ROOT)
+        combined_df, per_molecule_paths = build_combined_table(molecules, _REPO_ROOT, skip_missing=True)
+        out_path = args.combined_output or os.path.join("data", "results", "combined_ped_vs_scores.csv")
+        combined_df.to_csv(out_path, index=False, float_format="%.4f")
+        print(f"Merged PED for {len(per_molecule_paths)} of {len(molecules)} roster molecule(s) "
+              f"(rest skipped -- see messages above for missing data/ved/<mol>.ved/.vdf).")
+        print(f"Wrote {len(combined_df)}-row combined table -> {out_path}")
+
     if args.figures:
         print("Regenerating all manuscript figures (src.figures.regenerate_all)...")
         from src.figures import regenerate_all
@@ -342,6 +370,20 @@ def main():
     ap.add_argument("--figures", action="store_true",
                     help="Regenerate all manuscript figures from data/results/*.csv -> "
                          "data/figures/*.{pdf,png}. Global (ignores -m).")
+    ap.add_argument("--ped-merge", action="store_true", dest="ped_merge",
+                    help="Merge real VEDA4 PED (data/ved/<mol>.ved+.vdf) into -m <molecule>'s "
+                         "<mol>_normal_classified.csv (must already exist -- run --classify "
+                         "--mode normal first). Writes <mol>_normal_classified_ped.csv with "
+                         "PED_Stretch_pct/PED_Bend_pct columns added. Per-molecule; requires -m.")
+    ap.add_argument("--ped-merge-all", action="store_true", dest="ped_merge_all",
+                    help="Run --ped-merge for every molecule in data/mol_list_method.csv's "
+                         "roster, skipping (with a message) any missing its classified.csv or "
+                         "data/ved/<mol>.ved/.vdf pair, and write one combined table (default "
+                         "data/results/combined_ped_vs_scores.csv, override with "
+                         "--combined-output). Global (ignores -m).")
+    ap.add_argument("--combined-output", dest="combined_output", default=None,
+                    help="Output path for the --ped-merge-all combined table "
+                         "(default data/results/combined_ped_vs_scores.csv).")
     args = ap.parse_args()
 
     if _run_flag_pipelines(args):

@@ -36,6 +36,11 @@ Concretely, the code covers:
   confusion matrix and a threshold-sensitivity sweep.
 * **Figures.** All of the manuscript's data-driven figures can be regenerated from the pipeline's own
   CSV outputs.
+* **Real-VEDA4 PED cross-check.** `ped/` bridges a molecule's Gaussian Hessian into a real VEDA4
+  Potential Energy Distribution (PED) analysis (`ped/build_veda_fmt.py`), and `ped/merge_ped_scores.py`
+  (also reachable via `main.py --ped-merge`/`--ped-merge-all`) merges VEDA4's ground-truth %stretch/%bend
+  character back into this program's own scores for a genuine, non-reimplemented validation of
+  `V_Stretch`. See `ped/README.md` for the full workflow.
 
 ## Getting Started
 
@@ -92,7 +97,7 @@ The results are saved as a CSV file in `data/results/` (`<molecule>_normal_score
 
 ## Classification, EMIT Projection, Library Calibration, and Figures (CLI flags)
 
-Beyond the Step-1 scoring workflow above, `main.py` exposes five additional flags that each run one
+Beyond the Step-1 scoring workflow above, `main.py` exposes seven additional flags that each run one
 already-built pipeline end to end, with no need to import Python yourself. All commands below were run
 from the repository root (`Github/scoring-functions/`) against the data already checked into this repo
 and confirmed to produce real output files.
@@ -114,8 +119,21 @@ Project raw EMIT eigenvectors onto the mass-weighted normal-mode reference basis
 python main.py -m water --emit-projection
 ```
 
-Flags combine freely and run in a fixed order (classify, then emit-projection) — useful for doing both
-steps for one molecule in a single command.
+Merge real VEDA4 PED (Potential Energy Distribution) output into one molecule's classification, adding
+`PED_Stretch_pct`/`PED_Bend_pct` columns for validating `V_Stretch` against ground-truth %stretch/%bend
+character. Requires `data/results/<mol>_normal_classified.csv` (from `--classify --mode normal`) and a
+`data/ved/<mol>.ved` + `data/ved/<mol>.vdf` pair from a real VEDA4 GUI run — see `ped/README.md` for the
+full VEDA4 bridge workflow (`ped/build_veda_fmt.py` builds the `.fmt` file VEDA4 needs from
+`data/logs/<mol>.log` and, optionally, `data/fchk/<mol>.fchk`). Writes
+`data/results/<mol>_normal_classified_ped.csv` (the original `_classified.csv` is never modified).
+
+```bash
+python main.py -m CH4 --classify --mode normal --ped-merge
+```
+
+Flags combine freely and run in a fixed order (`--library`, `--calibrate`, `--classify`,
+`--emit-projection`, `--ped-merge`, `--ped-merge-all`, `--figures`) — useful for doing several steps for
+one molecule in a single command.
 
 ```bash
 python main.py -m benzene --mode emit --classify --emit-projection
@@ -145,6 +163,15 @@ and the standalone benzene-normal-modes gallery).
 
 ```bash
 python main.py --figures
+```
+
+Run `--ped-merge` for every molecule in `data/mol_list_method.csv`'s roster, skipping (with a message)
+any missing its classified.csv or `data/ved/` pair, and write one combined table across all matched
+molecules for correlating `V_Stretch` against real PED %stretch (default
+`data/results/combined_ped_vs_scores.csv`, override with `--combined-output`).
+
+```bash
+python main.py --ped-merge-all
 ```
 
 If none of these flags are passed, `main.py` behaves exactly as in Step 2-5 above (the plain Step-1

@@ -1,0 +1,151 @@
+abbreviation of: c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\c10h16\c10h16.ved
+IR spectrum from file: C:\Users\User\OneDrive\Chulalongkorn University\Research\Classifying modes of motion\veda4\C10H16\c10h16.fmt
+diagonality factor = 63.24   <EPm> = 61.87
+    IR      CM-1
+  59.34  3104.59   s1 -10   s3 -77
+  59.34  3104.59   s2 94
+  59.34  3104.59   s1 89
+   0.00  3097.68   s4 90
+   0.00  3097.68   s3 10   s5 82
+   0.00  3097.68   s6 96
+   0.00  3084.47   s7 98
+  89.66  3076.18   s8 80
+  89.66  3076.18   s9 -88
+  89.66  3076.18   s10 -87
+   0.00  3051.56   s11 92
+   0.00  3051.56   s12 -92
+  26.46  3051.19   s13 90
+  26.46  3051.19   s14 82
+  26.46  3051.19   s15 85
+   0.00  3050.70   s16 98
+   0.00  1595.88   s17 99
+  11.01  1575.28   s19 83
+  11.01  1575.28   s18 -14   s20 77
+  11.01  1575.28   s18 81   s20 12
+   0.00  1563.84   s21 -95
+   0.00  1563.84   s22 96
+   0.00  1441.55   s23 -57   s56 14
+   0.00  1441.55   s24 -60   s57 -13
+   0.56  1439.38   s25 73
+   0.56  1439.38   s26 -70
+   0.56  1439.38   s27 72
+   0.00  1418.54   s28 -59
+   0.00  1418.54   s28 16   s29 14   s30 -17   s40 10
+   0.00  1418.54   s29 48   s30 25
+   0.16  1358.97   s31 -42   s51 -15
+   0.16  1358.97   s33 60
+   0.16  1358.97   s31 19   s62 -10
+   0.00  1347.66   s35 -30   s49 14   s55 -11
+   0.00  1347.66   s36 60   s47 -18
+   0.00  1347.66   s34 50   s48 21
+   0.00  1295.99   s37 52
+   0.00  1295.99   s37 -15   s38 31   s69 18
+   0.00  1190.28   s39 80
+   0.00  1185.68   s30 -12   s40 -50
+   0.00  1185.68   s41 53
+   0.00  1185.68   s42 65
+   3.64  1150.17   s43 -46
+   3.64  1150.17   s32 16   s45 -46
+   3.64  1150.17   s44 -47   s51 -13   s63 -10
+   0.00  1071.20   s46 80
+   0.00  1069.15   s48 60
+   0.00  1069.15   s36 12   s47 56
+   0.00  1069.15   s35 15   s49 56
+   1.70   994.15   s32 37   s52 -21   s67 15
+   1.70   994.15   s50 -15   s58 -14   s65 -14
+   1.70   994.15   s50 14   s51 33
+   0.00   919.85   s53 11   s55 31
+   0.00   919.85   s49 -11   s53 11   s54 -40
+   0.00   919.85   s30 10   s47 12   s53 21   s70 10
+   0.00   916.03   s57 85
+   0.00   916.03   s56 -83
+   0.50   794.92   s58 -45
+   0.50   794.92   s59 -50
+   0.50   794.92   s60 -76
+   0.00   752.83   s61 99
+   0.00   651.43   s63 -33   s64 16
+   0.00   651.43   s32 16   s62 -33
+   0.00   651.43   s63 11   s64 22
+   0.04   443.23   s50 10   s65 13   s66 -35
+   0.04   443.23   s50 -21   s65 -24   s67 -10
+   0.04   443.23   s52 -30   s66 -11   s67 39
+   0.00   412.46   s68 85
+   0.00   412.46   s38 -18   s69 -30
+   0.00   314.30   s71 44
+   0.00   314.30   s55 14   s70 13   s72 -48
+   0.00   314.30   s53 16   s70 34   s71 -12
+
+Frequencies/PED calculated by Veda
+definitions of modes c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\c10h16\c10h16.dd2
+s  1   STRE CH   f3105 -10   f3105 89
+s  2   STRE CH   f3105 94
+s  3   STRE CH   f3105 -77   f3098 10
+s  4   STRE CH   f3098 90
+s  5   STRE CH   f3098 82
+s  6   STRE CH   f3098 96
+s  7   STRE CH   f3084 98
+s  8   STRE CH   f3076 80
+s  9   STRE CH   f3076 -88
+s 10   STRE CH   f3076 -87
+s 11   STRE CH   f3052 92
+s 12   STRE CH   f3052 -92
+s 13   STRE CH   f3051 90
+s 14   STRE CH   f3051 82
+s 15   STRE CH   f3051 85
+s 16   STRE CH   f3051 98
+s 17   BEND HCH   f1596 99
+s 18   BEND HCH   f1575 -14   f1575 81
+k 19   TORS HCCC   f1575 83
+s 20   BEND HCH   f1575 77   f1575 12
+s 21   BEND HCH   f1564 -95
+s 22   BEND HCH   f1564 96
+s 23   BEND HCC   f1442 -57
+s 24   BEND HCC   f1442 -60
+s 25   BEND HCC   f1439 73
+s 26   BEND HCC   f1439 -70
+s 27   BEND HCC   f1439 72
+s 28   BEND HCC   f1419 -59   f1419 16
+s 29   BEND HCC   f1419 14   f1419 48
+s 30   BEND HCH   f1419 -17   f1419 25   f1186 -12   f920 10
+s 31   BEND HCC   f1359 -42   f1359 19
+k 32   STRE CC   f1150 16   f994 37   f651 16
+k 33   BEND HCC   f1359 60
+s 34   BEND HCC   f1348 50
+s 35   BEND HCC   f1348 -30   f1069 15
+s 36   BEND HCC   f1348 60   f1069 12
+s 37   BEND HCC   f1296 52   f1296 -15
+s 38   TORS HCCH   f1296 31   f412 -18
+s 39   BEND HCC   f1190 80
+s 40   TORS HCCC   f1419 10   f1186 -50
+s 41   TORS HCCH   f1186 53
+s 42   BEND HCC   f1186 65
+s 43   BEND HCC   f1150 -46
+s 44   TORS HCCC   f1150 -47
+s 45   TORS HCCC   f1150 -46
+s 46   BEND CCC   f1071 80
+s 47   STRE CC   f1348 -18   f1069 56   f920 12
+s 48   STRE CC   f1348 21   f1069 60
+s 49   STRE CC   f1348 14   f1069 56   f920 -11
+s 50   TORS HCCC   f994 -15   f994 14   f443 10   f443 -21
+s 51   STRE CC   f1359 -15   f1150 -13   f994 33
+s 52   TORS HCCC   f994 -21   f443 -30
+s 53   TORS HCCC   f920 11   f920 11   f920 21   f314 16
+s 54   TORS HCCC   f920 -40
+s 55   TORS HCCC   f1348 -11   f920 31   f314 14
+s 56   STRE CC   f1442 14   f916 -83
+s 57   STRE CC   f1442 -13   f916 85
+s 58   STRE CC   f994 -14   f795 -45
+s 59   STRE CC   f795 -50
+s 60   STRE CC   f795 -76
+s 61   STRE CC   f753 99
+s 62   OUT  CCCC   f1359 -10   f651 -33
+s 63   TORS HCCC   f1150 -10   f651 -33   f651 11
+s 64   TORS HCCC   f651 16   f651 22
+s 65   TORS HCCH   f994 -14   f443 13   f443 -24
+s 66   TORS HCCC   f443 -35   f443 -11
+s 67   TORS HCCC   f994 15   f443 -10   f443 39
+s 68   BEND CCC   f412 85
+s 69   TORS HCCH   f1296 18   f412 -30
+s 70   TORS HCCC   f920 10   f314 13   f314 34
+s 71   TORS HCCC   f314 44   f314 -12
+s 72   TORS HCCC   f314 -48

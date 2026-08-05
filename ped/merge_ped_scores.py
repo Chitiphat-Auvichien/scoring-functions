@@ -147,7 +147,7 @@ def parse_ved(ved_path):
 # .vdf parsing (per-coordinate type: STRE vs everything else)
 # ---------------------------------------------------------------------------
 
-_COORD_DEF_RE = re.compile(r'^s\s*(\d+)\s+(\S+)')
+_COORD_DEF_RE = re.compile(r'^[a-zA-Z]\s*(\d+)\s+(\S+)')
 
 
 def parse_coord_types(vdf_path):
@@ -160,6 +160,15 @@ def parse_coord_types(vdf_path):
     isn't enough to compute a full %stretch/%bend sum). This reads the
     per-INTERNAL-COORDINATE type definitions instead, which are then applied
     to every column of the TED matrix parsed by parse_ved().
+
+    Every definition line is `<letter> <idx> <TYPE> <atoms...> f<freq> <pct>
+    [f<freq> <pct> ...]` (the trailing f/pct pairs list every mode this
+    coordinate contributes to, and are not needed here -- only <idx>/<TYPE>
+    are read). The leading letter is USUALLY 's', but VEDA4 also prints a
+    'k' prefix for some coordinates on larger molecules (confirmed on
+    C10H16's 72-coordinate set, e.g. 'k 32   STRE CC   ...') -- the letter
+    itself carries no category meaning for our purposes, so any single
+    letter is accepted, not just 's'.
     """
     with open(vdf_path) as f:
         lines = f.readlines()

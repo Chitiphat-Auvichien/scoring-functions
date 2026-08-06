@@ -41,6 +41,20 @@ VEDA4's own mode-row order need not match data/results/<mol>_normal_classified.c
 parse order here is typically ascending) -- modes are matched by nearest
 recomputed frequency, not by row position (see match_modes_by_frequency).
 
+Per-bond-type columns: in addition to the aggregate PED_Stretch_pct/
+PED_Bend_pct (all STRE coordinates lumped together), this module also emits
+one column triple per distinct bond type found across the molecules being
+combined (e.g. bond type "C-H" for a C-H stretch): BondScore_<T> (this
+repo's own raw sum-of-|s_AB| for bonds of type T, from
+ModeScorer.score_bonds()), BondScore_<T>_pct (that divided by V_Stretch,
+0-100 scale), and PED_S_<T>_pct (VEDA4's own %PED summed over STRE
+coordinates of type T). A molecule that has no bonds of a given type gets
+NaN in that type's columns, not 0 (matching the existing NaN-for-Tx/Ty/Tz-
+rows convention). Bond type is canonicalized as an alphabetically-sorted
+"Elem-Elem" pair so both sources (VEDA's .vdf composition token and this
+repo's own atom-symbol bond labels) agree on the same column name -- see
+_canonical_bond_type().
+
 Usage:
     python ped/merge_ped_scores.py --molecule CH4
     python ped/merge_ped_scores.py --molecules CH4 H2O C6H6 --combined-output data/results/combined_ped_vs_scores.csv
@@ -58,6 +72,9 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 sys.path.insert(0, _REPO_ROOT)
 
+from main import load_inputs, build_scorer_and_final  # noqa: E402
+from src.classifier import classify_all_modes  # noqa: E402
+
 # Frequency-match warning tolerance (cm^-1). Reuses the same 2.0 cm^-1
 # convention ped/build_veda_fmt.py / tests/test_veda_fmt_regression.py use
 # for the Hessian round-trip discrepancy check -- VEDA4 recomputes its own
@@ -67,10 +84,45 @@ sys.path.insert(0, _REPO_ROOT)
 # looser than that.
 DEFAULT_FREQ_TOL_CM1 = 2.0
 
-_COMBINED_COLUMNS = [
+_COMBINED_BASE_COLUMNS = [
     "Molecule", "Mode", "Freq", "V_Stretch", "label",
     "PED_Stretch_pct", "PED_Bend_pct", "VEDA_Freq", "Freq_Residual_cm-1",
 ]
+
+
+# ---------------------------------------------------------------------------
+# Bond-type canonicalization (shared by the VEDA-composition side and this
+# repo's own atom-label side, so both agree on the same column name)
+# ---------------------------------------------------------------------------
+
+def _split_composition_symbols(token):
+    """'ClC' -> ['Cl', 'C']; splits a VEDA .vdf STRE composition token
+    (concatenated element symbols, each capitalized) at capital-letter
+    boundaries. Raises ValueError if it doesn't split into exactly 2 symbols
+    (only STRE tokens describe a 2-atom bond -- BEND/TORS/OUT compositions
+    have 3+ atoms and are not passed here) or if the pieces don't
+    reconstruct the original token (format sanity check)."""
+    parts = re.findall(r'[A-Z][a-z]?', token)
+    if len(parts) != 2 or ''.join(parts) != token:
+        raise ValueError(
+            f"Expected a 2-atom STRE composition token, got {token!r} -> {parts}")
+    return parts
+
+
+def _canonical_bond_type(sym_a, sym_b):
+    """('Cl','C') -> 'C-Cl'. Alphabetically sorted so the VEDA-composition
+    side and this repo's own atom-label side produce the same label
+    regardless of which order each source lists the two atoms in."""
+    return "-".join(sorted((sym_a, sym_b)))
+
+
+def _bond_type_from_label(atom_label):
+    """'C1' -> 'C', 'Cl14' -> 'Cl' -- strips the trailing 1-based atom index
+    from a ModeScorer.score_bonds() i_label/j_label."""
+    m = re.match(r'^([A-Za-z]+)\d+$', atom_label)
+    if not m:
+        raise ValueError(f"Unexpected atom label format: {atom_label!r}")
+    return m.group(1)
 
 
 # ---------------------------------------------------------------------------
@@ -159,28 +211,31 @@ def parse_ved(ved_path):
 # .vdf parsing (per-coordinate type: STRE vs everything else)
 # ---------------------------------------------------------------------------
 
-_COORD_DEF_RE = re.compile(r'^[a-zA-Z]\s*(\d+)\s+(\S+)')
+_COORD_DEF_RE = re.compile(r'^[a-zA-Z]\s*(\d+)\s+(\S+)\s+(\S+)')
 
 
-def parse_coord_types(vdf_path):
-    """Parse the 'definitions of modes' tail section of a .vdf file. Returns
-    a list of VEDA4 coordinate-type strings (e.g. 'STRE', 'BEND', 'TORS',
-    'OUT'), index 0 = coordinate s1, in order.
+def _parse_coord_definitions(vdf_path):
+    """Shared implementation for parse_coord_types()/parse_coord_compositions():
+    parse the 'definitions of modes' tail section of a .vdf file into
+    {idx: (TYPE, composition)}, e.g. {1: ('STRE', 'CH'), ...}, 1-based idx.
 
     Only the per-mode SUMMARY lines earlier in the .vdf show the single
     dominant coordinate per normal mode -- that's NOT what this reads (it
     isn't enough to compute a full %stretch/%bend sum). This reads the
     per-INTERNAL-COORDINATE type definitions instead, which are then applied
-    to every column of the TED matrix parsed by parse_ved().
+    to every column of the PED matrix parsed by parse_ved().
 
-    Every definition line is `<letter> <idx> <TYPE> <atoms...> f<freq> <pct>
-    [f<freq> <pct> ...]` (the trailing f/pct pairs list every mode this
-    coordinate contributes to, and are not needed here -- only <idx>/<TYPE>
-    are read). The leading letter is USUALLY 's', but VEDA4 also prints a
-    'k' prefix for some coordinates on larger molecules (confirmed on
-    C10H16's 72-coordinate set, e.g. 'k 32   STRE CC   ...') -- the letter
-    itself carries no category meaning for our purposes, so any single
-    letter is accepted, not just 's'.
+    Every definition line is `<letter> <idx> <TYPE> <composition> f<freq>
+    <pct> [f<freq> <pct> ...]` (the trailing f/pct pairs list every mode
+    this coordinate contributes to, and are not needed here -- only
+    <idx>/<TYPE>/<composition> are read). <composition> is the coordinate's
+    concatenated-element-symbol atom composition (e.g. 'CH', 'ClC', 'HCH',
+    'HCCC') -- for STRE rows specifically this is always a 2-atom bond type,
+    see _split_composition_symbols(). The leading letter is USUALLY 's', but
+    VEDA4 also prints a 'k' prefix for some coordinates on larger molecules
+    (confirmed on C10H16's 72-coordinate set, e.g. 'k 32   STRE CC   ...')
+    -- the letter itself carries no category meaning for our purposes, so
+    any single letter is accepted, not just 's'.
     """
     with open(vdf_path) as f:
         lines = f.readlines()
@@ -194,28 +249,51 @@ def parse_coord_types(vdf_path):
         raise ValueError(f"{vdf_path}: could not find the 'definitions of "
                           "modes' section.")
 
-    types = {}
+    defs = {}
     for line in lines[start + 1:]:
         m = _COORD_DEF_RE.match(line.strip())
         if m:
-            types[int(m.group(1))] = m.group(2)
+            defs[int(m.group(1))] = (m.group(2), m.group(3))
 
-    if not types:
+    if not defs:
         raise ValueError(f"{vdf_path}: found the 'definitions of modes' "
-                          "header but no 's <idx> <TYPE> ...' lines after it.")
-    n = max(types)
-    missing = [i + 1 for i in range(n) if (i + 1) not in types]
+                          "header but no 's <idx> <TYPE> <composition> ...' "
+                          "lines after it.")
+    n = max(defs)
+    missing = [i + 1 for i in range(n) if (i + 1) not in defs]
     if missing:
         raise ValueError(f"{vdf_path}: missing coordinate-type definitions "
-                          f"for s{missing} (found {len(types)} of {n}).")
-    return [types[i + 1] for i in range(n)]
+                          f"for s{missing} (found {len(defs)} of {n}).")
+    return defs
+
+
+def parse_coord_types(vdf_path):
+    """Parse the 'definitions of modes' tail section of a .vdf file. Returns
+    a list of VEDA4 coordinate-type strings (e.g. 'STRE', 'BEND', 'TORS',
+    'OUT'), index 0 = coordinate s1, in order. See _parse_coord_definitions()
+    for the shared parsing this and parse_coord_compositions() are built on.
+    """
+    defs = _parse_coord_definitions(vdf_path)
+    n = max(defs)
+    return [defs[i + 1][0] for i in range(n)]
+
+
+def parse_coord_compositions(vdf_path):
+    """Like parse_coord_types() but returns the composition token per
+    coordinate (e.g. 'CH', 'ClC', 'HCH'), index 0 = s1. Only meaningful
+    (splittable into a 2-atom bond type) for STRE-typed coordinates --
+    present but unused by callers for BEND/TORS/OUT."""
+    defs = _parse_coord_definitions(vdf_path)
+    n = max(defs)
+    return [defs[i + 1][1] for i in range(n)]
 
 
 def compute_ped_percentages(ved_path, vdf_path):
-    """Combine parse_ved + parse_coord_types into per-VEDA-mode-row
-    PED_Stretch_pct/PED_Bend_pct. Returns a DataFrame (one row per VEDA mode,
-    VEDA's own row order) with columns veda_freq, PED_Stretch_pct,
-    PED_Bend_pct.
+    """Combine parse_ved + parse_coord_types/parse_coord_compositions into
+    per-VEDA-mode-row PED percentages. Returns a DataFrame (one row per VEDA
+    mode, VEDA's own row order) with columns veda_freq, PED_Stretch_pct,
+    PED_Bend_pct, plus one PED_S_<type>_pct column per distinct bond type
+    (e.g. 'C-H', 'C-Cl') found among this molecule's STRE coordinates.
 
     Percentages are the ABSOLUTE VALUE of each PED entry, summed by
     category -- the raw signed PED table does not reliably sum to ~100 per
@@ -225,6 +303,7 @@ def compute_ped_percentages(ved_path, vdf_path):
     """
     freqs, ped = parse_ved(ved_path)
     types = parse_coord_types(vdf_path)
+    compositions = parse_coord_compositions(vdf_path)
     if len(types) != ped.shape[1]:
         raise ValueError(
             f"{vdf_path} defines {len(types)} coordinate types but "
@@ -235,11 +314,27 @@ def compute_ped_percentages(ved_path, vdf_path):
     stretch_mask = np.array([t == 'STRE' for t in types])
     stretch_pct = abs_ped[:, stretch_mask].sum(axis=1)
     bend_pct = abs_ped[:, ~stretch_mask].sum(axis=1)
-    return pd.DataFrame({
+    data = {
         'veda_freq': freqs,
         'PED_Stretch_pct': stretch_pct,
         'PED_Bend_pct': bend_pct,
-    })
+    }
+
+    # Per-bond-type breakdown of the STRE columns only (bend type columns
+    # aren't requested and BEND/TORS/OUT compositions have 3+ atoms anyway,
+    # so _split_composition_symbols() wouldn't apply to them).
+    bond_types = {}  # canonical type -> boolean column mask
+    for col_idx, (t, comp) in enumerate(zip(types, compositions)):
+        if t != 'STRE':
+            continue
+        sym_a, sym_b = _split_composition_symbols(comp)
+        bond_type = _canonical_bond_type(sym_a, sym_b)
+        bond_types.setdefault(bond_type, np.zeros(len(types), dtype=bool))[col_idx] = True
+
+    for bond_type, mask in bond_types.items():
+        data[f'PED_S_{bond_type}_pct'] = abs_ped[:, mask].sum(axis=1)
+
+    return pd.DataFrame(data)
 
 
 # ---------------------------------------------------------------------------
@@ -314,21 +409,29 @@ def _resolve_ved_paths(molecule, data_dir):
 def merge_molecule_ped(molecule, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_TOL_CM1,
                         write=True):
     """Merge one molecule's data/ved/<mol>.ved+.vdf into its
-    data/results/<mol>_normal_classified.csv.
+    data/results/<mol>_normal_classified.csv, plus this repo's own per-bond
+    scores (recomputed via main.load_inputs/build_scorer_and_final +
+    src.classifier.classify_all_modes -- classified.csv itself only stores
+    the filtered/serialized 's_AB' string, not the full per-bond list needed
+    for a bond-type breakdown of every mode regardless of its S/B/SB label).
 
     Returns (full_df, vib_rows, out_path):
-      - full_df: the classified.csv DataFrame with exactly two new columns
-        appended, PED_Stretch_pct and PED_Bend_pct (NaN for the Tx/Ty/Tz/
-        Rx/Ry/Rz ideal-reference rows, which have no PED). This is written
-        to data/results/<mol>_normal_classified_ped.csv when write=True.
-        The original _classified.csv is never modified.
+      - full_df: the classified.csv DataFrame with new columns appended --
+        PED_Stretch_pct, PED_Bend_pct, and one PED_S_<type>_pct/
+        BondScore_<type>/BondScore_<type>_pct triple per bond type this
+        molecule has (NaN for the Tx/Ty/Tz/Rx/Ry/Rz ideal-reference rows,
+        which have neither PED nor a meaningful bond score). This is
+        written to data/results/<mol>_normal_classified_ped.csv when
+        write=True. The original _classified.csv is never modified.
       - vib_rows: list of dicts (one per "Vib N" row only) with the
-        _COMBINED_COLUMNS fields, for combined multi-molecule tables.
+        _COMBINED_BASE_COLUMNS fields plus this molecule's bond-type
+        columns, for combined multi-molecule tables.
       - out_path: path the per-molecule CSV was (or would be) written to.
 
     Raises FileNotFoundError if the classified.csv or the .ved/.vdf pair is
     missing, ValueError if the Vib-row count doesn't match the VEDA mode
-    count (see match_modes_by_frequency).
+    count (see match_modes_by_frequency) or if recomputed frequencies drift
+    from classified.csv (a stale-cache safety check, see below).
     """
     data_dir = os.path.join(repo_root, 'data')
     classified_path = os.path.join(data_dir, 'results', f'{molecule}_normal_classified.csv')
@@ -361,8 +464,52 @@ def merge_molecule_ped(molecule, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_TOL
         df.loc[vib_idx, 'Freq'].to_numpy(), ped_df['veda_freq'].to_numpy(),
         tol=freq_tol, context=f"{molecule}: ")
 
+    # Recompute this molecule's full per-bond s_AB for every mode (not just
+    # STRETCHING/MIXED_STRETCH_BEND -- see classify_all_modes' 'bonds_all').
+    # Uses the same cached intermediate load_inputs()/run_classify_pipeline
+    # already used to produce classified.csv, so under normal conditions
+    # this reproduces the identical mode list; the frequency check below
+    # catches it if classified.csv has since gone stale relative to the
+    # current cached/source data.
+    raw, _dirs = load_inputs(molecule, "normal", data_dir=data_dir)
+    scorer, final = build_scorer_and_final(raw, "normal")
+    scored = classify_all_modes(scorer, final)
+    scored_vibs = [m for m in scored if str(m["name"]).startswith("Vib ")]
+    if len(scored_vibs) != len(vib_idx):
+        raise ValueError(
+            f"{molecule}: recomputed {len(scored_vibs)} 'Vib N' modes but "
+            f"{classified_path} has {len(vib_idx)} -- classified.csv is out "
+            "of sync with the current source/cached data (re-run "
+            f"`python main.py -m {molecule} --classify --mode normal`).")
+    for local_ci, m in enumerate(scored_vibs):
+        orig_idx = vib_idx[local_ci]
+        csv_freq = df.loc[orig_idx, 'Freq']
+        if abs(m["frequency"] - csv_freq) > 1e-6:
+            raise ValueError(
+                f"{molecule}: recomputed frequency {m['frequency']:.6f} for "
+                f"'Vib N' row {local_ci} doesn't match classified.csv's "
+                f"{csv_freq:.6f} -- classified.csv is stale (re-run "
+                f"`python main.py -m {molecule} --classify --mode normal`).")
+
+    # This molecule's physical bond types (mode-independent -- every vib
+    # row's bonds_all covers the same bond list, so any one row's keys give
+    # the full set).
+    score_bond_types = sorted({
+        _canonical_bond_type(_bond_type_from_label(b["i_label"]),
+                              _bond_type_from_label(b["j_label"]))
+        for b in scored_vibs[0]["bonds_all"]
+    }) if scored_vibs else []
+    ped_bond_types = sorted(
+        c[len('PED_S_'):-len('_pct')] for c in ped_df.columns
+        if c.startswith('PED_S_') and c.endswith('_pct'))
+    bond_types = sorted(set(score_bond_types) | set(ped_bond_types))
+
     df['PED_Stretch_pct'] = np.nan
     df['PED_Bend_pct'] = np.nan
+    for t in bond_types:
+        df[f'PED_S_{t}_pct'] = np.nan
+        df[f'BondScore_{t}'] = np.nan
+        df[f'BondScore_{t}_pct'] = np.nan
 
     vib_rows = []
     # Iterate local_ci in increasing order (i.e. in vib_idx/classified.csv row
@@ -375,19 +522,50 @@ def merge_molecule_ped(molecule, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_TOL
         stretch = ped_df.loc[vi, 'PED_Stretch_pct']
         bend = ped_df.loc[vi, 'PED_Bend_pct']
         veda_freq = ped_df.loc[vi, 'veda_freq']
+        v_stretch = df.loc[orig_idx, 'V_Stretch']
         df.loc[orig_idx, 'PED_Stretch_pct'] = stretch
         df.loc[orig_idx, 'PED_Bend_pct'] = bend
-        vib_rows.append({
+
+        row = {
             'Molecule': molecule,
             'Mode': df.loc[orig_idx, 'Mode'],
             'Freq': df.loc[orig_idx, 'Freq'],
-            'V_Stretch': df.loc[orig_idx, 'V_Stretch'],
+            'V_Stretch': v_stretch,
             'label': df.loc[orig_idx, 'label'],
             'PED_Stretch_pct': stretch,
             'PED_Bend_pct': bend,
             'VEDA_Freq': veda_freq,
             'Freq_Residual_cm-1': resid,
-        })
+        }
+
+        bond_scores = {}
+        for b in scored_vibs[local_ci]["bonds_all"]:
+            t = _canonical_bond_type(_bond_type_from_label(b["i_label"]),
+                                      _bond_type_from_label(b["j_label"]))
+            bond_scores[t] = bond_scores.get(t, 0.0) + abs(b["s_AB"])
+
+        for t in bond_types:
+            ped_col = f'PED_S_{t}_pct'
+            if ped_col in ped_df.columns:
+                ped_val = ped_df.loc[vi, ped_col]
+                df.loc[orig_idx, ped_col] = ped_val
+                row[ped_col] = ped_val
+            else:
+                row[ped_col] = np.nan
+
+            score_col, pct_col = f'BondScore_{t}', f'BondScore_{t}_pct'
+            if t in bond_scores:
+                score = bond_scores[t]
+                pct = (score / v_stretch * 100) if v_stretch else np.nan
+                df.loc[orig_idx, score_col] = score
+                df.loc[orig_idx, pct_col] = pct
+                row[score_col] = score
+                row[pct_col] = pct
+            else:
+                row[score_col] = np.nan
+                row[pct_col] = np.nan
+
+        vib_rows.append(row)
 
     out_path = os.path.join(data_dir, 'results', f'{molecule}_normal_classified_ped.csv')
     if write:
@@ -414,6 +592,12 @@ def build_combined_table(molecules, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_
     or raise if skip_missing=False (used by a single explicit --molecule so
     a typo/missing-input request fails loud rather than silently vanishing).
 
+    Bond-type columns (BondScore_<T>/BondScore_<T>_pct/PED_S_<T>_pct) are
+    the UNION across every molecule actually merged -- a molecule lacking a
+    given bond type simply has NaN in that type's columns (its vib_rows
+    dicts never had that key, and pd.DataFrame's dict-of-rows constructor
+    NaN-fills any column missing from a given row).
+
     Returns (combined_df, per_molecule_paths).
     """
     all_rows = []
@@ -429,7 +613,14 @@ def build_combined_table(molecules, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_
         per_molecule_paths.append(out_path)
         all_rows.extend(vib_rows)
 
-    combined_df = pd.DataFrame(all_rows, columns=_COMBINED_COLUMNS)
+    bond_types = sorted({
+        key[len('BondScore_'):] for row in all_rows for key in row
+        if key.startswith('BondScore_') and not key.endswith('_pct')
+    })
+    bond_type_columns = []
+    for t in bond_types:
+        bond_type_columns += [f'BondScore_{t}', f'BondScore_{t}_pct', f'PED_S_{t}_pct']
+    combined_df = pd.DataFrame(all_rows, columns=_COMBINED_BASE_COLUMNS + bond_type_columns)
     return combined_df, per_molecule_paths
 
 

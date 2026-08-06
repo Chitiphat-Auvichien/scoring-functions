@@ -22,6 +22,9 @@ import merge_ped_scores as mps  # noqa: E402
 CH4_VED = os.path.join(ROOT, "data", "ved", "CH4.ved")
 CH4_VDF = os.path.join(ROOT, "data", "ved", "CH4.vdf")
 CH4_CLASSIFIED = os.path.join(ROOT, "data", "results", "CH4_normal_classified.csv")
+CHCL3_VED = os.path.join(ROOT, "data", "ved", "CHCl3.ved")
+CHCL3_VDF = os.path.join(ROOT, "data", "ved", "CHCl3.vdf")
+CHCL3_CLASSIFIED = os.path.join(ROOT, "data", "results", "CHCl3_normal_classified.csv")
 
 
 def _require(*paths):
@@ -82,6 +85,71 @@ def test_compute_ped_percentages_ch4_stretch_vs_bend():
     # be dominated by bend character (BEND+OUT, per the STRE-only-stretch rule).
     assert (ped_df['PED_Bend_pct'].iloc[4:9] > 95).all()
     assert (ped_df['PED_Stretch_pct'].iloc[4:9] < 5).all()
+
+
+# ---------------------------------------------------------------------------
+# Bond-type canonicalization
+# ---------------------------------------------------------------------------
+
+def test_split_composition_symbols():
+    assert mps._split_composition_symbols("ClC") == ["Cl", "C"]
+    assert mps._split_composition_symbols("CH") == ["C", "H"]
+    assert mps._split_composition_symbols("NB") == ["N", "B"]
+
+
+def test_split_composition_symbols_rejects_non_2_atom():
+    raised = False
+    try:
+        mps._split_composition_symbols("HCH")  # BEND-type composition, 3 atoms
+    except ValueError:
+        raised = True
+    assert raised
+
+
+def test_canonical_bond_type_is_alphabetical_regardless_of_input_order():
+    assert mps._canonical_bond_type("Cl", "C") == "C-Cl"
+    assert mps._canonical_bond_type("C", "Cl") == "C-Cl"
+    assert mps._canonical_bond_type("N", "B") == "B-N"
+
+
+def test_bond_type_from_label():
+    assert mps._bond_type_from_label("C1") == "C"
+    assert mps._bond_type_from_label("Cl14") == "Cl"
+
+
+def test_bond_type_from_label_rejects_malformed():
+    raised = False
+    try:
+        mps._bond_type_from_label("weird_label")
+    except ValueError:
+        raised = True
+    assert raised
+
+
+# ---------------------------------------------------------------------------
+# Per-bond-type PED columns
+# ---------------------------------------------------------------------------
+
+def test_compute_ped_percentages_ch4_single_bond_type_matches_aggregate():
+    _require(CH4_VED, CH4_VDF)
+    ped_df = mps.compute_ped_percentages(CH4_VED, CH4_VDF)
+    # CH4 has exactly one bond type (C-H), so the per-type column must equal
+    # the aggregate PED_Stretch_pct column exactly.
+    assert "PED_S_C-H_pct" in ped_df.columns
+    assert np.allclose(ped_df["PED_S_C-H_pct"], ped_df["PED_Stretch_pct"])
+    # And no other bond-type column should exist.
+    assert [c for c in ped_df.columns if c.startswith("PED_S_")] == ["PED_S_C-H_pct"]
+
+
+def test_compute_ped_percentages_chcl3_two_bond_types():
+    _require(CHCL3_VED, CHCL3_VDF)
+    ped_df = mps.compute_ped_percentages(CHCL3_VED, CHCL3_VDF)
+    bond_type_cols = sorted(c for c in ped_df.columns if c.startswith("PED_S_"))
+    assert bond_type_cols == ["PED_S_C-Cl_pct", "PED_S_C-H_pct"]
+    # Per-type columns must sum (for STRE-only, since CHCl3's non-STRE
+    # coordinates go to PED_Bend_pct) to no more than PED_Stretch_pct.
+    total = ped_df["PED_S_C-Cl_pct"] + ped_df["PED_S_C-H_pct"]
+    assert np.allclose(total, ped_df["PED_Stretch_pct"])
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +222,44 @@ def test_merge_molecule_ped_ch4_end_to_end():
     # frequencies vs. Gaussian's originals, sub-cm^-1 in this real dataset).
     for r in vib_rows:
         assert r['Freq_Residual_cm-1'] < mps.DEFAULT_FREQ_TOL_CM1
+
+    # Per-bond-type columns: CH4 has one bond type, C-H.
+    assert "BondScore_C-H" in df.columns
+    assert "BondScore_C-H_pct" in df.columns
+    for r in vib_rows:
+        if r['label'] == 'S':
+            assert r['BondScore_C-H_pct'] > 90
+
+
+# ---------------------------------------------------------------------------
+# build_combined_table: bond-type column union across differing molecules
+# ---------------------------------------------------------------------------
+
+def test_build_combined_table_ch4_chcl3_bond_type_union():
+    _require(CH4_VED, CH4_VDF, CH4_CLASSIFIED, CHCL3_VED, CHCL3_VDF, CHCL3_CLASSIFIED)
+    combined_df, paths = mps.build_combined_table(
+        ["CH4", "CHCl3"], repo_root=ROOT, skip_missing=False, write=False)
+
+    assert len(paths) == 2
+    for col in ("BondScore_C-H", "BondScore_C-H_pct", "PED_S_C-H_pct",
+                "BondScore_C-Cl", "BondScore_C-Cl_pct", "PED_S_C-Cl_pct"):
+        assert col in combined_df.columns
+
+    ch4_rows = combined_df[combined_df["Molecule"] == "CH4"]
+    chcl3_rows = combined_df[combined_df["Molecule"] == "CHCl3"]
+
+    # CH4 has no C-Cl bonds at all -- NaN, not 0, in every C-Cl column.
+    assert ch4_rows["BondScore_C-Cl"].isna().all()
+    assert ch4_rows["BondScore_C-Cl_pct"].isna().all()
+    assert ch4_rows["PED_S_C-Cl_pct"].isna().all()
+    # ...but its C-H columns are populated.
+    assert ch4_rows["PED_S_C-H_pct"].notna().all()
+
+    # CHCl3 has both bond types populated.
+    assert chcl3_rows["BondScore_C-Cl"].notna().all()
+    assert chcl3_rows["PED_S_C-Cl_pct"].notna().all()
+    assert chcl3_rows["BondScore_C-H"].notna().all()
+    assert chcl3_rows["PED_S_C-H_pct"].notna().all()
 
 
 if __name__ == "__main__":

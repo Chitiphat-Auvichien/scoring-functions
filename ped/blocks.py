@@ -31,9 +31,19 @@ LABEL_WIDTH = 15  # " Frequencies --" etc, measured from A1-91.FMT
 # --- Block 1: geometry, verbatim from the log's LAST orientation block --
 
 def extract_geometry_block(lines, expected_coords):
-    starts = [i for i, l in enumerate(lines) if "orientation:" in l]
+    # Match src.parser's GaussianParser._parse_standard_orientation: prefer
+    # "Standard orientation", fall back to "Input orientation" only if no
+    # Standard block exists. A bare "orientation:" substring match is too
+    # broad -- it also catches non-tabular sections like a freq job's
+    # "Dipole orientation:" (5 atom-number/x/y/z rows, no '---' header/
+    # footer), which the dash-counting loop below then runs off the end of
+    # the file trying to close.
+    starts = [i for i, l in enumerate(lines) if "Standard orientation" in l]
     if not starts:
-        raise ValueError("No '...orientation:' block found in log.")
+        starts = [i for i, l in enumerate(lines) if "Input orientation" in l]
+    if not starts:
+        raise ValueError("No 'Standard orientation'/'Input orientation' "
+                          "block found in log.")
     start = starts[-1]
 
     end = start + 1

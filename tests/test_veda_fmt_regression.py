@@ -184,6 +184,8 @@ def _synthetic_fchk_lines():
         "Number of atoms                           I               2\n",
         "Atomic numbers                            I   N=           2\n",
         "           1           8\n",
+        "Real atomic weights                       R   N=           2\n",
+        "  1.00782504E+00  1.59949146E+01\n",
         "Cartesian Force Constants                 R   N=          21\n",
     ]
     flat = [float(v) for v in range(1, 22)]  # 1.0 .. 21.0
@@ -263,6 +265,34 @@ def test_parse_fchk_hessian_symbol_mismatch_raises():
         raised = False
         try:
             hessian_fchk.parse_fchk_hessian(fchk_path, natoms=2, symbols=["H", "H"])
+        except ValueError:
+            raised = True
+        assert raised
+
+
+def test_parse_fchk_masses():
+    lines = _synthetic_fchk_lines()
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        fchk_path = os.path.join(d, "fake.fchk")
+        with open(fchk_path, "w") as f:
+            f.writelines(lines)
+
+        masses = hessian_fchk.parse_fchk_masses(fchk_path, natoms=2)
+        assert np.allclose(masses, [1.00782504, 15.9949146])
+
+
+def test_parse_fchk_masses_natoms_mismatch_raises():
+    lines = _synthetic_fchk_lines()
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        fchk_path = os.path.join(d, "fake.fchk")
+        with open(fchk_path, "w") as f:
+            f.writelines(lines)
+
+        raised = False
+        try:
+            hessian_fchk.parse_fchk_masses(fchk_path, natoms=3)
         except ValueError:
             raised = True
         assert raised

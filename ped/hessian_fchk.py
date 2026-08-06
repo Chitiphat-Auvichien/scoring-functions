@@ -4,14 +4,17 @@ reconstruction from printed normal modes needed (contrast
 hessian_reconstruct.py's Framework 1, which recovers the Hessian from
 Gaussian's printed frequencies/eigenvectors instead).
 
-WARNING: this module has NEVER been integration-tested against a real
-Gaussian-produced .fchk file -- none exists anywhere in this repo (no
-data/fchk/ directory, and no .log job here was ever run with %chk set).
-Only a synthetic hand-built fixture (tests/test_veda_fmt_regression.py)
-exercises the parsing logic below. Treat Framework 2 with suspicion on its
-first real use, until it's been run against a real Gaussian .fchk and
-independently cross-checked (e.g. against Framework 1's reconstruction for
-the same job, or against VEDA4's own recomputed frequencies).
+Integration-tested against a real Gaussian .fchk (data/fchk/B3N3H6.fchk):
+the round-trip check initially failed (7.65 cm^-1 max discrepancy) because
+masses came from src.utils.atomicMass's natural-abundance averages (B =
+10.811) rather than the isotope masses Gaussian actually used for the freq
+calc (11B = 11.009, from the .fchk's own 'Real atomic weights' block) --
+boron's isotopes are unusually far apart, so this ~1.8% mass error alone
+was enough to fail the tolerance. build_hessian now reads 'Real atomic
+weights' via parse_fchk_masses() and uses those (not atomicMass) for
+round_trip_validate_au; after the fix B3N3H6's discrepancy is 0.00005
+cm^-1. Still independently cross-check new molecules against Framework 1's
+reconstruction or VEDA4's own recomputed frequencies before trusting them.
 
 To obtain a usable .fchk: add `%chk=<name>.chk` to the Gaussian route of the
 freq job, then, after the job finishes, run Gaussian's `formchk <name>.chk
@@ -130,6 +133,25 @@ def parse_fchk_hessian(fchk_path, natoms, symbols=None):
     return H
 
 
+def parse_fchk_masses(fchk_path, natoms):
+    """Locate 'Real atomic weights' -- the exact isotope masses (amu)
+    Gaussian actually used for this frequency calculation. Gaussian's
+    default freq calc uses single-isotope masses (e.g. 11B = 11.0093, 14N =
+    14.0031, 1H = 1.00783), NOT the natural-abundance averages in
+    src/utils.atomicMass (e.g. B = 10.811) -- for an element with widely
+    separated isotope masses like boron that's a ~1.8% mismatch, enough by
+    itself to fail round_trip_validate_au's cm^-1 tolerance. Prefer this
+    over atomicMass whenever a .fchk is available."""
+    with open(fchk_path, 'r') as f:
+        lines = f.readlines()
+    weights = _parse_fchk_array(lines, "Real atomic weights")
+    if len(weights) != natoms:
+        raise ValueError(
+            f".fchk 'Real atomic weights' has {len(weights)} values, "
+            f"expected {natoms}: {fchk_path}")
+    return np.array(weights)
+
+
 def build_hessian(mol, symbols, vibfreq, masses):
     """Orchestrate Framework 2: parse .fchk -> validate against the .log's
     own frequencies (the only sanity check available until real .fchk data
@@ -142,5 +164,18 @@ def build_hessian(mol, symbols, vibfreq, masses):
     print(f"Parsing Hessian for {mol.name} from {mol.fchk_path} "
           "(Framework 2: parse from .fchk)")
     H_AU = parse_fchk_hessian(mol.fchk_path, len(symbols), symbols=symbols)
-    max_diff = blocks.round_trip_validate_au(H_AU, masses, vibfreq)
+
+    fchk_masses = parse_fchk_masses(mol.fchk_path, len(symbols))
+    mass_diff = np.abs(fchk_masses - np.asarray(masses))
+    max_mass_diff = float(np.max(mass_diff))
+    if max_mass_diff > 0.01:
+        worst = int(np.argmax(mass_diff))
+        print(f"WARNING: .fchk 'Real atomic weights' differ from "
+              f"src.utils.atomicMass by up to {max_mass_diff:.4f} amu "
+              f"(atom index {worst}, {symbols[worst]}: "
+              f"{fchk_masses[worst]:.6f} fchk vs {masses[worst]:.6f} "
+              "atomicMass) -- using the .fchk's exact isotope masses for "
+              "the round-trip check, since those are what Gaussian "
+              "actually used to compute these frequencies.")
+    max_diff = blocks.round_trip_validate_au(H_AU, fchk_masses, vibfreq)
     return H_AU, max_diff

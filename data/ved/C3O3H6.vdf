@@ -1,0 +1,67 @@
+abbreviation of: c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\c3o3h6\c3o3h6.ved
+IR spectrum from file: C:\Users\User\OneDrive\Chulalongkorn University\Research\Classifying modes of motion\veda4\C3O3H6\c3o3h6.fmt
+diagonality factor = 67.65   <EPm> = 66.03
+    IR      CM-1
+  13.92  3222.91   s2 97
+  23.50  3216.85   s3 97
+  23.50  3216.85   s1 97
+ 169.46  3014.74   s5 97
+  19.82  3002.05   s6 93
+  19.82  3002.05   s4 -93
+   8.83  1605.30   s14 96
+   0.42  1585.59   s18 91
+   0.42  1585.59   s13 -88
+  23.21  1477.90   s15 11   s22 -10   s27 59
+  23.21  1477.90   s23 -75
+   0.00  1422.65   s16 -10   s25 67   s27 10
+   0.75  1337.95   s15 -61   s22 11   s27 12
+   0.75  1337.95   s17 53   s23 -13
+   0.00  1261.52   s16 71   s26 23
+   6.65  1229.78   s15 12   s21 23   s22 13   s30 25
+ 109.08  1148.39   s7 -18   s17 -17   s24 -37
+ 109.08  1148.39   s8 -29   s26 29
+ 113.73  1048.03   s7 51   s24 -13
+ 113.73  1048.03   s8 51   s12 14   s26 12
+  74.88   945.45   s11 55   s12 -10
+   0.00   927.77   s9 86
+  16.45   891.78   s10 -85
+  16.45   891.78   s7 -28   s9 -10   s20 43
+   0.75   697.92   s11 35   s12 43
+  14.14   502.36   s8 -10   s12 18   s20 -16   s21 15   s30 -30
+  14.14   502.36   s19 -67   s29 -19
+  25.02   443.28   s20 10   s21 30   s22 -30   s30 17
+   0.10   289.99   s21 10   s26 18   s29 60
+   0.10   289.99   s24 -33   s28 -47
+
+Frequencies/PED calculated by Veda
+definitions of modes c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\c3o3h6\c3o3h6.dd2
+s  1   STRE CH   f3217 97
+s  2   STRE CH   f3223 97
+s  3   STRE CH   f3217 97
+s  4   STRE CH   f3002 -93
+s  5   STRE CH   f3015 97
+s  6   STRE CH   f3002 93
+s  7   STRE OC   f1148 -18   f1048 51   f892 -28
+s  8   STRE OC   f1148 -29   f1048 51   f502 -10
+s  9   STRE OC   f928 86   f892 -10
+s 10   STRE OC   f892 -85
+s 11   STRE OC   f945 55   f698 35
+s 12   BEND OCO   f1048 14   f945 -10   f698 43   f502 18
+s 13   BEND HCH   f1586 -88
+s 14   BEND HCH   f1605 96
+s 15   BEND HCO   f1478 11   f1338 -61   f1230 12
+s 16   BEND HCO   f1423 -10   f1262 71
+s 17   BEND HCO   f1338 53   f1148 -17
+s 18   BEND HCH   f1586 91
+s 19   BEND OCO   f502 -67
+s 20   BEND COC   f892 43   f502 -16   f443 10
+s 21   BEND COC   f1230 23   f502 15   f443 30   f290 10
+s 22   TORS HCOC   f1478 -10   f1338 11   f1230 13   f443 -30
+s 23   TORS HCOC   f1478 -75   f1338 -13
+s 24   TORS HCOC   f1148 -37   f1048 -13   f290 -33
+s 25   TORS HCOC   f1423 67
+s 26   TORS HCOC   f1262 23   f1148 29   f1048 12   f290 18
+s 27   TORS HCOC   f1478 59   f1423 10   f1338 12
+s 28   TORS COCO   f290 -47
+s 29   TORS COCO   f502 -19   f290 60
+s 30   TORS COCO   f1230 25   f502 -30   f443 17

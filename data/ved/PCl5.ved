@@ -1,0 +1,40 @@
+"****veda**** version 4.99e    c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\pcl5\pcl5.ved"
+F matrix & atom's orientation: C:\Users\User\OneDrive\Chulalongkorn University\Research\Classifying modes of motion\veda4\PCl5\pcl5.fmt
+diagonality factor = 84.34   <EPm> = 88.19
+
+   447.25   447.25   407.92   288.45   249.86   221.32   194.74   194.74
+   189.63   189.63    58.70    58.69
+
+PED: sign = direction,  column = coordinate,  row = No. of mode
+       1   2   3   4   5   6   7   8   9  10  11  12
+   1   0   9   0   0   0   0   0  -3   0   0  88   0   1 
+   2  88   0   0   0   0   0  -9   0   0   0   0  -3   2 
+   3   0   0  89   0   0  11   0   0   0   0   0   0   3 
+   4   0   0   0 100   0   0   0   0   0   0   0   0   4 
+   5   0   0   0   0 100   0   0   0   0   0   0   0   5 
+   6   0   0 -11   0   0  89   0   0   0   0   0   0   6 
+   7   0 -14   0   0   0   0   0  76   0   0  10   0   7 
+   8  10   0   0   0   0   0  14   0   0   0   0  76   8 
+   9   0   0   0   0   0   0   0   0   0 100   0   0   9 
+  10   0   0   0   0   0   0   0   0 100   0   0   0   10 
+  11   0  77   0   0   0   0   0  21   0   0  -2   0   11 
+  12   2   0   0   0   0   0  77   0   0   0   0 -21   12 
+       1   2   3   4   5   6   7   8   9  10  11  12
+
+TED:    sum = 100,   column = coordinate,  row = No. of mode
+       1   2   3   4   5   6   7   8   9  10  11  12
+   1   0   9   0   0   0   0   0   3   0   0  88   0   1 
+   2  88   0   0   0   0   0   9   0   0   0   0   3   2 
+   3   0   0  89   0   0  11   0   0   0   0   0   0   3 
+   4   0   0   0 100   0   0   0   0   0   0   0   0   4 
+   5   0   0   0   0 100   0   0   0   0   0   0   0   5 
+   6   0   0  11   0   0  89   0   0   0   0   0   0   6 
+   7   0  14   0   0   0   0   0  76   0   0  10   0   7 
+   8  10   0   0   0   0   0  14   0   0   0   0  76   8 
+   9   0   0   0   0   0   0   0   0   0 100   0   0   9 
+  10   0   0   0   0   0   0   0   0 100   0   0   0   10 
+  11   0  77   0   0   0   0   0  21   0   0   2   0   11 
+  12   2   0   0   0   0   0  77   0   0   0   0  21   12 
+       1   2   3   4   5   6   7   8   9  10  11  12
+
+TED Above 100 Factor TAF=0.000

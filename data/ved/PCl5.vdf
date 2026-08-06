@@ -1,0 +1,31 @@
+abbreviation of: c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\pcl5\pcl5.ved
+IR spectrum from file: C:\Users\User\OneDrive\Chulalongkorn University\Research\Classifying modes of motion\veda4\PCl5\pcl5.fmt
+diagonality factor = 84.34   <EPm> = 88.19
+    IR      CM-1
+ 103.31   447.24   s11 88
+ 103.31   447.24   s1 88
+ 174.37   407.92   s3 89   s6 11
+   0.00   288.45   s4 100
+   0.00   249.85   s5 100
+   9.10   221.32   s3 -11   s6 89
+   5.29   194.74   s2 -14   s8 76   s11 10
+   5.29   194.74   s1 10   s7 14   s12 76
+   0.00   189.63   s10 100
+   0.00   189.63   s9 100
+   0.42    58.69   s2 77   s8 21
+   0.42    58.69   s7 77   s12 -21
+
+Frequencies/PED calculated by Veda
+definitions of modes c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\pcl5\pcl5.dd2
+s  1   STRE ClP   f447 88   f195 10
+k  2   BEND ClPCl   f195 -14   f59 77
+s  3   STRE ClP   f408 89   f221 -11
+s  4   STRE ClP   f288 100
+s  5   STRE ClP   f250 100
+s  6   OUT  ClClClP   f408 11   f221 89
+k  7   BEND ClPCl   f195 14   f59 77
+k  8   OUT  ClClClP   f195 76   f59 21
+s  9   BEND ClPCl   f190 100
+s 10   BEND ClPCl   f190 100
+k 11   STRE ClP   f447 88   f195 10
+s 12   BEND ClPCl   f195 76   f59 -21

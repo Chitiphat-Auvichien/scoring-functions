@@ -1,0 +1,25 @@
+abbreviation of: c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\chcl3\chcl3.ved
+IR spectrum from file: C:\Users\User\OneDrive\Chulalongkorn University\Research\Classifying modes of motion\veda4\CHCl3\chcl3.fmt
+diagonality factor = 81.96   <EPm> = 85.43
+    IR      CM-1
+   1.16  3281.33   s1 100
+  24.49  1233.39   s2 97
+  24.49  1233.39   s3 97
+ 127.79   699.30   s5 88
+ 127.79   699.30   s4 89
+   8.83   588.20   s6 59   s7 41
+   0.76   322.77   s6 -42   s7 58
+   0.37   237.29   s8 91
+   0.37   237.29   s9 -91
+
+Frequencies/PED calculated by Veda
+definitions of modes c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\chcl3\chcl3.dd2
+s  1   STRE CH   f3281 100
+s  2   BEND HCCl   f1233 97
+s  3   BEND HCCl   f1233 97
+s  4   STRE ClC   f699 89
+s  5   STRE ClC   f699 88
+s  6   STRE ClC   f588 59   f323 -42
+s  7   OUT  ClClClC   f588 41   f323 58
+s  8   BEND ClCCl   f237 91
+s  9   BEND ClCCl   f237 -91

@@ -1,0 +1,31 @@
+abbreviation of: c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\ch3cn\ch3cn.ved
+IR spectrum from file: C:\Users\User\OneDrive\Chulalongkorn University\Research\Classifying modes of motion\veda4\CH3CN\ch3cn.fmt
+diagonality factor = 89.66   <EPm> = 93.98
+    IR      CM-1
+   2.26  3173.47   s2 100
+   2.26  3173.47   s1 -100
+   2.37  3100.77   s3 100
+   3.54  2157.07   s4 94
+  11.78  1584.49   s7 91
+  11.78  1584.49   s6 91
+   8.11  1512.32   s8 99
+   2.56  1146.42   s9 86
+   2.56  1146.42   s10 86
+   1.90   895.53   s5 94
+   0.03   419.11   s12 94
+   0.03   419.11   s11 94
+
+Frequencies/PED calculated by Veda
+definitions of modes c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\ch3cn\ch3cn.dd2
+s  1   STRE CH   f3174 -100
+s  2   STRE CH   f3174 100
+s  3   STRE CH   f3101 100
+s  4   STRE NC   f2157 94
+s  5   STRE CC   f896 94
+s  6   BEND HCH   f1585 91
+s  7   BEND HCH   f1585 91
+s  8   BEND HCH   f1512 99
+s  9   BEND HCC   f1146 86
+s 10   BEND HCC   f1146 86
+s 11   OUT  CNCH   f420 94
+s 12   OUT  CNCH   f420 94

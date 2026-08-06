@@ -1,0 +1,43 @@
+abbreviation of: c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\c4h4\c4h4.ved
+IR spectrum from file: C:\Users\User\OneDrive\Chulalongkorn University\Research\Classifying modes of motion\veda4\C4H4\c4h4.fmt
+diagonality factor = 60.81   <EPm> = 58.47
+    IR      CM-1
+   0.00  3462.46   s3 90
+  12.63  3420.10   s2 -84
+  12.63  3420.10   s1 94
+  12.63  3420.10   s4 86
+   0.00  1299.85   s6 98
+   0.74  1123.58   s5 10   s16 32   s18 31
+   0.74  1123.58   s7 39   s12 -47
+   0.74  1123.58   s5 33   s9 -21   s13 13   s15 18
+   0.00  1001.82   s10 -13   s17 68
+   0.00  1001.82   s11 44   s14 -54
+   0.00  1001.82   s10 -80   s17 -11
+   0.00   844.71   s9 12   s11 26   s14 25   s16 -13
+   0.00   844.71   s8 14   s13 42   s15 -28
+  82.73   833.69   s16 45   s17 -10   s18 -18
+  82.73   833.69   s7 34   s12 50
+  82.73   833.69   s5 -23   s9 11   s13 24   s15 31
+   0.00   674.90   s5 16   s9 31   s14 -12   s18 -18
+   0.00   674.90   s7 -13   s8 54
+
+Frequencies/PED calculated by Veda
+definitions of modes c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\c4h4\c4h4.dd2
+s  1   STRE CH   f3420 94
+s  2   STRE CH   f3420 -84
+s  3   STRE CH   f3462 90
+s  4   STRE CH   f3420 86
+s  5   STRE CC   f1124 10   f1124 33   f834 -23   f675 16
+s  6   STRE CC   f1300 98
+s  7   STRE CC   f1124 39   f834 34   f675 -13
+s  8   BEND CCC   f845 14   f675 54
+s  9   BEND CCC   f1124 -21   f845 12   f834 11   f675 31
+s 10   BEND HCC   f1001 -13   f1001 -80
+s 11   BEND HCC   f1001 44   f845 26
+s 12   BEND HCC   f1124 -47   f834 50
+s 13   BEND HCC   f1124 13   f845 42   f834 24
+s 14   TORS HCCC   f1001 -54   f845 25   f675 -12
+s 15   TORS HCCC   f1124 18   f845 -28   f834 31
+s 16   TORS HCCC   f1124 32   f845 -13   f834 45
+s 17   TORS HCCC   f1001 68   f1001 -11   f834 -10
+s 18   OUT  CCCC   f1124 31   f834 -18   f675 -18

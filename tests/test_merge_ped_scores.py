@@ -39,9 +39,9 @@ def _require(*paths):
 
 def test_parse_ved_ch4_shape_and_frequencies():
     _require(CH4_VED)
-    freqs, ted = mps.parse_ved(CH4_VED)
+    freqs, ped = mps.parse_ved(CH4_VED)
     assert len(freqs) == 9
-    assert ted.shape == (9, 9)
+    assert ped.shape == (9, 9)
     # VEDA4's own row order for CH4: triple-degenerate stretch first, then
     # the non-degenerate stretch, then the two degenerate bend sets.
     expected = [3194.70, 3194.70, 3194.70, 3086.49, 1667.80, 1667.80,
@@ -49,12 +49,15 @@ def test_parse_ved_ch4_shape_and_frequencies():
     assert np.allclose(freqs, expected, atol=0.01)
 
 
-def test_parse_ved_ch4_ted_rows_sum_near_100():
+def test_parse_ved_ch4_ped_rows_abs_sum_near_100():
     _require(CH4_VED)
-    _freqs, ted = mps.parse_ved(CH4_VED)
-    row_sums = ted.sum(axis=1)
-    # "TED: sum = 100" per the .ved header; small rounding deviations (98-101
-    # observed in the real file) are expected, not a bug.
+    _freqs, ped = mps.parse_ved(CH4_VED)
+    # Raw signed PED rows do NOT reliably sum to 100 for the degenerate
+    # 1456.69 cm^-1 triple (e.g. row 7 signed-sums to -98, a known artifact
+    # of arbitrary rotation within a degenerate eigenspace) -- but abs()
+    # summed first, every row recovers ~100, matching how %PED is
+    # conventionally reported (see merge_ped_scores.py module docstring).
+    row_sums = np.abs(ped).sum(axis=1)
     assert np.allclose(row_sums, 100.0, atol=2.0), row_sums
 
 

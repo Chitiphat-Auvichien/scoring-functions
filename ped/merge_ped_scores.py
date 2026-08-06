@@ -19,12 +19,22 @@ Sources combined:
 Category rule (explicit project decision): STRE -> stretch; every other
 VEDA4 coordinate type (BEND, TORS, OUT, LIN, ...) -> bend.
 
-Sign convention: the .ved file contains TWO separate matrices, a "PED: sign
-= direction" table and a distinct "TED: sum = 100" table (different values,
-not a transform of each other). This module uses ONLY the TED table -- see
-ped/archive_python_ped/13_compare_veda4.py, which established that the TED
-table (whose signed values already sum to ~100 per mode) is the authoritative
-one for %stretch/%bend character, not PED.
+Sign convention (revised 2026-08-07): the .ved file contains TWO separate
+matrices, a "PED: sign = direction" table and a distinct "TED: sum = 100"
+table (different values, not a transform of each other). This module uses
+the PED table -- VEDA/VEDA4's own literature (Jamroz's papers, and every
+published table built from VEDA output) is framed entirely around "PED
+analysis"; TED is an internal VEDA4-only supplementary quantity, not what
+the field reports as "%PED". Values are taken as abs() before summing per
+category: the raw signed PED table does NOT reliably sum to 100 per row for
+coupled/(quasi-)degenerate modes (e.g. CH4.ved's 1456.69 cm^-1 triple has a
+row that sums to -98 signed), an artifact of the arbitrary rotation freedom
+within a degenerate eigenspace -- taking abs() first (matching how %PED is
+conventionally reported in the literature) recovers a ~100 sum instead
+(that same row abs-sums to 100). This supersedes an earlier version of this
+module that used the TED table -- see ped/archive_python_ped/13_compare_veda4.py
+for the original PED-vs-TED table discovery (still accurate on the raw file
+structure, just not on which table to report).
 
 VEDA4's own mode-row order need not match data/results/<mol>_normal_classified.csv's
 "Vib N" row order (e.g. VEDA4 often prints descending frequency, Gaussian's
@@ -111,11 +121,11 @@ def _read_matrix_block(lines, start_idx, n):
 
 
 def parse_ved(ved_path):
-    """Parse a VEDA4 .ved file. Returns (freqs (n,), ted_matrix (n, n)).
+    """Parse a VEDA4 .ved file. Returns (freqs (n,), ped_matrix (n, n)).
 
-    Only the TED block is parsed -- see module docstring for why PED is
-    deliberately ignored. `freqs` is in VEDA4's own row order (row i of
-    ted_matrix corresponds to freqs[i]); it need not match the order of the
+    Only the PED block is parsed -- see module docstring for why TED is
+    deliberately not used. `freqs` is in VEDA4's own row order (row i of
+    ped_matrix corresponds to freqs[i]); it need not match the order of the
     log/classified.csv this molecule's frequencies came from originally.
     """
     with open(ved_path) as f:
@@ -129,7 +139,9 @@ def parse_ved(ved_path):
 
     dfac_idx = _find(lambda l: 'diagonality factor' in l, "the 'diagonality factor' line")
     ped_hdr_idx = _find(lambda l: l.strip().startswith('PED: sign'), "the 'PED: sign = direction' header")
-    ted_hdr_idx = _find(lambda l: l.strip().startswith('TED:'), "the 'TED: sum = 100' header")
+    # Not parsed (see module docstring), but its presence is checked as a
+    # sanity check that this is a genuine, complete VEDA4 .ved file.
+    _find(lambda l: l.strip().startswith('TED:'), "the 'TED: sum = 100' header")
 
     freq_lines = [l for l in lines[dfac_idx + 1:ped_hdr_idx] if l.strip()]
     freqs = np.array([float(x) for l in freq_lines for x in l.split()])
@@ -138,9 +150,9 @@ def parse_ved(ved_path):
         raise ValueError(f"{ved_path}: parsed zero frequencies between the "
                           "diagonality-factor line and the PED header.")
 
-    # ted_hdr_idx+1 is the "1 2 3 ... n" column-header line; data starts after it.
-    ted_matrix, _ = _read_matrix_block(lines, ted_hdr_idx + 2, n)
-    return freqs, ted_matrix
+    # ped_hdr_idx+1 is the "1 2 3 ... n" column-header line; data starts after it.
+    ped_matrix, _ = _read_matrix_block(lines, ped_hdr_idx + 2, n)
+    return freqs, ped_matrix
 
 
 # ---------------------------------------------------------------------------
@@ -205,23 +217,24 @@ def compute_ped_percentages(ved_path, vdf_path):
     VEDA's own row order) with columns veda_freq, PED_Stretch_pct,
     PED_Bend_pct.
 
-    Percentages are the RAW (signed) TED values summed by category -- not
-    absolute-valued -- matching the .ved header's own 'TED: sum = 100'
-    claim (each row's full 100-column sum, including small negative cross
-    terms, is already ~100; see ped/archive_python_ped/13_compare_veda4.py's
-    docstring for why no |.| post-processing is applied).
+    Percentages are the ABSOLUTE VALUE of each PED entry, summed by
+    category -- the raw signed PED table does not reliably sum to ~100 per
+    row for coupled/(quasi-)degenerate modes (see module docstring), so
+    abs() is applied first, matching how %PED is conventionally reported
+    in the VEDA literature.
     """
-    freqs, ted = parse_ved(ved_path)
+    freqs, ped = parse_ved(ved_path)
     types = parse_coord_types(vdf_path)
-    if len(types) != ted.shape[1]:
+    if len(types) != ped.shape[1]:
         raise ValueError(
             f"{vdf_path} defines {len(types)} coordinate types but "
-            f"{ved_path}'s TED matrix has {ted.shape[1]} columns -- these "
+            f"{ved_path}'s PED matrix has {ped.shape[1]} columns -- these "
             "must be the same VEDA4 run's paired output files.")
 
+    abs_ped = np.abs(ped)
     stretch_mask = np.array([t == 'STRE' for t in types])
-    stretch_pct = ted[:, stretch_mask].sum(axis=1)
-    bend_pct = ted[:, ~stretch_mask].sum(axis=1)
+    stretch_pct = abs_ped[:, stretch_mask].sum(axis=1)
+    bend_pct = abs_ped[:, ~stretch_mask].sum(axis=1)
     return pd.DataFrame({
         'veda_freq': freqs,
         'PED_Stretch_pct': stretch_pct,

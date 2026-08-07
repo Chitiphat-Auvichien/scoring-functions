@@ -2193,6 +2193,9 @@ def regenerate_all(verbose=True):
          lambda: plot_gaussian_nbasis_scaling(scale="log")),
         ("fig:gaussian_nbasis linear (SI/diagnostic, not yet in .tex)",
          lambda: plot_gaussian_nbasis_scaling(scale="linear")),
+        ("fig:ped_vs_vscore (proposed, not yet in .tex)", plot_ped_vs_vscore),
+        ("fig:ped_vs_bondscore (exploratory, not a manuscript figure)",
+         plot_ped_vs_bondscore_by_type),
     ]
     results = {}
     for tex_label, fn in fns:
@@ -2205,6 +2208,174 @@ def regenerate_all(verbose=True):
                 if k not in ("pdf", "png"):
                     print(f"  {k}: {v}")
     return results
+
+
+    return {
+        "pdf": pdf_path, "png": png_path,
+        "scale": scale,
+        "n_molecules_fit": len(df),
+        "n_excluded_non_mp2_321g": int(n_excluded),
+        "n_basis_range_fit": (int(df["n_basis"].min()), int(df["n_basis"].max())),
+        "fit_vs_n_basis_loglog": {"exponent": float(slope), "r2": float(r2)},
+        "fit_vs_n_basis_linear_space": {"exponent": float(b_lin), "r2_linear": float(r2_lin)},
+        "fit_vs_N_for_comparison": {"exponent": float(slope_N), "r2": float(r2_N)},
+        "framing": ("SI/diagnostic companion to fig:cputime, PROPOSED label "
+                    "fig:gaussian_nbasis, not yet wired into the .tex. Fit "
+                    "restricted to mp2_321g==True -- mixing methods "
+                    "confounds the N_basis fit the same way mixing methods "
+                    "confounded the N fit in fig:cputime. Shows n_basis "
+                    "(not N) is Gaussian's real cost-scaling variable "
+                    "within a fixed method/basis."),
+    }
+
+
+# --------------------------------------------------------------------------
+# fig:ped_vs_vscore / fig:ped_vs_bondscore -- VEDA4 PED-based %nu vs. this
+# framework's own s[V_S] / s^AB scores, from ped/merge_ped_scores.py's
+# data/results/combined_ped_vs_scores.csv.
+# --------------------------------------------------------------------------
+
+# combined_ped_vs_scores.csv's own `label` column stores classify_all_modes'
+# short S/B/SB codes directly (see ped/merge_ped_scores.py) -- map to the
+# shared CATEGORY_COLOR/CATEGORY_MARKER/CATEGORY_LABEL keys (classifier-
+# PREDICTED colors, not REF_CATEGORY_COLOR, since this label is this
+# framework's own output, not a literature/reference label).
+_LABEL_CODE_TO_CATEGORY = {"S": "stretch", "B": "bend", "SB": "mixed"}
+
+
+def _quadratic_fit_r2(x, y):
+    """Least-squares quadratic fit y ~ polyval(coeffs, x); return
+    (coeffs, r2), matching the np.polyfit + manual-R^2 pattern used
+    throughout this module (see plot_gaussian_nbasis_scaling)."""
+    coeffs = np.polyfit(x, y, 2)
+    pred = np.polyval(coeffs, x)
+    r2 = 1 - np.sum((y - pred) ** 2) / np.sum((y - y.mean()) ** 2)
+    return coeffs, r2
+
+
+def plot_ped_vs_vscore(
+    csv_input="data/results/combined_ped_vs_scores.csv",
+    out_dir="data/figures",
+    label="fig_ped_vs_vscore",
+):
+    """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
+    molecule-level stretch score s[V_S] (``V_Stretch``), one point per
+    (Molecule, Mode) row of combined_ped_vs_scores.csv, fit with a
+    quadratic (least squares, reported with R^2) summarizing the overall
+    trend. Points colored/marked by this framework's own S/B/SB
+    classify_all_modes label (the csv's own `label` column), reusing
+    CATEGORY_COLOR/CATEGORY_MARKER/CATEGORY_LABEL as-is via
+    _LABEL_CODE_TO_CATEGORY.
+    """
+    _style()
+    df = pd.read_csv(csv_input)
+    df = df.dropna(subset=["PED_Stretch_pct", "V_Stretch"])
+
+    fig, ax = plt.subplots(figsize=(6.2, 3.4))
+    for code, cat in _LABEL_CODE_TO_CATEGORY.items():
+        sub = df[df["label"] == code]
+        if sub.empty:
+            continue
+        kw = _marker_kwargs(cat)
+        ax.scatter(sub["PED_Stretch_pct"], sub["V_Stretch"], s=16,
+                   zorder=3, label=CATEGORY_LABEL[cat], **kw)
+
+    x = df["PED_Stretch_pct"].to_numpy(float)
+    y = df["V_Stretch"].to_numpy(float)
+    coeffs, r2 = _quadratic_fit_r2(x, y)
+    xx = np.linspace(x.min(), x.max(), 200)
+    ax.plot(xx, np.polyval(coeffs, xx), ls="--", lw=1.2,
+            color=COLORS["threshold"], zorder=4,
+            label=f"quadratic fit ($R^2$={r2:.2f})")
+
+    ax.set_xlabel(r"$\%\nu$")
+    ax.set_ylabel(r"$s[\mathrm{V_S}]$")
+    ax.set_xlim(-3, 103)
+    ax.set_ylim(-0.03, 1.05)
+    ax.legend(loc="upper left", frameon=False, handletextpad=0.4,
+              labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    return {
+        "pdf": pdf_path, "png": png_path,
+        "n_modes": len(df),
+        "n_molecules": df["Molecule"].nunique(),
+        "quadratic_coeffs_a_b_c": tuple(float(c) for c in coeffs),
+        "r2": float(r2),
+    }
+
+
+def plot_ped_vs_bondscore_by_type(
+    csv_input="data/results/combined_ped_vs_scores.csv",
+    out_dir="data/figures",
+    label="fig_ped_vs_bondscore",
+):
+    """Exploratory per-bond-type grid: VEDA4's ``PED_S_<T>_pct`` (%nu^AB) vs.
+    this framework's own raw ``BondScore_<T>`` (s^AB), one panel per bond
+    species-pair type T present in combined_ped_vs_scores.csv's own
+    BondScore_<T> columns (currently B-H, B-N, C-C, C-Cl, C-H, C-N, C-O,
+    Cl-P, H-N -- see ped/merge_ped_scores.py's ``_canonical_bond_type``).
+    Each panel gets its own quadratic fit + R^2 (same pattern as
+    plot_ped_vs_vscore), for spotting which bond types/molecules diverge
+    from the molecule-level trend. Exploratory, not a manuscript figure:
+    one plain marker color, no S/B/SB faceting.
+    """
+    _style()
+    df = pd.read_csv(csv_input)
+
+    bond_types = [c[len("BondScore_"):] for c in df.columns
+                  if c.startswith("BondScore_") and not c.endswith("_pct")]
+
+    n = len(bond_types)
+    ncols = 3
+    nrows = -(-n // ncols)  # ceil division
+    fig, axes = plt.subplots(nrows, ncols, figsize=(3.2 * ncols, 2.8 * nrows),
+                              squeeze=False)
+
+    per_bond_type = {}
+    for i, bt in enumerate(bond_types):
+        ax = axes.flat[i]
+        x_col, y_col = f"PED_S_{bt}_pct", f"BondScore_{bt}"
+        sub = df[[x_col, y_col]].dropna()
+        x = sub[x_col].to_numpy(float)
+        y = sub[y_col].to_numpy(float)
+
+        ax.scatter(x, y, s=14, marker="o", facecolors="black",
+                   edgecolors="black", alpha=0.75, zorder=3)
+
+        if len(sub) >= 3:
+            coeffs, r2 = _quadratic_fit_r2(x, y)
+            xx = np.linspace(x.min(), x.max(), 100)
+            ax.plot(xx, np.polyval(coeffs, xx), ls="--", lw=1.1,
+                    color=COLORS["threshold"], zorder=4)
+            ax.text(0.05, 0.92, f"$R^2$={r2:.2f}", transform=ax.transAxes,
+                    fontsize=ANNOTATION_FONTSIZE, va="top")
+            per_bond_type[bt] = {"n": len(sub), "r2": float(r2)}
+        else:
+            ax.text(0.5, 0.5, "insufficient data", transform=ax.transAxes,
+                    ha="center", va="center", fontsize=ANNOTATION_FONTSIZE,
+                    color=COLORS["threshold"])
+            per_bond_type[bt] = {"n": len(sub), "r2": None}
+
+        ax.set_title(bt.replace("-", "–"), fontsize=11)
+
+    for j in range(n, nrows * ncols):
+        axes.flat[j].axis("off")
+
+    fig.supxlabel(r"$\%\nu^{AB}$")
+    fig.supylabel(r"$s^{AB}$")
+    fig.tight_layout(rect=(0.02, 0.02, 1, 1))
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    return {
+        "pdf": pdf_path, "png": png_path,
+        "bond_types": bond_types,
+        "per_bond_type": per_bond_type,
+    }
 
 
 if __name__ == "__main__":

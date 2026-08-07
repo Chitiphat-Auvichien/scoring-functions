@@ -89,15 +89,15 @@ earlier internal optimization cycles; only the final, named pair matters.
 Copy that `.ved` + `.vdf` pair into **`data/ved/<mol>.ved`** and
 **`data/ved/<mol>.vdf`** (same basename convention as `data/logs/`,
 `data/gjf/`, `data/fchk/` -- one pair per molecule). `ped/merge_ped_scores.py`
-then combines them with this repo's own
-`data/results/<mol>_normal_classified.csv` (T/R/V scores + S/B/M
-classification label, from `python main.py -m <mol> --classify --mode
+then combines them with this repo's own `data/results/<mol>_normal.csv` (T/R/V
+scores + S/B/M classification label, from `python main.py -m <mol> --mode
 normal`) into a per-mode table of V-score vs. real %stretch/%bend character:
 
 ```bash
-# Single molecule -- writes data/results/<mol>_normal_classified_ped.csv
-# (the original _classified.csv is never modified; two columns are appended:
-# PED_Stretch_pct, PED_Bend_pct). Fails loud if inputs are missing.
+# Single molecule -- appends PED_Stretch_pct/PED_Bend_pct (+ per-bond-type
+# columns) into data/results/<mol>_normal.csv IN PLACE (an intentional
+# enrichment of that one canonical per-molecule file, not a separate `_ped`
+# file). Fails loud if inputs are missing.
 python ped/merge_ped_scores.py --molecule CH4
 
 # Several molecules, plus one combined table for correlating V-score against
@@ -109,11 +109,19 @@ python ped/merge_ped_scores.py --molecules CH4 H2O C6H6 \
 # Every molecule in data/mol_list_method.csv's roster that has a .ved/.vdf pair.
 python ped/merge_ped_scores.py --all \
     --combined-output data/results/combined_ped_vs_scores.csv
+
+# Full per-internal-coordinate |PED| table for one molecule (one row per VEDA
+# mode, one column per internal coordinate, e.g. '1_STRE_CH') -- a developer
+# diagnostic, not the aggregate Stretch/Bend/bond-type merge above. Reads
+# only data/ved/<mol>.ved+.vdf, no <mol>_normal.csv needed. Writes
+# data/results/<mol>_full_ped_table.csv (override with --full-table-output).
+python ped/merge_ped_scores.py --molecule CH4 --full-table
 ```
 
-The same functionality is also wired into `main.py`'s flag dispatch, alongside
-`--classify`/`--emit-projection`/`--library`/`--calibrate`/`--figures`, so it
-doesn't require calling this script directly:
+The single-molecule and roster-batch merges are also wired into `main.py`'s
+flag dispatch, alongside `--emit-projection`/`--library`/`--calibrate`/
+`--figures`, so ordinary use doesn't require calling this script directly
+(`--full-table` is developer-only and stays `ped/merge_ped_scores.py`-only):
 
 ```bash
 # Per-molecule (equivalent to --molecule above); requires -m.
@@ -123,22 +131,21 @@ python main.py -m CH4 --ped-merge
 python main.py --ped-merge-all --combined-output data/results/combined_ped_vs_scores.csv
 ```
 
-`--classify` and `--ped-merge` can be combined in one invocation (fixed
-dispatch order runs `--classify` first, so `--ped-merge` finds the
-classified.csv it just wrote): `python main.py -m CH4 --classify --mode normal --ped-merge`.
-
 **Category rule:** VEDA4's `STRE` coordinate type maps to stretch; every
-other type (`BEND`, `TORS`, `OUT`, `LIN`, ...) maps to bend. **Only the `TED`
-table is used** (`"TED: sum = 100"` in the `.ved` file), never `PED`
-(`"PED: sign = direction"`) -- this project already learned the hard way
-(`ped/archive_python_ped/13_compare_veda4.py`) that PED encodes sign/phase
-information, not the summable %character VEDA4 itself reports as
-authoritative. `%stretch`/`%bend` are the raw (signed) per-category TED sums,
-not absolute-valued -- each TED row already sums to ~100 by construction
-(small deviations, e.g. 98 or 101, and small negative cross-term entries, are
-normal rounding, not a bug).
+other type (`BEND`, `TORS`, `OUT`, `LIN`, ...) maps to bend. **The `PED` table
+is used** (`"PED: sign = direction"` in the `.ved` file), not `TED`
+(`"TED: sum = 100"`) -- VEDA4/VEDA's own literature (Jamroz's papers, and
+every published table built from VEDA output) is framed entirely around "PED
+analysis"; TED is an internal VEDA4-only supplementary quantity, not what the
+field reports as "%PED" (see `ped/merge_ped_scores.py`'s module docstring for
+the full rationale, including why an earlier version of this module used TED
+instead). Values are taken as **absolute value** before summing per category
+-- the raw signed PED table does not reliably sum to ~100 per row for
+coupled/(quasi-)degenerate modes (an artifact of the arbitrary rotation
+freedom within a degenerate eigenspace); abs()-summing first recovers a ~100
+sum, matching how %PED is conventionally reported in the literature.
 
-VEDA4's own mode-row order need not match `_classified.csv`'s `Vib N` row
+VEDA4's own mode-row order need not match `<mol>_normal.csv`'s `Vib N` row
 order (e.g. VEDA4 often prints descending frequency; this repo's parse order
 is typically ascending) -- `merge_ped_scores.py` matches modes by nearest
 recomputed frequency (greedy, warns above 2.0 cm⁻¹ residual -- the same

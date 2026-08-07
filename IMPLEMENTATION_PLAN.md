@@ -10,11 +10,83 @@
 > manuscript's Results & Discussion section (`lead-author` especially, but also
 > `figure-builder`/`lead-engineer` when their output feeds a specific section) should be pointed at this
 > file, not an older one.
-> Last updated: 2026-08-03 (**`scoring.py`'s `Atom`/`Coordinate` classes vectorized** — the numerical-
-> core item explicitly deferred out of the same-day refactor session below is now done. `pytest`
-> 119/119 green; `library_scores.csv`/`thresholds.json`/every figure PNG re-verified. See RESUME HERE.)
+> Last updated: 2026-08-07 (**CLI/CSV consolidation** — collapsed the scores/classified/PED-merge
+> file-type proliferation into one canonical per-molecule CSV; removed `--classify`; PED-merge and
+> EMIT-projection now enrich that file in place instead of writing near-duplicate `_ped`/`_contributions`
+> files. `pytest` 132/137 green (5 pre-existing failures unrelated to this change — see entry). See
+> RESUME HERE.)
 
 > ## ▶ RESUME HERE (session pointer — keep current; update + commit after each increment)
+> **2026-08-07 (CLI/CSV consolidation):** User feedback: "too many options and calculation paths, hence
+> too many types of csv files." Consolidated both `main.py` and `ped/merge_ped_scores.py`:
+> - **One CSV per molecule per mode type.** `run_classify_pipeline` (renamed `run_scoring_pipeline`) now
+>   writes `data/results/<mol>_{normal,EMIT}.csv` containing scores (`Tx..Rz`, `V_Stretch`), `Mu`/`K`/
+>   `Irrep`, AND the Steps 2-4 classification (`label`/`annotation`/`s_AB`) together — `classify_to_rows()`
+>   (`src/classifier.py`) gained the `Mu`/`K`/`Irrep` columns it was missing, making it a strict superset
+>   of the old scores-only row. This replaces the old `_normal_scores.csv` + `_normal_classified.csv` /
+>   `_EMIT_scores.csv` + `_EMIT_classified.csv` pairs — `score_modes()`/`_SCORE_COLS` deleted (dead code,
+>   zero external callers, confirmed by grep before removal).
+> - **PED-merge and EMIT-projection enrich in place instead of forking a new file.** `--ped-merge` /
+>   `ped/merge_ped_scores.py`'s default path now reads-and-rewrites `<mol>_normal.csv` directly (appends
+>   `PED_Stretch_pct`/`PED_Bend_pct`/per-bond-type columns) instead of writing a separate
+>   `_normal_classified_ped.csv` — an intentional, deliberate reversal of the previous "the original
+>   `_classified.csv` is never modified" invariant, since the whole point of this session was fewer files,
+>   and the operation is git-tracked/deterministic/developer-invoked-only. Likewise `--emit-projection`
+>   now requires `<mol>_EMIT.csv` to already exist and merges `C2_Tx..C2_VMix` into it in place (dropping
+>   `_EMIT_contributions.csv` entirely), while still writing a separate `<mol>_EMIT_full.csv` (renamed
+>   from `_EMIT_projection_full.csv`) for the genuinely different-shaped per-reference-mode detail — same
+>   "aggregate merges in, full-dimensional dump stays separate" pattern PED's `_full_ped_table.csv`
+>   (`--full-table`, added earlier the same day) already established.
+> - **`--classify` removed.** Classification was already a strict superset of scoring, so the plain
+>   `-m <mol> --mode {normal,emit}` path now always classifies — there is no more scores-only mode.
+> - **`main.py --help` now groups flags** into "User workflow" (`-m`/`--mode` — the whole job for
+>   ordinary use) and "Developer / maintainer workflow" (`--emit-projection`, `--ped-merge`,
+>   `--ped-merge-all`, `--combined-output`, `--library`, `--calibrate`, `--figures`) via
+>   `argparse.add_argument_group`.
+> - **`ped/README.md` stale-doc fix (pre-existing, unrelated to the consolidation but caught while
+>   editing the same section):** it still described the `.ved` file's TED table (signed, "never PED") as
+>   authoritative, contradicting `ped/merge_ped_scores.py`'s own code/docstring, which had already
+>   switched to the PED table + abs() earlier the same day. Corrected to match the code.
+> - **Bug found and fixed while regenerating data:** `run_projection_pipeline` wasn't idempotent — running
+>   `--emit-projection` a second time (or once for real then once more via a test's `write=False` call)
+>   duplicated `C2_*` columns as `_x`/`_y` via `merge()`'s default suffixing, since the freshly-read
+>   `<mol>_EMIT.csv` could already carry `C2_*` columns from a prior run. Fixed by dropping any existing
+>   `C2_*` columns before merging. Caught by `tests/test_projection.py`/`tests/test_flag_validation.py`
+>   failing after the first real `--emit-projection` run on C6H6; both pass after the fix.
+> - **`data/results/` regenerated wholesale, old files deleted.** Every per-molecule file under the old
+>   naming was regenerated under the new scheme and the old file removed (`git rm`) — see the commit for
+>   the exact list. Two exceptions, both pre-existing and left untouched: `SnO2_normal_classified.csv`
+>   has no `.log`/`.gjf` anywhere in the repo (not in `mol_list_method.csv` either) and is therefore
+>   unreproducible — kept as-is rather than deleted or silently renamed. `combined_ped_vs_scores.csv` was
+>   regenerated via `ped/merge_ped_scores.py --molecules <the 10 PED molecules> --combined-output ...`
+>   (NOT `main.py --ped-merge-all`, which reads the 68-molecule hydride-library roster and only overlaps
+>   this file's molecule set at `C6H6` — confirmed by running it and getting a 1-molecule result first),
+>   which reset it to 243 rows, overwriting a prior manual 213-row hand-edit (committed `37ea724`,
+>   recoverable from git history if that edit needs to be reapplied).
+> - **Found but explicitly left alone (pre-existing, unrelated):** `data/logs/C6H6.log`,
+>   `data/gjf/C6H6.com`, `data/ved/C6H6.ved`/`.vdf` all had uncommitted local modifications already
+>   present before this session started (plus a new untracked `data/fchk/C6H6.fchk`) — looks like
+>   in-progress fchk-based VEDA4 rework. Regenerating `C6H6_normal.csv`/`C6H6_EMIT.csv`/
+>   `combined_ped_vs_scores.csv` necessarily used this current on-disk state (the pipeline always reads
+>   current source, by design) and that state got included in this session's commit; flagged to the user
+>   rather than silently absorbed. This pre-existing state is also the root cause of two `pytest`
+>   failures unrelated to the consolidation itself: `test_veda_fmt_regression.py::
+>   test_framework1_c6h6_round_trip_and_matches_reference` (fresh Hessian reconstruction now diverges from
+>   the committed `ped/reference/C6H6.fmt` golden, built from the old log) and `::
+>   test_resolve_molecule_no_fchk_present` (asserts no `.fchk` exists for C6H6; one now does). Three more
+>   pre-existing failures in `test_library_ingest.py` (`test_check_roster_disk_consistency_...`,
+>   `test_discover_geometry_molecules_matches_roster_exactly`, `test_regenerate_characterised_modes_...`)
+>   are caused by the 9 transferability-test molecules' `.log`/`.gjf` files sharing `data/logs`/
+>   `data/gjf` with the 68-molecule calibration roster (deliberately excluded from
+>   `mol_list_method.csv` per the transferability-test decision) — none of these 5 touch any file this
+>   session modified. **132/137 passing**, all 5 failures pre-existing.
+> - Also fixed a separate pre-existing gap surfaced by finally running `--figures` end to end: two
+>   `plot_benzene_*` functions in `src/figures.py` defaulted to `data/results/benzene_*.csv` paths that
+>   have never existed on disk (only `C6H6_*` files do, from the 2026-07-26 basename rename) — corrected
+>   to `C6H6_*`. `plot_benzene_confusion_precision_recall` also needed `benzene_internal_confusion_matrix
+>   /summary.csv`, which `src/benzene_validation.py::run_benzene_internal_confusion()` had never been run
+>   to produce — ran it once to unblock `--figures`; unrelated to the CLI/CSV consolidation itself.
+
 > **2026-08-03 (Atom/Coordinate vectorization, same-day follow-up to the refactor session below):**
 > Replaced `scoring.py`'s per-atom `Atom`/`Coordinate` objects (camelCase, `.x()/.y()/.z()` method-call
 > accessors, Python for-loops in `COM()`/`MIT()`/`Tscore()`/`Rscore()`/`_build_inertia_tensor()`) with

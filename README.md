@@ -90,53 +90,43 @@ The program generates a text file in `data/intermediate/` containing the molecul
 * **Action:** Open the file, verify the `BONDS` section, and add any missing bonds (e.g., `1 2` for a bond between Atom 1 and Atom 2 or you can copy the connectivity information directly from the Gaussian input file). Save and close the file, then press **Enter** in the terminal.
 
 ### Step 5: View Results
-The results are saved as a CSV file in `data/results/` (`<molecule>_normal_scores.csv` or
-`<molecule>_EMIT_scores.csv`). You can open this file in Excel.
+The results are saved as one CSV file per mode type in `data/results/` (`<molecule>_normal.csv` or
+`<molecule>_EMIT.csv`) — scores, `Mu`/`K`/`Irrep`, and the Steps 2-4 classification (`label`,
+`annotation`, `s_AB`) are all in that single file; there is no separate scores-only output. You can open
+this file in Excel.
 
 **Note:** This repository is designed to facilitate calculations of scores for vibrational modes from the Gaussian program or for EMIT modes. However, the user can calculate scores for modes of motion obtained from any programs or methods by adapting the output format to suit this program.
 
-## Classification, EMIT Projection, Library Calibration, and Figures (CLI flags)
+## Developer / maintainer workflow (CLI flags)
 
-Beyond the Step-1 scoring workflow above, `main.py` exposes seven additional flags that each run one
-already-built pipeline end to end, with no need to import Python yourself. All commands below were run
-from the repository root (`Github/scoring-functions/`) against the data already checked into this repo
-and confirmed to produce real output files.
+Steps 1-5 above (`-m`/`--molecule` + `--mode`) are the whole job for ordinary use. `main.py` also exposes
+a second group of flags — diagnostics, cross-checks, and manuscript-support pipelines — that most users
+won't need. Run `python main.py --help` to see both groups. All commands below were run from the
+repository root (`Github/scoring-functions/`) against the data already checked into this repo and
+confirmed to produce real output files.
 
-**Per-molecule flags** (`-m`/`--molecule` required):
+**Per-molecule flags** (`-m`/`--molecule` required; each requires its prerequisite CSV to already exist):
 
-Run the Steps 2-4 classification for one molecule. `--mode` is required (it picks which CSV gets
-written). Writes `data/results/<mol>_{normal,emit}_classified.csv`.
-
-```bash
-python main.py -m water --mode normal --classify
-```
-
-Project raw EMIT eigenvectors onto the mass-weighted normal-mode reference basis. Writes
-`data/results/<mol>_EMIT_contributions.csv` (grouped) and `data/results/<mol>_EMIT_projection_full.csv`
-(per-reference-mode detail). Fails loudly with a clear message if `data/EMIT/<mol>_EMIT.txt` is missing.
+Project raw EMIT eigenvectors onto the mass-weighted normal-mode reference basis. Requires
+`data/results/<mol>_EMIT.csv` to already exist (run `--mode emit` first); merges the grouped
+`C2_Tx`..`C2_VMix` fractions into that file **in place** and writes `data/results/<mol>_EMIT_full.csv`
+(per-reference-mode detail). Fails loudly with a clear message if a prerequisite is missing.
 
 ```bash
+python main.py -m water --mode emit
 python main.py -m water --emit-projection
 ```
 
-Merge real VEDA4 PED (Potential Energy Distribution) output into one molecule's classification, adding
-`PED_Stretch_pct`/`PED_Bend_pct` columns for validating `V_Stretch` against ground-truth %stretch/%bend
-character. Requires `data/results/<mol>_normal_classified.csv` (from `--classify --mode normal`) and a
-`data/ved/<mol>.ved` + `data/ved/<mol>.vdf` pair from a real VEDA4 GUI run — see `ped/README.md` for the
-full VEDA4 bridge workflow (`ped/build_veda_fmt.py` builds the `.fmt` file VEDA4 needs from
-`data/logs/<mol>.log` and, optionally, `data/fchk/<mol>.fchk`). Writes
-`data/results/<mol>_normal_classified_ped.csv` (the original `_classified.csv` is never modified).
+Merge real VEDA4 PED (Potential Energy Distribution) output into one molecule's `<mol>_normal.csv`,
+appending `PED_Stretch_pct`/`PED_Bend_pct` (+ per-bond-type columns) **in place** for validating
+`V_Stretch` against ground-truth %stretch/%bend character. Requires `data/results/<mol>_normal.csv`
+(from `--mode normal`) and a `data/ved/<mol>.ved` + `data/ved/<mol>.vdf` pair from a real VEDA4 GUI run
+— see `ped/README.md` for the full VEDA4 bridge workflow (`ped/build_veda_fmt.py` builds the `.fmt` file
+VEDA4 needs from `data/logs/<mol>.log` and, optionally, `data/fchk/<mol>.fchk`).
 
 ```bash
-python main.py -m CH4 --classify --mode normal --ped-merge
-```
-
-Flags combine freely and run in a fixed order (`--library`, `--calibrate`, `--classify`,
-`--emit-projection`, `--ped-merge`, `--ped-merge-all`, `--figures`) — useful for doing several steps for
-one molecule in a single command.
-
-```bash
-python main.py -m benzene --mode emit --classify --emit-projection
+python main.py -m CH4 --mode normal
+python main.py -m CH4 --ped-merge
 ```
 
 **Global flags** (molecule-independent; `-m` is ignored if supplied alongside them):
@@ -157,25 +147,23 @@ first, so this is also slow.
 python main.py --calibrate
 ```
 
-Regenerate every manuscript figure from `data/results/*.csv` into `data/figures/*.{pdf,png}` (7 figures:
-`fig:benzene`, `fig:confusion`, `fig:bondscores`, `fig:boxplots`, `fig:modemixing`, `fig:sensitivity`,
-and the standalone benzene-normal-modes gallery).
+Regenerate every manuscript figure from `data/results/*.csv` into `data/figures/*.{pdf,png}`.
 
 ```bash
 python main.py --figures
 ```
 
 Run `--ped-merge` for every molecule in `data/mol_list_method.csv`'s roster, skipping (with a message)
-any missing its classified.csv or `data/ved/` pair, and write one combined table across all matched
+any missing its `<mol>_normal.csv` or `data/ved/` pair, and write one combined table across all matched
 molecules for correlating `V_Stretch` against real PED %stretch (default
-`data/results/combined_ped_vs_scores.csv`, override with `--combined-output`).
+`data/results/combined_ped_vs_scores.csv`, override with `--combined-output`). Note: this roster is the
+68-molecule hydride calibration library, not any transferability-test molecule set you may be tracking
+separately — use `ped/merge_ped_scores.py --molecules ...` directly (see `ped/README.md`) to merge PED
+for an explicit list of molecules instead.
 
 ```bash
 python main.py --ped-merge-all
 ```
-
-If none of these flags are passed, `main.py` behaves exactly as in Step 2-5 above (the plain Step-1
-scoring path) — nothing about the default workflow changed.
 
 Every manuscript figure is also a standalone function in `src/figures.py` (e.g.
 `plot_benzene_stress_test`, `plot_confusion_matrix`, `plot_bond_scores`, `plot_boxplots`,

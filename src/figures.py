@@ -2284,9 +2284,12 @@ def plot_ped_vs_vscore(
     _collapse_degenerate_freqs -- see its docstring) of
     combined_ped_vs_scores.csv, fit with a quadratic (least squares,
     reported with R^2) summarizing the overall trend. Points colored/
-    marked by this framework's own S/B/SB classify_all_modes label (the
-    csv's own `label` column), reusing CATEGORY_COLOR/CATEGORY_MARKER/
-    CATEGORY_LABEL as-is via _LABEL_CODE_TO_CATEGORY.
+    colored by this framework's own S/B/SB classify_all_modes label (the
+    csv's own `label` column), reusing CATEGORY_COLOR/CATEGORY_LABEL as-is
+    via _LABEL_CODE_TO_CATEGORY. One marker shape (circle) for all points --
+    color alone distinguishes the category, so varying marker shape too
+    would be a redundant second encoding of the same distinction (matches
+    fig:bondscores' marker="o" override).
     """
     _style()
     df = pd.read_csv(csv_input)
@@ -2300,7 +2303,7 @@ def plot_ped_vs_vscore(
         sub = df[df["label"] == code]
         if sub.empty:
             continue
-        kw = _marker_kwargs(cat)
+        kw = _marker_kwargs(cat, marker="o")
         ax.scatter(sub["PED_Stretch_pct"], sub["V_Stretch"], s=16,
                    zorder=3, label=CATEGORY_LABEL[cat], **kw)
 

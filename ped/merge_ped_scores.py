@@ -59,6 +59,7 @@ Usage:
     python ped/merge_ped_scores.py --molecule CH4
     python ped/merge_ped_scores.py --molecules CH4 H2O C6H6 --combined-output data/results/combined_ped_vs_scores.csv
     python ped/merge_ped_scores.py --all --combined-output data/results/combined_ped_vs_scores.csv
+    python ped/merge_ped_scores.py --molecule CH4 --full-table  # full per-internal-coordinate |PED| table, no classified.csv needed
 """
 import argparse
 import os
@@ -335,6 +336,32 @@ def compute_ped_percentages(ved_path, vdf_path):
         data[f'PED_S_{bond_type}_pct'] = abs_ped[:, mask].sum(axis=1)
 
     return pd.DataFrame(data)
+
+
+def full_ped_table(ved_path, vdf_path):
+    """Full per-internal-coordinate |PED| table for one molecule: one row
+    per VEDA4 mode (VEDA's own row order, indexed by ``veda_freq``), one
+    column per internal coordinate labeled ``'<idx>_<TYPE>_<composition>'``
+    (e.g. ``'1_STRE_CH'``, ``'5_BEND_HCH'``), values = abs(PED) -- the same
+    abs() convention as compute_ped_percentages' aggregate columns, applied
+    per-entry instead of summed by category. This is parse_ved()'s raw
+    matrix laid out as a labeled DataFrame for direct inspection, not a
+    replacement for the aggregate Stretch/Bend/per-bond-type columns
+    computed elsewhere in this module.
+    """
+    freqs, ped = parse_ved(ved_path)
+    types = parse_coord_types(vdf_path)
+    compositions = parse_coord_compositions(vdf_path)
+    if len(types) != ped.shape[1]:
+        raise ValueError(
+            f"{vdf_path} defines {len(types)} coordinate types but "
+            f"{ved_path}'s PED matrix has {ped.shape[1]} columns -- these "
+            "must be the same VEDA4 run's paired output files.")
+
+    columns = [f"{i + 1}_{t}_{c}" for i, (t, c) in enumerate(zip(types, compositions))]
+    table = pd.DataFrame(np.abs(ped), columns=columns)
+    table.insert(0, "veda_freq", freqs)
+    return table
 
 
 # ---------------------------------------------------------------------------
@@ -649,11 +676,38 @@ def _parse_args(argv=None):
                     help=f"Warn (not fail) if a matched Vib/VEDA frequency "
                          f"pair's residual exceeds this many cm^-1 (default "
                          f"{DEFAULT_FREQ_TOL_CM1}).")
+    p.add_argument('--full-table', action='store_true',
+                    help="Instead of the merged classified+PED output, write "
+                         "the full per-internal-coordinate |PED| table (one "
+                         "row per VEDA mode, one column per internal "
+                         "coordinate) for a single --molecule. Reads only "
+                         "data/ved/<mol>.ved+.vdf -- no classified.csv "
+                         "needed. Not valid with --molecules/--all.")
+    p.add_argument('--full-table-output', default=None,
+                    help="Output path for --full-table (default "
+                         "data/results/<mol>_full_ped_table.csv).")
     return p.parse_args(argv)
 
 
 def main(argv=None):
     args = _parse_args(argv)
+
+    if args.full_table:
+        if not args.molecule:
+            print("Error: --full-table requires a single --molecule "
+                  "(not --molecules/--all).")
+            return 1
+        data_dir = os.path.join(_REPO_ROOT, 'data')
+        ved_path, vdf_path, missing = _resolve_ved_paths(args.molecule, data_dir)
+        if missing:
+            print(f"Error: missing VEDA4 output for {args.molecule!r}: {missing}")
+            return 1
+        table = full_ped_table(ved_path, vdf_path)
+        out_path = args.full_table_output or os.path.join(
+            data_dir, 'results', f'{args.molecule}_full_ped_table.csv')
+        table.to_csv(out_path, index=False, float_format='%.4f')
+        print(f"Wrote {len(table)}x{len(table.columns) - 1} full PED table -> {out_path}")
+        return 0
 
     if args.all:
         molecules = _read_roster(_REPO_ROOT)

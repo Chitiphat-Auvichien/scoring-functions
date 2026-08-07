@@ -282,8 +282,12 @@ def classify_all_modes(scorer, final, thresholds=None):
 
 
 def classify_to_rows(scored):
-    """Flatten classify_all_modes() output into CSV-row dicts. s_AB is a
-    semicolon-joined 'Elem#-Elem#:value' list, e.g. "C1-C2:0.0342"."""
+    """Flatten classify_all_modes() output into CSV-row dicts -- this is the
+    single, complete per-mode result row (scores + Mu/K/Irrep + classification);
+    there is no separate scores-only row shape. s_AB is a semicolon-joined
+    'Elem#-Elem#:value' list, e.g. "C1-C2:0.0342". Mu/K/Irrep are None for
+    EMIT modes and the synthetic ideal T/R references (only real Gaussian
+    normal modes carry them)."""
     rows = []
     for m in scored:
         is_emit = m["is_emit"]
@@ -294,6 +298,7 @@ def classify_to_rows(scored):
             "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
             "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
             "V_Stretch": m["V"],
+            "Mu": m["reduced_mass"], "K": m["force_constant"], "Irrep": m["irrep"],
             "label": m["classification"],
             "annotation": m["annotation"],
             "s_AB": bonds_str,

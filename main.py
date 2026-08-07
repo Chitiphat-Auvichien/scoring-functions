@@ -9,9 +9,6 @@ from src.classifier import classify_all_modes, classify_to_rows, is_linear
 from src.projection import build_reference_basis, project_emit
 from src.utils import find_file
 
-# Column order for the results table / CSV.
-_SCORE_COLS = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_Stretch"]
-
 
 def resolve_dirs(data_dir="data"):
     """Return the standard data subdirectories, creating them if needed."""
@@ -116,8 +113,8 @@ def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
 
 def build_scorer_and_final(raw, mode_type):
     """Align to principal axes and build the candidate mode pool ('final'),
-    shared by score_modes() and the classifier so both score the identical
-    mode list.
+    shared by run_scoring_pipeline() and the classifier so both score the
+    identical mode list.
       - 'normal': MIT rotates the molecule AND the mode vectors
         (rotate_modes=True); the 3 ideal T + 3 ideal R references are
         prepended to the real vibrational modes.
@@ -154,37 +151,20 @@ def build_scorer_and_final(raw, mode_type):
     return scorer, final
 
 
-def score_modes(raw, mode_type):
-    """Score every mode in build_scorer_and_final's candidate pool; returns a list of result-row dicts."""
-    scorer, final = build_scorer_and_final(raw, mode_type)
+def run_scoring_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, write=True):
+    """Headless pipeline: load inputs -> classify_all_modes (Algorithm 1) -> CSV.
 
-    rows = []
-    for i, mode in enumerate(final):
-        sc = scorer.calculate_scores(mode["vector"])
-        is_emit = mode.get("is_emit", False)
-        rows.append({
-            "Mode": mode.get("label", f"Mode {i+1}"),
-            ("Eigenvalue" if is_emit else "Freq"): mode["frequency"],
-            "Tx": sc["T"]["x"], "Ty": sc["T"]["y"], "Tz": sc["T"]["z"],
-            "Rx": sc["R"]["x"], "Ry": sc["R"]["y"], "Rz": sc["R"]["z"],
-            "V_Stretch": sc["V"],
-            # Only real Gaussian normal modes carry mu/k/irrep; .get() yields
-            # None for EMIT modes and the synthetic ideal T/R references.
-            "Mu": mode.get("reduced_mass"),
-            "K": mode.get("force_constant"),
-            "Irrep": mode.get("irrep"),
-        })
-    return rows
-
-
-def run_classify_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, write=True):
-    """Headless pipeline: load inputs -> classify_all_modes (Algorithm 1) -> CSV."""
+    This is the single, complete per-molecule result: scores (Tx..Rz,
+    V_Stretch), Mu/K/Irrep, and the Steps 2-4 classification (label,
+    annotation, s_AB) all in one row per mode -- there is no separate
+    scores-only output. Writes data/results/<mol>_{normal,EMIT}.csv.
+    """
     raw, dirs = load_inputs(mol_name, mode_type, data_dir)
     scorer, final = build_scorer_and_final(raw, mode_type)
     scored = classify_all_modes(scorer, final, thresholds)
     df = pd.DataFrame(classify_to_rows(scored))
     suffix = "normal" if mode_type == "normal" else "EMIT"
-    output_file = os.path.join(dirs["results"], f"{mol_name}_{suffix}_classified.csv")
+    output_file = os.path.join(dirs["results"], f"{mol_name}_{suffix}.csv")
     if write:
         df.to_csv(output_file, index=False, float_format="%.4f")
     return df, output_file
@@ -195,9 +175,11 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
 
     Builds the mass-weighted normal-mode reference basis from data/logs/<mol>.log,
     projects the raw EMIT eigenvectors from data/EMIT/<mol>_EMIT.txt onto it, and
-    writes two files: <mol>_EMIT_contributions.csv (grouped T/R/V fractions per
-    EMIT mode) and <mol>_EMIT_projection_full.csv (per-reference-mode detail).
-    Returns (df_grouped, df_full, (path_grouped, path_full)).
+    merges the grouped T/R/V fractions (C2_Tx..C2_VMix) into
+    data/results/<mol>_EMIT.csv in place (must already exist -- run
+    `python main.py -m <mol> --mode emit` first), plus a separate
+    <mol>_EMIT_full.csv with the per-reference-mode detail.
+    Returns (df_emit, df_full, (path_emit, path_full)).
     """
     raw_n, dirs = load_inputs(mol_name, "normal", data_dir)
     scorer_n, final_n = build_scorer_and_final(raw_n, "normal")
@@ -218,17 +200,27 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
             "'Standard orientation' block or non-deterministic MIT() sign fix."
         )
 
+    emit_path = os.path.join(dirs["results"], f"{mol_name}_EMIT.csv")
+    if not os.path.exists(emit_path):
+        raise FileNotFoundError(
+            f"{emit_path} not found -- run `python main.py -m {mol_name} --mode emit` first.")
+    df_emit = pd.read_csv(emit_path)
+    # Re-running --emit-projection (e.g. after a fresh --mode emit) must not
+    # duplicate C2_* columns via merge's _x/_y suffixing -- drop any already
+    # merged in from a prior run first, so this is idempotent.
+    df_emit = df_emit.drop(columns=[c for c in df_emit.columns if c.startswith("C2_")])
+
     ref = build_reference_basis(scorer_n, final_n, thresholds)
     rows, full_rows = project_emit(ref, final_e)
 
-    df = pd.DataFrame(rows)
+    contrib = pd.DataFrame(rows).drop(columns=["Eigenvalue"])
+    df_emit = df_emit.merge(contrib, on="Mode", how="left")
     df_full = pd.DataFrame(full_rows)
-    out_grouped = os.path.join(dirs["results"], f"{mol_name}_EMIT_contributions.csv")
-    out_full = os.path.join(dirs["results"], f"{mol_name}_EMIT_projection_full.csv")
+    out_full = os.path.join(dirs["results"], f"{mol_name}_EMIT_full.csv")
     if write:
-        df.to_csv(out_grouped, index=False, float_format="%.6f")
+        df_emit.to_csv(emit_path, index=False, float_format="%.4f")
         df_full.to_csv(out_full, index=False, float_format="%.6f")
-    return df, df_full, (out_grouped, out_full)
+    return df_emit, df_full, (emit_path, out_full)
 
 
 def _print_table(df, title):
@@ -238,23 +230,25 @@ def _print_table(df, title):
 
 
 def _run_flag_pipelines(args):
-    """Handle the --classify / --emit-projection / --library / --calibrate /
-    --figures CLI flags by wiring up the existing headless pipeline functions.
+    """Handle the developer/maintainer CLI flags (--emit-projection,
+    --ped-merge, --ped-merge-all, --library, --calibrate, --figures) by
+    wiring up the existing headless pipeline functions. The plain user
+    workflow (-m/--molecule [--mode]) is NOT handled here -- see main().
 
       - --library/--calibrate/--figures/--ped-merge-all are GLOBAL and ignore
         -m/--molecule.
-      - --classify/--emit-projection/--ped-merge are PER-MOLECULE and
-        require -m; --classify additionally requires --mode (normal|emit).
-      - Combined flags run in fixed order: --library, --calibrate, --classify,
-        --emit-projection, --ped-merge, --ped-merge-all, --figures. This lets
-        --classify and --ped-merge be combined in one invocation (--ped-merge
-        reads the classified.csv --classify just wrote). Fails loud on a bad
-        combination rather than silently doing nothing.
+      - --emit-projection/--ped-merge are PER-MOLECULE and require -m.
+        --emit-projection requires <mol>_EMIT.csv to already exist (run
+        `-m <mol> --mode emit` first); --ped-merge requires <mol>_normal.csv
+        to already exist (run `-m <mol> --mode normal` first).
+      - Combined flags run in fixed order: --library, --calibrate,
+        --emit-projection, --ped-merge, --ped-merge-all, --figures. Fails
+        loud on a bad combination rather than silently doing nothing.
 
     Returns True if at least one flag was handled (caller should stop),
-    False otherwise (caller falls through to the interactive/--mode path).
+    False otherwise (caller falls through to the plain user workflow).
     """
-    any_flag = (args.library or args.calibrate or args.classify or args.emit_projection
+    any_flag = (args.library or args.calibrate or args.emit_projection
                 or args.figures or args.ped_merge or args.ped_merge_all)
     if not any_flag:
         return False
@@ -283,43 +277,27 @@ def _run_flag_pipelines(args):
               f"tau_B={thresholds.tau_B} -> {path_json}")
         print(f"Wrote {len(sweep_df)}-row sensitivity sweep -> {path_sweep}")
 
-    if args.classify or args.emit_projection:
+    if args.emit_projection or args.ped_merge:
         if not args.molecule:
-            print("Error: --classify/--emit-projection require -m/--molecule.")
+            print("Error: --emit-projection/--ped-merge require -m/--molecule.")
             return True
-
-    if args.classify:
-        if not args.mode:
-            print("Error: --classify requires --mode {normal,emit} "
-                  "(it determines which classified CSV gets written).")
-            return True
-        try:
-            df, path = run_classify_pipeline(args.molecule, args.mode)
-        except (FileNotFoundError, ValueError) as e:
-            print(f"Error running --classify for '{args.molecule}' ({args.mode}): {e}")
-            return True
-        _print_table(df, f"{args.molecule} classification ({args.mode})")
-        print(f"Wrote {len(df)}-row classification -> {path}")
 
     if args.emit_projection:
         try:
-            df, df_full, (path_grouped, path_full) = run_projection_pipeline(args.molecule)
+            df, df_full, (path_emit, path_full) = run_projection_pipeline(args.molecule)
         except FileNotFoundError as e:
-            print(f"Error: --emit-projection for '{args.molecule}' needs both normal-mode "
-                  f"AND EMIT input data present ({e})")
+            print(f"Error: --emit-projection for '{args.molecule}' needs data/EMIT/, the "
+                  f"normal-mode log, AND an existing <mol>_EMIT.csv ({e})")
             return True
         except ValueError as e:
             print(f"Error running --emit-projection for '{args.molecule}': {e}")
             return True
-        _print_table(df, f"{args.molecule} EMIT->normal-mode contributions")
-        print(f"Wrote {len(df)}-row grouped contributions -> {path_grouped}")
+        _print_table(df, f"{args.molecule} EMIT->normal-mode contributions (merged)")
+        print(f"Merged {len(df)}-mode grouped contributions into -> {path_emit}")
         print("(per-reference-mode full detail is wide -- not echoed here; "
               f"see the CSV) Wrote {len(df_full)}-row full projection detail -> {path_full}")
 
     if args.ped_merge:
-        if not args.molecule:
-            print("Error: --ped-merge requires -m/--molecule.")
-            return True
         from ped.merge_ped_scores import merge_molecule_ped
         try:
             _df, vib_rows, path = merge_molecule_ped(args.molecule)
@@ -350,40 +328,52 @@ def _run_flag_pipelines(args):
 
 def main():
     ap = argparse.ArgumentParser(description="Calculate Molecular Mode Scores")
-    ap.add_argument("-m", "--molecule", help="Molecule name (without extension)")
-    ap.add_argument("--mode", choices=["normal", "emit"],
-                    help="Run non-interactively with this mode type (skips the prompt).")
-    ap.add_argument("--classify", action="store_true",
-                    help="Run Steps 2-4 classification for -m <molecule> "
-                         "(requires --mode). Writes <mol>_{normal,emit}_classified.csv.")
-    ap.add_argument("--emit-projection", action="store_true", dest="emit_projection",
-                    help="Project raw EMIT eigenvectors onto the normal-mode reference "
-                         "basis for -m <molecule>. Writes <mol>_EMIT_contributions.csv "
-                         "and <mol>_EMIT_projection_full.csv.")
-    ap.add_argument("--library", action="store_true",
-                    help="Ingest the full mol_list_method.csv roster (real-engine recompute "
-                         "for every molecule's on-disk .log/.gjf pair) -> "
-                         "data/results/library_scores.csv. Global (ignores -m); slow.")
-    ap.add_argument("--calibrate", action="store_true",
-                    help="Calibrate tau_TR/tau_S/tau_B against the ingested library -> "
-                         "data/results/thresholds.json + tau_sensitivity_sweep.csv. Global (ignores -m).")
-    ap.add_argument("--figures", action="store_true",
-                    help="Regenerate all manuscript figures from data/results/*.csv -> "
-                         "data/figures/*.{pdf,png}. Global (ignores -m).")
-    ap.add_argument("--ped-merge", action="store_true", dest="ped_merge",
-                    help="Merge real VEDA4 PED (data/ved/<mol>.ved+.vdf) into -m <molecule>'s "
-                         "<mol>_normal_classified.csv (must already exist -- run --classify "
-                         "--mode normal first). Writes <mol>_normal_classified_ped.csv with "
-                         "PED_Stretch_pct/PED_Bend_pct columns added. Per-molecule; requires -m.")
-    ap.add_argument("--ped-merge-all", action="store_true", dest="ped_merge_all",
-                    help="Run --ped-merge for every molecule in data/mol_list_method.csv's "
-                         "roster, skipping (with a message) any missing its classified.csv or "
-                         "data/ved/<mol>.ved/.vdf pair, and write one combined table (default "
-                         "data/results/combined_ped_vs_scores.csv, override with "
-                         "--combined-output). Global (ignores -m).")
-    ap.add_argument("--combined-output", dest="combined_output", default=None,
-                    help="Output path for the --ped-merge-all combined table "
-                         "(default data/results/combined_ped_vs_scores.csv).")
+
+    user_group = ap.add_argument_group(
+        "User workflow",
+        "Score + classify one molecule's modes. This is the whole job for most users: "
+        "pick a molecule and a mode type, get one CSV back.")
+    user_group.add_argument("-m", "--molecule", help="Molecule name (without extension)")
+    user_group.add_argument("--mode", choices=["normal", "emit"],
+                             help="Run non-interactively with this mode type (skips the prompt). "
+                                  "Writes data/results/<mol>_{normal,EMIT}.csv (scores + Mu/K/Irrep "
+                                  "+ Steps 2-4 classification, all in one file).")
+
+    dev_group = ap.add_argument_group(
+        "Developer / maintainer workflow",
+        "Diagnostics, cross-checks, and manuscript-support pipelines. Not needed for ordinary use.")
+    dev_group.add_argument("--emit-projection", action="store_true", dest="emit_projection",
+                            help="Project raw EMIT eigenvectors onto the normal-mode reference "
+                                 "basis for -m <molecule>. Requires <mol>_EMIT.csv to already "
+                                 "exist (run -m <mol> --mode emit first); merges C2_Tx..C2_VMix "
+                                 "into that file in place and writes <mol>_EMIT_full.csv "
+                                 "(per-reference-mode detail).")
+    dev_group.add_argument("--ped-merge", action="store_true", dest="ped_merge",
+                            help="Merge real VEDA4 PED (data/ved/<mol>.ved+.vdf) into -m "
+                                 "<molecule>'s <mol>_normal.csv (must already exist -- run "
+                                 "-m <mol> --mode normal first). Appends "
+                                 "PED_Stretch_pct/PED_Bend_pct/per-bond-type columns in place. "
+                                 "Per-molecule; requires -m.")
+    dev_group.add_argument("--ped-merge-all", action="store_true", dest="ped_merge_all",
+                            help="Run --ped-merge for every molecule in data/mol_list_method.csv's "
+                                 "roster, skipping (with a message) any missing its <mol>_normal.csv "
+                                 "or data/ved/<mol>.ved/.vdf pair, and write one combined table "
+                                 "(default data/results/combined_ped_vs_scores.csv, override with "
+                                 "--combined-output). Global (ignores -m).")
+    dev_group.add_argument("--combined-output", dest="combined_output", default=None,
+                            help="Output path for the --ped-merge-all combined table "
+                                 "(default data/results/combined_ped_vs_scores.csv).")
+    dev_group.add_argument("--library", action="store_true",
+                            help="Ingest the full mol_list_method.csv roster (real-engine recompute "
+                                 "for every molecule's on-disk .log/.gjf pair) -> "
+                                 "data/results/library_scores.csv. Global (ignores -m); slow.")
+    dev_group.add_argument("--calibrate", action="store_true",
+                            help="Calibrate tau_TR/tau_S/tau_B against the ingested library -> "
+                                 "data/results/thresholds.json + tau_sensitivity_sweep.csv. "
+                                 "Global (ignores -m).")
+    dev_group.add_argument("--figures", action="store_true",
+                            help="Regenerate all manuscript figures from data/results/*.csv -> "
+                                 "data/figures/*.{pdf,png}. Global (ignores -m).")
     args = ap.parse_args()
 
     if _run_flag_pipelines(args):
@@ -415,7 +405,7 @@ def main():
         return
 
     # Interactive fallback: let the user add bonds to the intermediate file
-    # then reload (headless run_pipeline/score_modes raise instead); see _cache_is_fresh.
+    # then reload (headless run_scoring_pipeline raises instead); see _cache_is_fresh.
     if not raw["bonds"]:
         inter = intermediate_path(dirs, mol_name, mode_type)
         print("\n" + "!" * 70)
@@ -426,16 +416,12 @@ def main():
         raw = IntermediateIO.load(inter)
 
     try:
-        rows = score_modes(raw, mode_type)
+        df, output_file = run_scoring_pipeline(mol_name, mode_type)
     except ValueError as e:
         print(f"Error: {e}")
         return
 
-    df = pd.DataFrame(rows)
-    suffix = "normal" if mode_type == "normal" else "EMIT"
-    output_file = os.path.join(dirs["results"], f"{mol_name}_{suffix}_scores.csv")
-    _print_table(df, "Scoring Results")
-    df.to_csv(output_file, index=False, float_format="%.4f")
+    _print_table(df, "Scoring + Classification Results")
     print(f"\nResults saved to: {output_file}")
 
 

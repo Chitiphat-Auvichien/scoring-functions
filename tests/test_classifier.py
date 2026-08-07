@@ -134,7 +134,7 @@ def test_co2_linear_no_spurious_onaxis_mode():
 def test_classify_to_rows_shape():
     """classify_to_rows() produces the documented CSV columns for both mol/mode_type combos."""
     expected_cols = {"Mode", "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_Stretch",
-                     "label", "annotation", "s_AB"}
+                     "Mu", "K", "Irrep", "label", "annotation", "s_AB"}
     for mol, mode_type, freq_col in [("H2O", "normal", "Freq"),
                                       ("C6H6", "emit", "Eigenvalue")]:
         raw, _ = load_inputs(mol, mode_type, os.path.join(ROOT, "data"))

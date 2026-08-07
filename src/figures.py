@@ -340,8 +340,7 @@ def _explode_bonds(lib_df):
 # --------------------------------------------------------------------------
 
 def plot_benzene_stress_test(
-    emit_classified_csv="data/results/benzene_EMIT_classified.csv",
-    emit_contrib_csv="data/results/benzene_EMIT_contributions.csv",
+    emit_csv="data/results/C6H6_EMIT.csv",
     out_dir="data/figures",
     label="fig_benzene",
 ):
@@ -357,13 +356,14 @@ def plot_benzene_stress_test(
     Single-panel: the normal-mode s[V_S]-vs-frequency content lives
     separately in ``plot_benzene_normal_modes``/``fig_benzene_normal``.
 
+    Requires `emit_csv` to already have the C2_* projection columns merged
+    in (`python main.py -m benzene --mode emit` then `--emit-projection`).
+
     Returns a summary dict with output paths and a few sanity numbers.
     """
     _style()
 
-    emit = pd.read_csv(emit_classified_csv)
-    contrib = pd.read_csv(emit_contrib_csv)
-    emit = emit.merge(contrib, on="Mode", suffixes=("", "_c"))
+    emit = pd.read_csv(emit_csv)
 
     fig, ax_b = plt.subplots(figsize=(3.8, 3.6))
 
@@ -480,7 +480,7 @@ def plot_benzene_stress_test(
 # --------------------------------------------------------------------------
 
 def plot_benzene_normal_modes(
-    normal_csv="data/results/benzene_normal_classified.csv",
+    normal_csv="data/results/C6H6_normal.csv",
     out_dir="data/figures",
     label="fig_benzene_normal",
 ):
@@ -1159,7 +1159,7 @@ def plot_benzene_confusion_precision_recall(
 # --------------------------------------------------------------------------
 
 def plot_benzene_emit_counts(
-    emit_csv="data/results/benzene_EMIT_classified.csv",
+    emit_csv="data/results/C6H6_EMIT.csv",
     out_dir="data/figures",
     label="fig_benzene_emit_counts",
 ):

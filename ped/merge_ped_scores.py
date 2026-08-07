@@ -10,9 +10,11 @@ data/ved/<mol>.ved + data/ved/<mol>.vdf (mirrors the existing per-molecule-
 basename convention of data/logs/, data/gjf/, data/fchk/).
 
 Sources combined:
-  - data/results/<mol>_normal_classified.csv -- this repo's own T/R/V scores
-    and S/B/M classification label (src.classifier.classify_all_modes,
-    written by `python main.py -m <mol> --classify --mode normal`).
+  - data/results/<mol>_normal.csv -- this repo's own T/R/V scores and S/B/M
+    classification label (src.classifier.classify_all_modes, written by
+    `python main.py -m <mol> --mode normal`). The default merge below
+    ENRICHES this file in place with the PED columns rather than writing a
+    separate file.
   - data/ved/<mol>.ved + .vdf -- real VEDA4 TED matrix + per-coordinate type
     definitions (STRE/BEND/TORS/OUT/...), produced by veda4e1.exe.
 
@@ -36,7 +38,7 @@ module that used the TED table -- see ped/archive_python_ped/13_compare_veda4.py
 for the original PED-vs-TED table discovery (still accurate on the raw file
 structure, just not on which table to report).
 
-VEDA4's own mode-row order need not match data/results/<mol>_normal_classified.csv's
+VEDA4's own mode-row order need not match data/results/<mol>_normal.csv's
 "Vib N" row order (e.g. VEDA4 often prints descending frequency, Gaussian's
 parse order here is typically ascending) -- modes are matched by nearest
 recomputed frequency, not by row position (see match_modes_by_frequency).
@@ -59,7 +61,7 @@ Usage:
     python ped/merge_ped_scores.py --molecule CH4
     python ped/merge_ped_scores.py --molecules CH4 H2O C6H6 --combined-output data/results/combined_ped_vs_scores.csv
     python ped/merge_ped_scores.py --all --combined-output data/results/combined_ped_vs_scores.csv
-    python ped/merge_ped_scores.py --molecule CH4 --full-table  # full per-internal-coordinate |PED| table, no classified.csv needed
+    python ped/merge_ped_scores.py --molecule CH4 --full-table  # full per-internal-coordinate |PED| table, no <mol>_normal.csv needed
 """
 import argparse
 import os
@@ -371,7 +373,7 @@ def full_ped_table(ved_path, vdf_path):
 def match_modes_by_frequency(classified_freqs, veda_freqs, tol=DEFAULT_FREQ_TOL_CM1,
                               context=""):
     """Greedy nearest-frequency one-to-one matching between
-    data/results/<mol>_normal_classified.csv's "Vib N" row frequencies and
+    data/results/<mol>_normal.csv's "Vib N" row frequencies and
     VEDA4's own recomputed mode frequencies. Both lists must be the same
     length -- this is Vib-rows-vs-VEDA-mode-rows for ONE molecule, and a
     count mismatch means the two files don't describe the same normal-mode
@@ -436,36 +438,37 @@ def _resolve_ved_paths(molecule, data_dir):
 def merge_molecule_ped(molecule, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_TOL_CM1,
                         write=True):
     """Merge one molecule's data/ved/<mol>.ved+.vdf into its
-    data/results/<mol>_normal_classified.csv, plus this repo's own per-bond
+    data/results/<mol>_normal.csv **in place**, plus this repo's own per-bond
     scores (recomputed via main.load_inputs/build_scorer_and_final +
-    src.classifier.classify_all_modes -- classified.csv itself only stores
+    src.classifier.classify_all_modes -- <mol>_normal.csv itself only stores
     the filtered/serialized 's_AB' string, not the full per-bond list needed
     for a bond-type breakdown of every mode regardless of its S/B/SB label).
 
     Returns (full_df, vib_rows, out_path):
-      - full_df: the classified.csv DataFrame with new columns appended --
+      - full_df: the <mol>_normal.csv DataFrame with new columns appended --
         PED_Stretch_pct, PED_Bend_pct, and one PED_S_<type>_pct/
         BondScore_<type>/BondScore_<type>_pct triple per bond type this
         molecule has (NaN for the Tx/Ty/Tz/Rx/Ry/Rz ideal-reference rows,
         which have neither PED nor a meaningful bond score). This is
-        written to data/results/<mol>_normal_classified_ped.csv when
-        write=True. The original _classified.csv is never modified.
+        written back to data/results/<mol>_normal.csv in place when
+        write=True (an intentional enrichment of the one canonical
+        per-molecule file, not a separate `_ped` file).
       - vib_rows: list of dicts (one per "Vib N" row only) with the
         _COMBINED_BASE_COLUMNS fields plus this molecule's bond-type
         columns, for combined multi-molecule tables.
       - out_path: path the per-molecule CSV was (or would be) written to.
 
-    Raises FileNotFoundError if the classified.csv or the .ved/.vdf pair is
+    Raises FileNotFoundError if <mol>_normal.csv or the .ved/.vdf pair is
     missing, ValueError if the Vib-row count doesn't match the VEDA mode
     count (see match_modes_by_frequency) or if recomputed frequencies drift
-    from classified.csv (a stale-cache safety check, see below).
+    from <mol>_normal.csv (a stale-cache safety check, see below).
     """
     data_dir = os.path.join(repo_root, 'data')
-    classified_path = os.path.join(data_dir, 'results', f'{molecule}_normal_classified.csv')
+    classified_path = os.path.join(data_dir, 'results', f'{molecule}_normal.csv')
     if not os.path.isfile(classified_path):
         raise FileNotFoundError(
             f"{classified_path} not found -- run "
-            f"`python main.py -m {molecule} --classify --mode normal` first.")
+            f"`python main.py -m {molecule} --mode normal` first.")
 
     ved_path, vdf_path, missing = _resolve_ved_paths(molecule, data_dir)
     if missing:
@@ -505,18 +508,18 @@ def merge_molecule_ped(molecule, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_TOL
     if len(scored_vibs) != len(vib_idx):
         raise ValueError(
             f"{molecule}: recomputed {len(scored_vibs)} 'Vib N' modes but "
-            f"{classified_path} has {len(vib_idx)} -- classified.csv is out "
-            "of sync with the current source/cached data (re-run "
-            f"`python main.py -m {molecule} --classify --mode normal`).")
+            f"{classified_path} has {len(vib_idx)} -- it is out of sync with "
+            "the current source/cached data (re-run "
+            f"`python main.py -m {molecule} --mode normal`).")
     for local_ci, m in enumerate(scored_vibs):
         orig_idx = vib_idx[local_ci]
         csv_freq = df.loc[orig_idx, 'Freq']
         if abs(m["frequency"] - csv_freq) > 1e-6:
             raise ValueError(
                 f"{molecule}: recomputed frequency {m['frequency']:.6f} for "
-                f"'Vib N' row {local_ci} doesn't match classified.csv's "
-                f"{csv_freq:.6f} -- classified.csv is stale (re-run "
-                f"`python main.py -m {molecule} --classify --mode normal`).")
+                f"'Vib N' row {local_ci} doesn't match {classified_path}'s "
+                f"{csv_freq:.6f} -- it is stale (re-run "
+                f"`python main.py -m {molecule} --mode normal`).")
 
     # This molecule's physical bond types (mode-independent -- every vib
     # row's bonds_all covers the same bond list, so any one row's keys give
@@ -594,7 +597,7 @@ def merge_molecule_ped(molecule, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_TOL
 
         vib_rows.append(row)
 
-    out_path = os.path.join(data_dir, 'results', f'{molecule}_normal_classified_ped.csv')
+    out_path = classified_path
     if write:
         df.to_csv(out_path, index=False, float_format='%.4f')
 
@@ -660,7 +663,7 @@ def _parse_args(argv=None):
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     group = p.add_mutually_exclusive_group(required=True)
     group.add_argument('--molecule', help="Single molecule (e.g. CH4). Fails loud "
-                        "if its classified.csv or .ved/.vdf pair is missing.")
+                        "if its <mol>_normal.csv or .ved/.vdf pair is missing.")
     group.add_argument('--molecules', nargs='+', help="Multiple molecules "
                         "(space-separated). Skips (with a message) any that "
                         "are missing inputs, rather than aborting the batch.")
@@ -677,11 +680,11 @@ def _parse_args(argv=None):
                          f"pair's residual exceeds this many cm^-1 (default "
                          f"{DEFAULT_FREQ_TOL_CM1}).")
     p.add_argument('--full-table', action='store_true',
-                    help="Instead of the merged classified+PED output, write "
-                         "the full per-internal-coordinate |PED| table (one "
-                         "row per VEDA mode, one column per internal "
+                    help="Instead of the merged <mol>_normal.csv+PED output, "
+                         "write the full per-internal-coordinate |PED| table "
+                         "(one row per VEDA mode, one column per internal "
                          "coordinate) for a single --molecule. Reads only "
-                         "data/ved/<mol>.ved+.vdf -- no classified.csv "
+                         "data/ved/<mol>.ved+.vdf -- no <mol>_normal.csv "
                          "needed. Not valid with --molecules/--all.")
     p.add_argument('--full-table-output', default=None,
                     help="Output path for --full-table (default "

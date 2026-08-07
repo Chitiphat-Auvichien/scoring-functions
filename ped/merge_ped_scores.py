@@ -350,6 +350,17 @@ def full_ped_table(ved_path, vdf_path):
     matrix laid out as a labeled DataFrame for direct inspection, not a
     replacement for the aggregate Stretch/Bend/per-bond-type columns
     computed elsewhere in this module.
+
+    Also appends one ``'total_<TYPE>_<composition>'`` column per distinct
+    (TYPE, composition) pair present (e.g. ``'total_STRE_CH'``,
+    ``'total_BEND_HCH'``, ``'total_TORS_HCCC'``) -- the row-sum of |PED|
+    across every individual coordinate sharing that exact type+composition,
+    so e.g. all four equivalent C-H stretches in CH4 collapse into one "how
+    much does *any* C-H stretch contribute to this mode" number. Unlike
+    compute_ped_percentages' BondScore/PED_S_<T> columns (STRE-only, and
+    canonicalized so 'CH'/'HC' agree with this repo's own atom-label bond
+    types), this groups by VEDA's own composition string as-is and covers
+    every coordinate type, not just STRE.
     """
     freqs, ped = parse_ved(ved_path)
     types = parse_coord_types(vdf_path)
@@ -360,9 +371,17 @@ def full_ped_table(ved_path, vdf_path):
             f"{ved_path}'s PED matrix has {ped.shape[1]} columns -- these "
             "must be the same VEDA4 run's paired output files.")
 
+    abs_ped = np.abs(ped)
     columns = [f"{i + 1}_{t}_{c}" for i, (t, c) in enumerate(zip(types, compositions))]
-    table = pd.DataFrame(np.abs(ped), columns=columns)
+    table = pd.DataFrame(abs_ped, columns=columns)
     table.insert(0, "veda_freq", freqs)
+
+    groups = {}  # (TYPE, composition) -> boolean column mask, in first-seen order
+    for col_idx, (t, c) in enumerate(zip(types, compositions)):
+        groups.setdefault((t, c), np.zeros(len(types), dtype=bool))[col_idx] = True
+    for (t, c), mask in groups.items():
+        table[f"total_{t}_{c}"] = abs_ped[:, mask].sum(axis=1)
+
     return table
 
 

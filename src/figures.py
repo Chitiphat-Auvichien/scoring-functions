@@ -2210,25 +2210,6 @@ def regenerate_all(verbose=True):
     return results
 
 
-    return {
-        "pdf": pdf_path, "png": png_path,
-        "scale": scale,
-        "n_molecules_fit": len(df),
-        "n_excluded_non_mp2_321g": int(n_excluded),
-        "n_basis_range_fit": (int(df["n_basis"].min()), int(df["n_basis"].max())),
-        "fit_vs_n_basis_loglog": {"exponent": float(slope), "r2": float(r2)},
-        "fit_vs_n_basis_linear_space": {"exponent": float(b_lin), "r2_linear": float(r2_lin)},
-        "fit_vs_N_for_comparison": {"exponent": float(slope_N), "r2": float(r2_N)},
-        "framing": ("SI/diagnostic companion to fig:cputime, PROPOSED label "
-                    "fig:gaussian_nbasis, not yet wired into the .tex. Fit "
-                    "restricted to mp2_321g==True -- mixing methods "
-                    "confounds the N_basis fit the same way mixing methods "
-                    "confounded the N fit in fig:cputime. Shows n_basis "
-                    "(not N) is Gaussian's real cost-scaling variable "
-                    "within a fixed method/basis."),
-    }
-
-
 # --------------------------------------------------------------------------
 # fig:ped_vs_vscore / fig:ped_vs_bondscore -- VEDA4 PED-based %nu vs. this
 # framework's own s[V_S] / s^AB scores, from ped/merge_ped_scores.py's
@@ -2241,6 +2222,45 @@ def regenerate_all(verbose=True):
 # PREDICTED colors, not REF_CATEGORY_COLOR, since this label is this
 # framework's own output, not a literature/reference label).
 _LABEL_CODE_TO_CATEGORY = {"S": "stretch", "B": "bend", "SB": "mixed"}
+
+# Gap between the two members of a genuinely degenerate pair/triple is 0 or
+# a ~1e-4 cm^-1 numerical-diagonalization artifact; the next-smallest gap
+# between distinct (non-degenerate) modes in this dataset is ~0.37 cm^-1 --
+# a clean two-orders-of-magnitude separation, so 0.01 cm^-1 safely clusters
+# degenerate partners without merging genuinely different modes.
+_DEGENERATE_FREQ_TOL_CM1 = 0.01
+
+
+def _collapse_degenerate_freqs(df, value_cols, freq_col="Freq", label_col=None,
+                                tol=_DEGENERATE_FREQ_TOL_CM1):
+    """Average ``value_cols`` over sets of rows sharing one physical
+    frequency within a molecule (``freq_col`` values equal to within
+    ``tol`` cm^-1). VEDA reports PED for each individual member of a
+    degenerate mode independently, but an individual member's PED is not
+    physically meaningful on its own -- it depends on the arbitrary linear
+    combination diagonalization happened to pick within the degenerate
+    subspace; only the set-averaged value is. Returns one row per
+    degenerate group (Molecule + clustered Freq), with non-degenerate modes
+    (group size 1) passed through unchanged. If ``label_col`` is given, the
+    most common label in the group is carried through (ties broken by
+    first occurrence) for scatter coloring.
+    """
+    df = df.sort_values(["Molecule", freq_col]).reset_index(drop=True)
+    freqs = df[freq_col].to_numpy(float)
+    mols = df["Molecule"].to_numpy()
+    gid = np.zeros(len(df), dtype=int)
+    g = -1
+    for i in range(len(df)):
+        if i == 0 or mols[i] != mols[i - 1] or freqs[i] - freqs[i - 1] > tol:
+            g += 1
+        gid[i] = g
+    df = df.assign(_gid=gid)
+
+    agg = {c: "mean" for c in value_cols}
+    if label_col is not None:
+        agg[label_col] = lambda s: s.mode().iloc[0]
+    out = df.groupby(["_gid", "Molecule"], as_index=False, sort=False).agg(agg)
+    return out.drop(columns=["_gid"])
 
 
 def _quadratic_fit_r2(x, y):
@@ -2260,16 +2280,20 @@ def plot_ped_vs_vscore(
 ):
     """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
     molecule-level stretch score s[V_S] (``V_Stretch``), one point per
-    (Molecule, Mode) row of combined_ped_vs_scores.csv, fit with a
-    quadratic (least squares, reported with R^2) summarizing the overall
-    trend. Points colored/marked by this framework's own S/B/SB
-    classify_all_modes label (the csv's own `label` column), reusing
-    CATEGORY_COLOR/CATEGORY_MARKER/CATEGORY_LABEL as-is via
-    _LABEL_CODE_TO_CATEGORY.
+    physical frequency (degenerate modes averaged together via
+    _collapse_degenerate_freqs -- see its docstring) of
+    combined_ped_vs_scores.csv, fit with a quadratic (least squares,
+    reported with R^2) summarizing the overall trend. Points colored/
+    marked by this framework's own S/B/SB classify_all_modes label (the
+    csv's own `label` column), reusing CATEGORY_COLOR/CATEGORY_MARKER/
+    CATEGORY_LABEL as-is via _LABEL_CODE_TO_CATEGORY.
     """
     _style()
     df = pd.read_csv(csv_input)
     df = df.dropna(subset=["PED_Stretch_pct", "V_Stretch"])
+    n_raw_modes = len(df)
+    df = _collapse_degenerate_freqs(
+        df, value_cols=["PED_Stretch_pct", "V_Stretch"], label_col="label")
 
     fig, ax = plt.subplots(figsize=(6.2, 3.4))
     for code, cat in _LABEL_CODE_TO_CATEGORY.items():
@@ -2301,7 +2325,8 @@ def plot_ped_vs_vscore(
 
     return {
         "pdf": pdf_path, "png": png_path,
-        "n_modes": len(df),
+        "n_frequency_points": len(df),
+        "n_raw_modes_before_degenerate_averaging": n_raw_modes,
         "n_molecules": df["Molecule"].nunique(),
         "quadratic_coeffs_a_b_c": tuple(float(c) for c in coeffs),
         "r2": float(r2),
@@ -2321,13 +2346,18 @@ def plot_ped_vs_bondscore_by_type(
     Each panel gets its own quadratic fit + R^2 (same pattern as
     plot_ped_vs_vscore), for spotting which bond types/molecules diverge
     from the molecule-level trend. Exploratory, not a manuscript figure:
-    one plain marker color, no S/B/SB faceting.
+    one plain marker color, no S/B/SB faceting. One point per physical
+    frequency -- degenerate modes are averaged together first (see
+    _collapse_degenerate_freqs), same as plot_ped_vs_vscore.
     """
     _style()
     df = pd.read_csv(csv_input)
 
     bond_types = [c[len("BondScore_"):] for c in df.columns
                   if c.startswith("BondScore_") and not c.endswith("_pct")]
+    value_cols = [f"PED_S_{bt}_pct" for bt in bond_types] + \
+                 [f"BondScore_{bt}" for bt in bond_types]
+    df = _collapse_degenerate_freqs(df, value_cols=value_cols)
 
     n = len(bond_types)
     ncols = 3

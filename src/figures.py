@@ -906,6 +906,7 @@ def plot_rigorous_tier_check(
     library_csv="data/results/library_scores.csv",
     out_dir="data/figures",
     label="fig_rigorous_tier_check",
+    csv_path="data/results/rigorous_tier_consistency_table.csv",
 ):
     """Build the SI rigorous-tier consistency check: a small reference/
     predicted-count TABLE (not a heatmap, deliberately minimal) covering
@@ -940,7 +941,6 @@ def plot_rigorous_tier_check(
     rows = _per_category_from_table(tbl_r, cats_r)
     table_df = pd.DataFrame(rows)
 
-    csv_path = os.path.join("data", "results", "rigorous_tier_consistency_table.csv")
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     table_df.to_csv(csv_path, index=False)
 

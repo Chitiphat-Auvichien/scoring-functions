@@ -14,7 +14,7 @@
 > `git log -p -- IMPLEMENTATION_PLAN.md`. Every decision, formula, and numeric target that was still live
 > is preserved below in **Locked decisions** / **Authoritative spec** / the Phase checklists.
 >
-> Last updated: 2026-08-07 (CLI/CSV consolidation — see Recent history).
+> Last updated: 2026-08-10 (G16 promoted to canonical — see Recent history).
 
 ## Status snapshot (current stage)
 - **Phases 0–3: DONE.** Core engine, unified classifier, EMIT projection, library ingest, τ-calibration,
@@ -27,10 +27,8 @@
   manuscript by author decision, kept as internal diagnostic); 2 open recommended items are the other
   near-term frontier: mixed-SB bucket validation library-wide, out-of-sample/leave-one-molecule-out
   evaluation.
-- Most recent session (2026-08-07): CLI/CSV consolidation — one CSV per molecule/mode-type, `--classify`
-  removed (classification always-on), PED-merge/EMIT-projection now enrich that CSV in place. `pytest`
-  132/137 green (5 pre-existing failures, unrelated — fchk/log staleness + transferability-roster
-  exclusions).
+- Most recent session (2026-08-10): G16 promoted to canonical, G09 archived. `pytest` 132/137 green (same
+  5 pre-existing failures, unrelated — fchk/log staleness + roster/disk-count checks).
 
 ## Context
 
@@ -71,6 +69,21 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 - **CLI/CSV consolidation (2026-08-07, most recent):** one CSV per molecule per mode type
   (`<mol>_{normal,EMIT}.csv`); `--classify` removed (classification always-on); PED-merge/EMIT-projection
   enrich the existing CSV in place (reversal of the prior "never modify the classified CSV" rule).
+- **G16 promoted to canonical (LOCKED 2026-08-10):** `data/logs`+`data/gjf`+`data/fchk`+
+  `data/characterised_modes.csv` now hold the **Gaussian 16, Revision C.01** rerun (previously
+  `data/logs_rerun`/etc.); the original **Gaussian 09** calculation is archived, recoverable via `git mv`
+  history, under `data/logs_g09`/`data/gjf_g09`/`data/fchk_g09`/`data/characterised_modes_g09.csv`.
+  Promotion followed a clean G09-vs-G16 consistency check (`scripts/compare_rerun.py`,
+  `data/results/rerun_consistency_report.csv`, 846 rows): 0 point-group mismatches, 3/846
+  threshold-boundary label flips (FBr3 modes 1/2 bend↔SB canceling net, ClH3 mode 4 stretch SB→S), 14
+  irrep swaps manually reconciled into `characterised_modes.csv` beforehand. Recalibrating τ against the
+  full G16 library moved `τ_S` by ~1.5e-7 (`0.9036817451504533` → `0.9036818966195127`, still XeOH4's
+  ideal-stretch min, just under slightly different G16 geometry) — negligible; `τ_TR=0.95` and
+  `τ_B=0.17326891344050538` are unchanged bit-for-bit, and the sensitivity plateau range
+  `[0.34, 0.995]` is unchanged. H2O and CO2 scores are exact-match (0 delta, up to the usual
+  arbitrary-sign/degenerate-axis-labeling convention) between G09 and G16; benzene's EMIT-scored and
+  PED-enriched normal-mode CSVs came back byte-identical. Resolves the Phase 5 "Gaussian revision/year
+  `TODO-DATA`" item below — the canonical revision is now known and pinned.
 
 ### Authoritative spec (from the `.tex`; algorithm = PDF §B6.2 `classify_all_modes`)
 - `s[T_Q] = (1/N) Σ unit(d_A)·Q̂`, atoms with `|d_A|>ε_disp`; divisor is **N** (zero-motion atoms dilute via
@@ -196,7 +209,12 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 - [ ] **SI Cartesian-geometry export** (optimized coords for water/benzene/CO₂/gramicidin from logs, +
       library if retrievable) — B7/B14 reproducibility requirement.
 - [ ] **Graphical-TOC image** (B4, submission-required): 50×50 mm, per the structure-doc concept.
-- [ ] Fill the **Gaussian revision/year** `TODO-DATA` and fix the inconsistent citation.
+- [x] Fill the **Gaussian revision/year** `TODO-DATA` and fix the inconsistent citation — resolved by the
+      2026-08-10 G16 promotion (see Locked decisions): canonical revision is **Gaussian 16, Revision
+      C.01** (confirmed from `data/logs/H2O.log`'s header). The manuscript `.tex` itself still needs this
+      value substituted in and its citation reconciled — that substitution is `lead-author`/manuscript
+      work, out of scope for this repo-tracking doc, but the data-side ambiguity this item was blocked on
+      is now resolved.
 
 ## Phase 6 — Strengthen for review (re-tiered 2026-07-01)
 > Re-triaged after Decision 5 (Gramicidin deferred) removed the paper's only scale/robustness
@@ -260,6 +278,11 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 > One line per session, newest first. Full narration for any entry predating 2026-08-10 is in git history:
 > `git log -p -- IMPLEMENTATION_PLAN.md`.
 
+- **2026-08-10** — G16 promoted to canonical (see Locked decisions): G09 archived under `_g09` suffixes;
+  `library_scores.csv`/`thresholds.json`/all 19 figures regenerated (`τ_S` shifted ~1.5e-7, `τ_TR`/`τ_B`
+  unchanged); 3 golden-value test updates (1 sign-convention flip, 2 from a real 3/846 threshold-boundary
+  label flip), each documented with old→new value and cause; `pytest` 132/137 (same 5 pre-existing
+  failures as before promotion).
 - **2026-08-07** — CLI/CSV consolidation: one CSV per molecule/mode-type, `--classify` removed, PED-merge/
   EMIT-projection now enrich that CSV in place. `pytest` 132/137 (5 pre-existing unrelated failures).
 - **2026-08-03** — `scoring.py` vectorized; dead code (`normalize()`, `axis_blocks()`,

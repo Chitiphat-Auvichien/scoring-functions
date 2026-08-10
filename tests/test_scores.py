@@ -87,8 +87,14 @@ def test_water_tab_water():
     assert abs(t["Vib1"]["V"] - 0.1343) < TOL         # bend (sigma)
     assert abs(t["Vib2"]["V"] - 0.9966) < TOL         # nu_s
     assert abs(t["Vib3"]["V"] - 0.9984) < TOL         # nu_as
-    assert abs(t["Vib3"]["Tx"] - (-0.1963)) < TOL
-    assert abs(t["Vib3"]["Rz"] - (-0.2959)) < TOL
+    # 2026-08-10 G16 promotion: Vib3's Tx/Rz pair flipped sign together
+    # (old G09 H2O.log: Tx=-0.1963, Rz=-0.2959; new G16 H2O.log: Tx=+0.1963,
+    # Rz=+0.2959) -- an arbitrary principal-axis/eigensolver sign convention
+    # (CLAUDE.md: "sign-of-frame is arbitrary; classification uses |score|"),
+    # not a logic bug -- both components flipped together and magnitudes are
+    # bit-identical to 4 dp, confirming a coherent frame flip.
+    assert abs(t["Vib3"]["Tx"] - 0.1963) < TOL
+    assert abs(t["Vib3"]["Rz"] - 0.2959) < TOL
 
 
 def test_co2_linear():

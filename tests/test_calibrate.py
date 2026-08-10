@@ -343,6 +343,20 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     were already exactly 1.0 and remain so: tp=n_pred=n_ref=201 translation,
     197 rotation). Recall/mixed_fraction reflect the smaller (SnO2/FH3-free)
     population from step (1) above; unaffected by step (2)'s CO2 re-tag.
+
+    **Re-derived again 2026-08-10 (G16 promotion)**: canonical `data/logs`+
+    `data/gjf`+`data/fchk` switched from G09 to G16 (see IMPLEMENTATION_PLAN.md
+    Locked decisions). `tau_S` shifted by ~1.5e-7 (0.9036817451504533 ->
+    0.9036818966195127, still XeOH4's ideal-stretch min, just recomputed from
+    slightly different G16 geometry) -- negligible, and not the cause of the
+    change below. The real cause: `ClH3` mode 4 (non-ideal, ref=stretch,
+    V_Stretch 0.903119 (G09) -> 0.905849 (G16)) crossed `tau_S` and flipped
+    predicted_label SB->S -- one of the exact 3/846 threshold-boundary flips
+    already characterized in the G09-vs-G16 consistency check
+    (`data/results/rerun_consistency_report.csv`). `stretch` tp/n_pred
+    121->122 (recall/mixed_fraction shift accordingly); `bend` is UNCHANGED
+    (the other 2 of the 3 flips are `FBr3` modes 1/2, both ref=bend, B<->SB
+    in opposite directions -- they cancel net, bend tp stays 193).
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -355,11 +369,11 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     assert res["per_category"]["rotation"]["recall"] == 1.0
 
     stretch = res["per_category"]["stretch"]
-    assert stretch["tp"] == 121
-    assert stretch["n_pred"] == 121
+    assert stretch["tp"] == 122
+    assert stretch["n_pred"] == 122
     assert stretch["n_ref"] == 203
-    assert abs(stretch["recall"] - 0.5960591133004927) < 1e-6
-    assert abs(stretch["mixed_fraction"] - 0.4039408866995074) < 1e-6
+    assert abs(stretch["recall"] - 0.6009852216748769) < 1e-6
+    assert abs(stretch["mixed_fraction"] - 0.39901477832512317) < 1e-6
 
     bend = res["per_category"]["bend"]
     assert bend["tp"] == 193
@@ -419,6 +433,19 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     (tau_S/tau_B are literally this population's own min/max, so no
     ideal-tier row can land on the wrong side of its own defining boundary,
     with or without CO2 in that tier).
+
+    **Re-derived again 2026-08-10 (G16 promotion)**: see the sibling test's
+    docstring for the mechanism (canonical data switched G09->G16; `ClH3`
+    mode 4, non-ideal/stretch, crossed `tau_S` SB->S, one of the 3/846
+    already-characterized threshold-boundary flips in
+    `rerun_consistency_report.csv`). `n_ref_ideal`/`n_ref_nonideal` counts are
+    UNCHANGED (39/48 ideal, 164/161 non-ideal -- the flip is a label change
+    within the existing non-ideal stretch population, not a tier move).
+    `recall_ideal` stays EXACTLY 1.0 for both (unaffected, by construction).
+    `bend recall_nonideal` is UNCHANGED (the other 2 of the 3 flips, `FBr3`
+    modes 1/2, are both non-ideal/bend and flip in opposite directions --
+    they cancel net). `stretch recall_nonideal` moves from exactly 0.5
+    (82/164) to 83/164 with ClH3's flip added to the numerator.
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -431,7 +458,7 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
 
     # Non-ideal tier -- grew by CO2's 4 modes this session (see docstring above).
     assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.9006211180124224) < 1e-6
-    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.5) < 1e-6
+    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.5060975609756098) < 1e-6
     assert res["per_category"]["bend"]["n_ref_nonideal"] == 161
     assert res["per_category"]["stretch"]["n_ref_nonideal"] == 164
 
@@ -447,7 +474,10 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     # match the sibling test's pooled numbers above (unaffected by the CO2
     # retag -- see that test's docstring for why the pooled figures are
     # actually from the PRIOR SnO2/FH3 session, not from today's CO2 change).
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.5960591133004927) < 1e-6
+    # 2026-08-10 G16 promotion: stretch recall 0.5960591133004927 ->
+    # 0.6009852216748769 (ClH3 mode 4 flip, see sibling test's docstring);
+    # bend recall UNCHANGED (the FBr3 pair cancels net).
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.6009852216748769) < 1e-6
     assert abs(res["per_category"]["bend"]["recall"] - 0.9234449760765551) < 1e-6
 
 

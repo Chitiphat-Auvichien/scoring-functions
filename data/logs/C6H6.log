@@ -2,8 +2,8 @@
  Input=C6H6.com
  Output=C6H6.log
  Initial command:
- /opt/g16/g16/l1.exe "/home/pnatt/scratch/Gau-3449285.inp" -scrdir="/home/pnatt/scratch/"
- Entering Link 1 = /opt/g16/g16/l1.exe PID=   3449287.
+ /opt/g16/g16/l1.exe "/home/pnatt/scratch/Gau-1468604.inp" -scrdir="/home/pnatt/scratch/"
+ Entering Link 1 = /opt/g16/g16/l1.exe PID=   1468618.
   
  Copyright (c) 1988-2019, Gaussian, Inc.  All Rights Reserved.
   
@@ -76,9 +76,9 @@
  
  ******************************************
  Gaussian 16:  ES64L-G16RevC.01  3-Jul-2019
-                 7-Aug-2026 
+                10-Aug-2026 
  ******************************************
- %chk=C6H6.chk
+ %chk=C6H6_MP2_3-21G_D6h.chk
  ----------------------------------------------
  # opt freq=hpmodes mp2/3-21g geom=connectivity
  ----------------------------------------------
@@ -661,7 +661,7 @@
  One-electron integrals computed using PRISM.
  NBasis=    66 RedAO= T EigKep=  1.93D-03  NBF=    16    11     2     4     2     4    16    11
  NBsUse=    66 1.00D-06 EigRej= -1.00D+00 NBFU=    16    11     2     4     2     4    16    11
- Initial guess from the checkpoint file:  "C6H6.chk"
+ Initial guess from the checkpoint file:  "C6H6_MP2_3-21G_D6h.chk"
  B after Tr=     0.000000    0.000000   -0.000000
          Rot=    1.000000    0.000000   -0.000000    0.000000 Ang=   0.00 deg.
  Initial guess orbital symmetries:
@@ -930,7 +930,7 @@
  One-electron integrals computed using PRISM.
  NBasis=    66 RedAO= T EigKep=  1.92D-03  NBF=    16    11     2     4     2     4    16    11
  NBsUse=    66 1.00D-06 EigRej= -1.00D+00 NBFU=    16    11     2     4     2     4    16    11
- Initial guess from the checkpoint file:  "C6H6.chk"
+ Initial guess from the checkpoint file:  "C6H6_MP2_3-21G_D6h.chk"
  B after Tr=     0.000000    0.000000    0.000000
          Rot=    1.000000    0.000000    0.000000    0.000000 Ang=   0.00 deg.
  Initial guess orbital symmetries:
@@ -1338,7 +1338,7 @@
  Symmetry B2U  KE= 7.150108027913D+01
  Symmetry B3U  KE= 4.006318699117D+01
  Unable to Open any file for archive entry.
- 1\1\GINC-BS001\FOpt\RMP2-FC\3-21G\C6H6\PNATT\07-Aug-2026\0\\# opt freq
+ 1\1\GINC-BS001\FOpt\RMP2-FC\3-21G\C6H6\PNATT\10-Aug-2026\0\\# opt freq
  =hpmodes mp2/3-21g geom=connectivity\\Title Card Required\\0,1\C,0.000
  0000027,1.4068761329,0.\C,-1.2183904697,0.7034380688,0.\C,-1.218390472
  4,-0.7034380641,0.\C,-0.0000000027,-1.4068761329,0.\C,1.2183904697,-0.
@@ -1351,14 +1351,12 @@
  The archive entry for this job was punched.
 
 
- HICKORY, DICKORY, DOCK
- TWO MICE RAN UP THE CLOCK
- THE CLOCK STRUCK ONE...
- THE OTHER ESCAPED WITH MINOR INJURIES.
- Job cpu time:       0 days  0 hours  0 minutes  4.5 seconds.
- Elapsed time:       0 days  0 hours  0 minutes  4.4 seconds.
+ MOM AND DAD WENT TO ALPHA CENTAURI AND ALL
+ I GOT WAS THIS DUMB T-SHIRT.
+ Job cpu time:       0 days  0 hours  0 minutes  5.1 seconds.
+ Elapsed time:       0 days  0 hours  0 minutes  4.9 seconds.
  File lengths (MBytes):  RWF=      6 Int=      0 D2E=      0 Chk=      2 Scr=      1
- Normal termination of Gaussian 16 at Fri Aug  7 15:24:52 2026.
+ Normal termination of Gaussian 16 at Mon Aug 10 16:15:34 2026.
  Link1:  Proceeding to internal job step number  2.
  -------------------------------------------------------------------
  #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk RMP2(FC)/3-21G Freq
@@ -1379,7 +1377,7 @@
  7/8=11,10=1,12=2,25=1,44=2/1,2,3,16;
  1/10=4,30=1/3;
  99//99;
- Structure from the checkpoint file:  "C6H6.chk"
+ Structure from the checkpoint file:  "C6H6_MP2_3-21G_D6h.chk"
  -------------------
  Title Card Required
  -------------------
@@ -1562,7 +1560,7 @@
  One-electron integrals computed using PRISM.
  NBasis=    66 RedAO= T EigKep=  1.92D-03  NBF=    16    11     2     4     2     4    16    11
  NBsUse=    66 1.00D-06 EigRej= -1.00D+00 NBFU=    16    11     2     4     2     4    16    11
- Initial guess from the checkpoint file:  "C6H6.chk"
+ Initial guess from the checkpoint file:  "C6H6_MP2_3-21G_D6h.chk"
  B after Tr=    -0.000000    0.000000    0.000000
          Rot=    1.000000   -0.000000   -0.000000   -0.000000 Ang=   0.00 deg.
  Initial guess orbital symmetries:
@@ -2535,7 +2533,7 @@
 
  ----------------------------------------------------------------------
  Unable to Open any file for archive entry.
- 1\1\GINC-BS001\Freq\RMP2-FC\3-21G\C6H6\PNATT\07-Aug-2026\0\\#N Geom=Al
+ 1\1\GINC-BS001\Freq\RMP2-FC\3-21G\C6H6\PNATT\10-Aug-2026\0\\#N Geom=Al
  lCheck Guess=TCheck SCRF=Check GenChk RMP2(FC)/3-21G Freq\\Title Card 
  Required\\0,1\C,0.0000000027,1.4068761329,0.\C,-1.2183904697,0.7034380
  688,0.\C,-1.2183904724,-0.7034380641,0.\C,-0.0000000027,-1.4068761329,
@@ -2637,13 +2635,9 @@
  The archive entry for this job was punched.
 
 
- Some scientists claim that hydrogen, because it is so
- plentiful, is the basic building block of the universe. 
- I dispute that. I say that stupidity is far more
- abundant than hydrogen, and THAT is the basic building 
- block of the universe.
-                   --Frank Zappa
- Job cpu time:       0 days  0 hours  0 minutes 19.9 seconds.
- Elapsed time:       0 days  0 hours  0 minutes 19.8 seconds.
+ A FOOL CAN ASK MORE QUESTIONS THAN
+ A WISE MAN CAN ANSWER.
+ Job cpu time:       0 days  0 hours  0 minutes 21.8 seconds.
+ Elapsed time:       0 days  0 hours  0 minutes 21.6 seconds.
  File lengths (MBytes):  RWF=    198 Int=      0 D2E=      0 Chk=      2 Scr=      1
- Normal termination of Gaussian 16 at Fri Aug  7 15:25:12 2026.
+ Normal termination of Gaussian 16 at Mon Aug 10 16:15:56 2026.

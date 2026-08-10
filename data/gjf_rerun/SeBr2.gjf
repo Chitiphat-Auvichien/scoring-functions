@@ -1,0 +1,14 @@
+%chk=SeBr2.chk
+# opt freq=hpmodes mp2/3-21g geom=connectivity
+
+Title Card Required
+
+0 1
+ Se                  0.000000    0.000000    0.988717
+ Br                  0.000000    1.807830   -0.480234
+ Br                 -0.000000   -1.807830   -0.480234
+
+ 1 2 1.0 3 1.0
+ 2
+ 3
+

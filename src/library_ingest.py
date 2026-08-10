@@ -610,7 +610,7 @@ _CHARACTERISED_MODES_MANUAL_COLUMNS = (
 )
 
 
-def regenerate_characterised_modes(data_dir="data", write=True):
+def regenerate_characterised_modes(data_dir="data", write=True, force_refresh_irrep=False):
     """Regenerate data/characterised_modes.csv's engine-derivable columns
     (molecule, mode, freq, mu, k) from a direct on-disk scan of data/logs +
     data/gjf (not restricted to the roster, so new file pairs are picked up
@@ -619,17 +619,28 @@ def regenerate_characterised_modes(data_dir="data", write=True):
     blank for genuinely new ones.
 
     `irrep` carve-out (authoritative reasoning; referenced elsewhere in this
-    module and in src/figures.py): an existing row's irrep is preserved
-    untouched, never overwritten with the raw engine-parsed token. The
-    on-disk log's irrep is plain ASCII ("B2", "A1'"), while existing
-    characterised_modes.csv values are hand-verified Unicode-subscript/prime
-    strings ("B₂", "A₁′") that src/figures.py::plot_irrep_coupling matches by
-    exact string equality -- e.g. BBr3/OCl2 are known cases with this
-    ASCII-vs-Unicode mismatch. Overwriting would silently break that
-    matching (and regress at least one author-resolved Gaussian near-
-    degeneracy placeholder to less information). A general ASCII->Unicode
-    translator is deliberately deferred, not attempted here. Only genuinely
-    new rows (nothing to lose) get the raw engine-parsed irrep token.
+    module and in src/figures.py): by default (`force_refresh_irrep=False`),
+    an existing row's irrep is preserved untouched, never overwritten with
+    the raw engine-parsed token. The on-disk log's irrep is plain ASCII
+    ("B2", "A1'"), while existing characterised_modes.csv values are
+    hand-verified Unicode-subscript/prime strings ("B₂", "A₁′") that
+    src/figures.py::plot_irrep_coupling matches by exact string equality --
+    e.g. BBr3/OCl2 are known cases with this ASCII-vs-Unicode mismatch.
+    Overwriting would silently break that matching (and regress at least one
+    author-resolved Gaussian near-degeneracy placeholder to less
+    information). A general ASCII->Unicode translator is deliberately
+    deferred, not attempted here. Only genuinely new rows (nothing to lose)
+    get the raw engine-parsed irrep token by default.
+
+    `force_refresh_irrep=True` overrides the carve-out: every row's irrep
+    (existing or new) is overwritten with the fresh engine-parsed token from
+    THIS call's own `data_dir` logs. This intentionally regresses the
+    Unicode/hand-verified formatting described above -- it exists for
+    exploratory/consistency-check runs against an alternate `data_dir` (e.g.
+    a different Gaussian-version rerun mirror), where the whole point is to
+    see exactly what that run's own logs say, not what a prior curation
+    recorded. Never pass True when regenerating the canonical
+    data/characterised_modes.csv in place.
 
     Returns a report dict:
       'n_disk_basenames', 'n_old_molecules', 'n_new_molecules': counts.
@@ -637,6 +648,8 @@ def regenerate_characterised_modes(data_dir="data", write=True):
         (no on-disk match anymore / newly present on disk).
       'parse_failures': [{'molecule', 'basename', 'detail'}, ...].
       'n_rows_written', 'n_rows_with_preserved_manual_labels': int.
+      'n_rows_irrep_overridden': int -- rows whose irrep was force-refreshed
+        AND actually changed value (0 whenever force_refresh_irrep=False).
     """
     old_path = os.path.join(data_dir, "characterised_modes.csv")
     old = pd.read_csv(old_path, dtype=str, keep_default_na=False)
@@ -654,6 +667,7 @@ def regenerate_characterised_modes(data_dir="data", write=True):
     parse_failures = []
     new_molecules = set()
     n_preserved = 0
+    n_irrep_overridden = 0
     for base in bases:
         molecule = base_to_mol.get(base, base)
         log_path = _resolve_log_path(base, data_dir)
@@ -682,8 +696,13 @@ def regenerate_characterised_modes(data_dir="data", write=True):
             row["freq"] = _fmt_trim(m["frequency"])
             row["μ"] = _fmt_trim(m["reduced_mass"]) if m.get("reduced_mass") is not None else ""
             row["k"] = _fmt_trim(m["force_constant"]) if m.get("force_constant") is not None else ""
-            row["irrep"] = (old_row["irrep"] if has_prior
-                             else (m.get("irrep") or ""))
+            engine_irrep = m.get("irrep") or ""
+            if has_prior and not force_refresh_irrep:
+                row["irrep"] = old_row["irrep"]
+            else:
+                row["irrep"] = engine_irrep
+                if has_prior and old_row["irrep"] != engine_irrep:
+                    n_irrep_overridden += 1
             new_rows.append(row)
 
     new_df = pd.DataFrame(new_rows, columns=old.columns.tolist())
@@ -697,6 +716,7 @@ def regenerate_characterised_modes(data_dir="data", write=True):
         "parse_failures": parse_failures,
         "n_rows_written": len(new_df),
         "n_rows_with_preserved_manual_labels": n_preserved,
+        "n_rows_irrep_overridden": n_irrep_overridden,
     }
 
     if write:

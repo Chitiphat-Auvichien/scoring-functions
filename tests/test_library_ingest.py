@@ -217,23 +217,18 @@ def test_full_population_has_geometry_for_every_row():
     """Every row in the checked-in golden is geometry-backed (has_geometry
     unconditionally True) -- the whole point of the roster-driven flip.
 
-    The checked-in data/results/library_scores.csv golden predates the
-    2026-08-11 roster expansion (9 'test'-category transferability
-    molecules added) and was NOT regenerated as part of that change
-    (regenerating it is a separate, deliberate follow-up -- see
-    IMPLEMENTATION_PLAN.md), so it is compared here against the roster's
-    non-test subset (ideal/non-ideal/multi-centre, 68 rows) rather than the
-    full 77-row roster. Population may be 67 or 68 molecules depending on
-    whether every roster row's files happen to parse/score cleanly (a
-    molecule with files present but unusable connectivity is
-    warned-and-skipped, not fabricated)."""
+    2026-08-11: library_scores.csv was regenerated to include the 9
+    'test'-category transferability molecules added to mol_list_method.csv,
+    so it's compared here against the full 77-row roster. Population may be
+    76 or 77 molecules depending on whether every roster row's files happen
+    to parse/score cleanly (a molecule with files present but unusable
+    connectivity is warned-and-skipped, not fabricated)."""
     df = _load()
     roster = load_mol_roster(DATA_DIR)
-    non_test_roster = roster[roster["mol_type"] != "test"]
     assert df["has_geometry"].all()
     assert len(df) > 0
-    assert set(df["molecule"].unique()) <= set(non_test_roster["molecule"])
-    assert df["molecule"].nunique() >= len(non_test_roster) - 1  # at most 1 legitimate skip
+    assert set(df["molecule"].unique()) <= set(roster["molecule"])
+    assert df["molecule"].nunique() >= len(roster) - 1  # at most 1 legitimate skip
 
 
 def test_geometry_backed_molecules_have_expected_external_row_counts():

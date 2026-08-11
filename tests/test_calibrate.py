@@ -109,17 +109,17 @@ def test_single_centre_only_exclude_matches_scope_decision():
     assert len(SINGLE_CENTRE_ONLY_EXCLUDE) == 10
     assert "H2O" not in SINGLE_CENTRE_ONLY_EXCLUDE
 
-    # The checked-in library_scores.csv golden predates the 'test'-category
-    # roster addition (not regenerated as part of that migration -- see
-    # tests/test_library_ingest.py), so only C6H6 of the 10 excluded names
-    # is actually present in it to be dropped; the 9 test molecules are
-    # simply absent from this golden, not merely filtered.
+    # library_scores.csv was regenerated 2026-08-11 to include the 9
+    # 'test'-category molecules, so all 10 excluded names (C6H6 + the 9
+    # test molecules) are now present to be dropped; the historical 7-name
+    # fallback set only ever had C6H6 actually present in the real roster.
     lib_df = pd.read_csv(LIB_CSV)
     old_dropped = set(lib_df.loc[lib_df["molecule"].isin(_HISTORICAL_SINGLE_CENTRE_EXCLUDE_7),
                                   "molecule"].unique())
     new_dropped = set(lib_df.loc[lib_df["molecule"].isin(SINGLE_CENTRE_ONLY_EXCLUDE),
                                   "molecule"].unique())
-    assert old_dropped == new_dropped == {"C6H6"}
+    assert old_dropped == {"C6H6"}
+    assert new_dropped == expected
 
 
 def test_filter_single_centre_library_drops_exactly_the_excluded_molecules():
@@ -130,21 +130,20 @@ def test_filter_single_centre_library_drops_exactly_the_excluded_molecules():
     and nothing else.
 
     **2026-08-11 update:** SINGLE_CENTRE_ONLY_EXCLUDE now has 10 names
-    (C6H6 + the 9 'test'-category molecules), but the checked-in
-    library_scores.csv golden predates that roster addition (still 68
-    molecules, not regenerated as part of the migration -- see
-    tests/test_library_ingest.py), so only C6H6 is actually present in it to
-    be dropped by this filter, same as before."""
+    (C6H6 + the 9 'test'-category molecules); library_scores.csv was
+    regenerated the same day to include all 77 roster molecules, so all 10
+    are present and dropped (67 remain: the ideal/non-ideal calibration
+    scope)."""
     lib_df = pd.read_csv(LIB_CSV)
     before_molecules = set(lib_df["molecule"].unique())
     present_of_excluded = SINGLE_CENTRE_ONLY_EXCLUDE & before_molecules
-    assert present_of_excluded == {"C6H6"}
+    assert present_of_excluded == SINGLE_CENTRE_ONLY_EXCLUDE
 
     filtered = filter_single_centre_library(lib_df)
     after_molecules = set(filtered["molecule"].unique())
 
-    assert before_molecules - after_molecules == {"C6H6"}
-    assert lib_df["molecule"].nunique() - 1 == filtered["molecule"].nunique()
+    assert before_molecules - after_molecules == SINGLE_CENTRE_ONLY_EXCLUDE
+    assert lib_df["molecule"].nunique() - len(SINGLE_CENTRE_ONLY_EXCLUDE) == filtered["molecule"].nunique()
     # filter_single_centre_library is idempotent (re-filtering drops nothing more).
     assert set(filter_single_centre_library(filtered)["molecule"].unique()) == after_molecules
 

@@ -290,11 +290,20 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   {ideal, non-ideal}) now drives `src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE` (10 names: C6H6 + the 9 test
   molecules) instead of the old multi-centre-only exclusion, so any future `mol_type` category drops out
   of calibration automatically. `fig:ped_vs_vscore`/`fig:ped_vs_bondscore` scoped to `mol_type=='test'`
-  only (excludes C6H6, which appeared there only by accident before). `data/results/library_scores.csv`
-  deliberately NOT regenerated this session (still the pre-migration 68-molecule golden) — the 9 test
-  molecules' library rows are a separate, deliberate follow-up; calibration numbers
-  (`thresholds.json`/`tau_sensitivity_sweep.csv`/confusion/boxplots/mode-mixing/bondscores figures) are
-  therefore byte-for-byte unchanged. `pytest` 136/138 (2 pre-existing fchk/log-staleness failures only).
+  only (excludes C6H6, which appeared there only by accident before). Follow-up same day: CO2 was briefly
+  re-tagged `ideal` in `mol_list_method.csv` (diverging from the still-`non-ideal` checked-in
+  `library_scores.csv`), then re-tagged back to `non-ideal` to match its linear siblings;
+  `library_scores.csv` was regenerated to include the 9 test molecules (68 → 77 molecules, verified
+  byte-identical for all 68 pre-existing molecules' scores) and `thresholds.json`/
+  `tau_sensitivity_sweep.csv`/`fig:sensitivity` were refreshed (`τ_S`/`τ_B`/`τ_TR` unchanged; the T/R
+  ground-truth pool used by the sensitivity sweep grew 404 → 458 external rows since it spans every
+  geometry-backed roster molecule, not just the ideal/non-ideal calibration scope — accuracy trace
+  unaffected, `label_change_fraction` shifted at exactly one grid point by ~0.00025). Three tests
+  (`test_filter_single_centre_library_drops_exactly_the_excluded_molecules`,
+  `test_library_external_references_never_false_positive`,
+  `test_full_population_has_geometry_for_every_row`, plus
+  `test_single_centre_only_exclude_matches_scope_decision`'s golden-comparison block) updated from
+  68/404-molecule goldens to 77/458. `pytest` 136/138 (2 pre-existing fchk/log-staleness failures only).
 - **2026-08-10** — G16 promoted to canonical (see Locked decisions): G09 archived under `_g09` suffixes;
   `library_scores.csv`/`thresholds.json`/all 19 figures regenerated (`τ_S` shifted ~1.5e-7, `τ_TR`/`τ_B`
   unchanged); 3 golden-value test updates (1 sign-convention flip, 2 from a real 3/846 threshold-boundary

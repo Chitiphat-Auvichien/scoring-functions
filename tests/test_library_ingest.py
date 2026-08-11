@@ -70,14 +70,16 @@ def _load():
 # ---------------------------------------------------------------------------
 
 def test_load_mol_roster_reads_all_77_molecules():
-    """77 rows: 11 'ideal' + 56 'non-ideal' + 1 'multi-centre' (C6H6) + 9
+    """77 rows: 10 'ideal' + 57 'non-ideal' + 1 'multi-centre' (C6H6) + 9
     'test' (a held-out transferability-test set: CH4, C4H4, C10H16, PCl5,
     C3H6, B3N3H6, CHCl3, CH3CN, C3O3H6). 2026-08-11: the redundant
     `basename` column was dropped from mol_list_method.csv entirely --
     `molecule` now doubles as the on-disk basename (every on-disk file was
-    already renamed to match `molecule` in an earlier commit). (Test name
-    kept in the same style for history/grep-ability; the docstring is the
-    source of truth for the current count.)"""
+    already renamed to match `molecule` in an earlier commit); CO2 was
+    re-tagged 'non-ideal' (was briefly 'ideal') to match its linear
+    siblings, consistent with the already-checked-in library_scores.csv.
+    (Test name kept in the same style for history/grep-ability; the
+    docstring is the source of truth for the current count.)"""
     roster = load_mol_roster(DATA_DIR)
     assert "molecule" in roster.columns
     assert "basename" not in roster.columns
@@ -85,8 +87,8 @@ def test_load_mol_roster_reads_all_77_molecules():
     assert roster["molecule"].is_unique
     assert roster["molecule"].notna().all()
     counts = roster["mol_type"].value_counts()
-    assert counts["ideal"] == 11
-    assert counts["non-ideal"] == 56
+    assert counts["ideal"] == 10
+    assert counts["non-ideal"] == 57
     assert counts["multi-centre"] == 1
     assert counts["test"] == 9
 

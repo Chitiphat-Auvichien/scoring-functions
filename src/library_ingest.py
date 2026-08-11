@@ -1,6 +1,6 @@
 """Library ingest: builds data/results/library_scores.csv for every molecule
-in the JCC paper's roster, ``data/mol_list_method.csv`` (77 rows: 11 "ideal"
-single-centre AB_n shapes, 56 "non-ideal" substituted variants, 1
+in the JCC paper's roster, ``data/mol_list_method.csv`` (77 rows: 10 "ideal"
+single-centre AB_n shapes, 57 "non-ideal" substituted variants, 1
 "multi-centre" = benzene, 9 "test" = a held-out transferability-test set).
 ``data/mol_list_method.csv`` is the single source of truth; since 2026-08-11
 its ``molecule`` column doubles as the on-disk basename (the old, redundant

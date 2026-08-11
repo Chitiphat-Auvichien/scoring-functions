@@ -1,6 +1,5 @@
 mol_type,shape,point_group,molecule,MP2_3-21G,current_method,note
 ideal,bend,C2v,TeH2,TRUE,,
-ideal,linear,Dinfh,CO2,TRUE,,
 ideal,T-shape,C2v,IH3,TRUE,,
 ideal,trigonal pyramidal,C3v,SbH3,TRUE,,
 ideal,trigonal planar,D3h,InH3,TRUE,,
@@ -10,6 +9,7 @@ ideal,tetrahedral,Td,SnH4,TRUE,,
 ideal,trigonal bipyramidal,D3h,SbH5,TRUE,,
 ideal,square pyramidal,C4v,XeOH4,FALSE,HF/STO-3G,convergence issue
 ideal,octahedral,Oh,TeH6,TRUE,,
+non-ideal,linear,Dinfh,CO2,TRUE,,
 non-ideal,bend,C2v,H2O,TRUE,,
 non-ideal,bend,C2v,OF2,TRUE,,
 non-ideal,bend,C2v,OCl2,TRUE,,

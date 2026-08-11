@@ -48,7 +48,8 @@ from src.library_ingest import (                                   # noqa: E402
     load_mol_roster, check_roster_disk_consistency,
     resolve_log_basename, discover_geometry_molecules,
     score_geometry_molecule, attach_labels, attach_ideal_tags,
-    build_library_scores, multi_centre_molecules, _central_atom_index,
+    build_library_scores, multi_centre_molecules,
+    out_of_calibration_scope_molecules, _central_atom_index,
     _basename_to_molecule_map, regenerate_characterised_modes,
     _EXTERNAL_SLOTS, SCHEMA_COLUMNS,
 )
@@ -68,41 +69,50 @@ def _load():
 # registry.
 # ---------------------------------------------------------------------------
 
-def test_load_mol_roster_reads_all_70_with_basename_column():
-    """68, not 72 -- two roster shrinks: OH4/OF4 removed 2026-07-09 (not
-    genuine stationary points at this project's MP2/3-21G level, so their
-    normal modes cannot be validly compared to the TeH4 ideal see-saw
-    template; 72 -> 70), then SnO2/FH3 removed 2026-07-23 for the same
-    reason (70 -> 68; that session also re-tagged CO2 `ideal`, corrected
-    back to `non-ideal` 2026-07-24 -- a tag flip, not a roster-count change).
-    (Test name kept for history/grep-ability; the docstring is the source of
-    truth for the current count.)"""
+def test_load_mol_roster_reads_all_77_molecules():
+    """77 rows: 11 'ideal' + 56 'non-ideal' + 1 'multi-centre' (C6H6) + 9
+    'test' (a held-out transferability-test set: CH4, C4H4, C10H16, PCl5,
+    C3H6, B3N3H6, CHCl3, CH3CN, C3O3H6). 2026-08-11: the redundant
+    `basename` column was dropped from mol_list_method.csv entirely --
+    `molecule` now doubles as the on-disk basename (every on-disk file was
+    already renamed to match `molecule` in an earlier commit). (Test name
+    kept in the same style for history/grep-ability; the docstring is the
+    source of truth for the current count.)"""
     roster = load_mol_roster(DATA_DIR)
-    assert {"molecule", "basename"}.issubset(roster.columns)
-    assert len(roster) == 68
+    assert "molecule" in roster.columns
+    assert "basename" not in roster.columns
+    assert len(roster) == 77
     assert roster["molecule"].is_unique
-    assert roster["basename"].notna().all()
+    assert roster["molecule"].notna().all()
+    counts = roster["mol_type"].value_counts()
+    assert counts["ideal"] == 11
+    assert counts["non-ideal"] == 56
+    assert counts["multi-centre"] == 1
+    assert counts["test"] == 9
 
 
 def test_load_mol_roster_raises_on_missing_required_column():
     with tempfile.TemporaryDirectory() as tmp_dir:
         with open(os.path.join(tmp_dir, "mol_list_method.csv"), "w") as f:
-            f.write("molecule,shape\nH2O,bend\n")
+            f.write("shape,foo\nbend,1\n")
         try:
             load_mol_roster(tmp_dir)
-            assert False, "expected ValueError for a roster missing 'basename'"
+            assert False, "expected ValueError for a roster missing 'molecule'"
         except ValueError as e:
-            assert "basename" in str(e)
+            assert "molecule" in str(e)
 
 
 def test_resolve_log_basename_matches_roster_for_known_molecules():
-    """resolve_log_basename() is now a pure roster lookup (no on-disk
-    existence check) -- values must match data/mol_list_method.csv exactly."""
+    """resolve_log_basename() is now a pure roster-membership lookup (no
+    on-disk existence check) that returns the molecule name itself (the
+    `basename` column no longer exists) -- values must match
+    data/mol_list_method.csv exactly."""
     assert resolve_log_basename("SbH3", DATA_DIR) == "SbH3"
     assert resolve_log_basename("BrF3", DATA_DIR) == "BrF3"
     assert resolve_log_basename("H2O", DATA_DIR) == "H2O"
     assert resolve_log_basename("C6H6", DATA_DIR) == "C6H6"
     assert resolve_log_basename("SeCl4", DATA_DIR) == "SeCl4"
+    assert resolve_log_basename("CH4", DATA_DIR) == "CH4"  # test-category molecule
 
 
 def test_resolve_log_basename_returns_none_for_unknown_molecule():
@@ -121,31 +131,31 @@ def test_check_roster_disk_consistency_real_roster_has_no_missing_or_orphaned():
 
 def test_check_roster_disk_consistency_detects_missing_row():
     roster = load_mol_roster(DATA_DIR)
-    fake_row = pd.DataFrame([{"molecule": "FAKE", "basename": "not_a_real_basename_xyz"}])
+    fake_row = pd.DataFrame([{"molecule": "FAKE"}])
     combined = pd.concat([roster, fake_row], ignore_index=True)
     missing, _ = check_roster_disk_consistency(combined, DATA_DIR)
-    assert missing == [("FAKE", "not_a_real_basename_xyz")]
+    assert missing == [("FAKE", "FAKE")]
 
 
 def test_check_roster_disk_consistency_detects_orphaned_basename():
-    """Dropping a real roster row leaves its on-disk basename unreferenced --
-    exactly the gramicidin-style 'file present, no roster row' case."""
+    """Dropping a real roster row leaves its on-disk basename (== molecule
+    name) unreferenced -- exactly the gramicidin-style 'file present, no
+    roster row' case."""
     roster = load_mol_roster(DATA_DIR)
-    dropped_basename = roster.loc[roster["molecule"] == "TeH2", "basename"].iloc[0]
+    dropped_basename = roster.loc[roster["molecule"] == "TeH2", "molecule"].iloc[0]
     reduced = roster[roster["molecule"] != "TeH2"]
     _, orphaned = check_roster_disk_consistency(reduced, DATA_DIR)
     assert dropped_basename in orphaned
 
 
 def test_discover_geometry_molecules_matches_roster_exactly():
-    """The safety-net directory scan and the roster agree exactly (70
-    basenames each, 2026-07-09: OH4/OF4 excluded) now that Phase A's
-    coverage is complete."""
+    """The safety-net directory scan and the roster agree exactly (77
+    basenames each) now that Phase A's coverage is complete."""
     bases = discover_geometry_molecules(DATA_DIR)
     assert bases == sorted(bases)
     assert len(bases) == len(set(bases))
     roster = load_mol_roster(DATA_DIR)
-    assert set(bases) == set(roster["basename"])
+    assert set(bases) == set(roster["molecule"])
 
 
 # ---------------------------------------------------------------------------
@@ -155,19 +165,18 @@ def test_discover_geometry_molecules_matches_roster_exactly():
 # ---------------------------------------------------------------------------
 
 def test_build_library_scores_raises_filenotfounderror_on_missing_basename():
-    fake_roster = pd.DataFrame([{"molecule": "FAKE", "basename": "not_a_real_basename_xyz"}])
+    fake_roster = pd.DataFrame([{"molecule": "not_a_real_basename_xyz"}])
     with patch("src.library_ingest.load_mol_roster", return_value=fake_roster):
         try:
             build_library_scores(DATA_DIR)
             assert False, "expected FileNotFoundError"
         except FileNotFoundError as e:
-            assert "FAKE" in str(e)
             assert "not_a_real_basename_xyz" in str(e)
 
 
 def test_build_library_scores_warns_on_orphaned_disk_basename_and_still_builds():
     """Restrict the roster to just water (fast: 9 modes) while leaving the
-    real 70-basename disk listing plus one extra fake basename -- missing
+    real 77-basename disk listing plus one extra fake basename -- missing
     stays empty (every roster row -- just water here -- resolves fine) but
     the fake basename (and every other real-but-unreferenced-by-this-
     reduced-roster basename) is reported as orphaned and warned about,
@@ -196,7 +205,7 @@ def test_build_library_scores_warns_on_orphaned_disk_basename_and_still_builds()
 
 def test_library_excludes_gramicidin_fragment():
     """Gly5 (Decision 5, gramicidin fragment) must not appear -- it is
-    simply absent from mol_list_method.csv's 70-row roster now, not an
+    simply absent from mol_list_method.csv's 77-row roster now, not an
     explicit ingest-time exclusion list."""
     df = _load()
     assert not (df["molecule"] == "Gly5").any()
@@ -205,15 +214,24 @@ def test_library_excludes_gramicidin_fragment():
 def test_full_population_has_geometry_for_every_row():
     """Every row in the checked-in golden is geometry-backed (has_geometry
     unconditionally True) -- the whole point of the roster-driven flip.
-    Population may be 69 or 70 molecules depending on whether every roster
-    row's files happen to parse/score cleanly (a molecule with files present
-    but unusable connectivity is warned-and-skipped, not fabricated)."""
+
+    The checked-in data/results/library_scores.csv golden predates the
+    2026-08-11 roster expansion (9 'test'-category transferability
+    molecules added) and was NOT regenerated as part of that change
+    (regenerating it is a separate, deliberate follow-up -- see
+    IMPLEMENTATION_PLAN.md), so it is compared here against the roster's
+    non-test subset (ideal/non-ideal/multi-centre, 68 rows) rather than the
+    full 77-row roster. Population may be 67 or 68 molecules depending on
+    whether every roster row's files happen to parse/score cleanly (a
+    molecule with files present but unusable connectivity is
+    warned-and-skipped, not fabricated)."""
     df = _load()
     roster = load_mol_roster(DATA_DIR)
+    non_test_roster = roster[roster["mol_type"] != "test"]
     assert df["has_geometry"].all()
     assert len(df) > 0
-    assert set(df["molecule"].unique()) <= set(roster["molecule"])
-    assert df["molecule"].nunique() >= len(roster) - 1  # at most 1 legitimate skip
+    assert set(df["molecule"].unique()) <= set(non_test_roster["molecule"])
+    assert df["molecule"].nunique() >= len(non_test_roster) - 1  # at most 1 legitimate skip
 
 
 def test_geometry_backed_molecules_have_expected_external_row_counts():
@@ -374,14 +392,31 @@ def test_score_geometry_molecule_skips_d_ca_for_multi_centre_or_unset_mol_type()
 
 
 def test_multi_centre_molecules_tags_c6h6_and_nothing_else_in_the_real_roster():
-    """multi_centre_molecules() (roster-driven, repoints
-    src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE) must reproduce the real
-    mol_list_method.csv's mol_type=='multi-centre' rows exactly -- as of the
-    70-molecule roster (2026-07-09: OH4/OF4 excluded), that is C6H6 alone
-    (verified, not assumed)."""
+    """multi_centre_molecules() must reproduce the real mol_list_method.csv's
+    mol_type=='multi-centre' rows exactly -- as of the 77-molecule roster
+    (2026-08-11: 'test' category added, basename column dropped), that is
+    C6H6 alone (verified, not assumed). No longer drives
+    src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE directly (that's
+    out_of_calibration_scope_molecules() now); still used for figure
+    filtering."""
 
     result = multi_centre_molecules(DATA_DIR)
     assert result == frozenset({"C6H6"})
+
+
+def test_out_of_calibration_scope_molecules_is_c6h6_plus_the_9_test_molecules():
+    """out_of_calibration_scope_molecules() (drives
+    src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE) is the complement of the
+    ideal/non-ideal inclusion filter: mol_type not in {'ideal', 'non-ideal'}
+    -- currently C6H6 (multi-centre) plus the 9 held-out 'test'
+    transferability molecules, 10 names total."""
+    result = out_of_calibration_scope_molecules(DATA_DIR)
+    expected = {
+        "C6H6", "CH4", "C4H4", "C10H16", "PCl5", "C3H6", "B3N3H6",
+        "CHCl3", "CH3CN", "C3O3H6",
+    }
+    assert result == frozenset(expected)
+    assert len(result) == 10
 
 
 def test_schema_columns_includes_mu_k_irrep_and_d_ca():
@@ -532,33 +567,23 @@ def test_attach_ideal_tags_is_unconditional_even_without_a_ref_label():
 
 def test_resync_reference_metadata_real_roster_has_no_mismatches_or_missing_logs():
     """Live, read-only (write=False) check against the real, already-fixed
-    data/ tree. **Updated 2026-07-09** (OH4/OF4 exclusion session):
-    ``resync_reference_metadata()`` now resyncs ``characterised_modes.csv``
-    only -- ``data/data_score.csv`` was deleted from disk this session (an
-    unrelated cleanup of an already-retired file) and the function was
-    updated to stop reading/writing it. The roster shrank from 72 to 70
-    molecules (OH4/OF4 removed: not genuine stationary points at this
-    project's MP2/3-21G level, so their normal modes cannot be validly
-    compared to the TeH4 ideal see-saw template). Every one of the 70
-    roster molecules has a characterised_modes.csv row (unaffected by the
-    OH4/OF4 removal -- their rows were removed along with them), so
-    resync_reference_metadata()'s ``if not cm_idx: skip`` condition is never
-    true for a real roster row. 0 mode-count mismatches, 0 unresolvable
-    logs, 0 skipped_no_rows.
+    data/ tree.
 
-    **Updated again 2026-07-23** (commit `8a12c32`): SnO2/FH3 removed from
-    the roster for the same reason (not genuine stationary points at this
-    level), 70 -> 68 molecules, still all resynced with 0 mismatches/skips.
-    (2026-07-24's CO2 ideal -> non-ideal retag is a `mol_type` tag flip in
-    `mol_list_method.csv`, not a roster-membership or log-count change, so
-    it does not affect this test.)"""
+    **2026-08-11** (mol_list_method.csv format migration): the roster grew
+    from 68 to 77 molecules (the 9 held-out 'test'-category transferability
+    molecules -- CH4, C4H4, C10H16, PCl5, C3H6, B3N3H6, CHCl3, CH3CN,
+    C3O3H6 -- were already present on disk with matching
+    characterised_modes.csv rows, so this stays a clean 0-mismatch resync).
+    resync_reference_metadata() iterates the roster directly (not the
+    checked-in library_scores.csv golden, which was NOT regenerated as part
+    of that migration), so it sees all 77 rows here."""
     from src.library_ingest import resync_reference_metadata
 
     report = resync_reference_metadata(DATA_DIR, write=False)
     assert report["skipped_mode_count_mismatch"] == []
     assert report["skipped_no_log"] == []
     assert report["skipped_no_rows"] == []
-    assert len(report["resynced"]) == 68
+    assert len(report["resynced"]) == 77
 
 
 def test_resync_reference_metadata_is_a_true_dry_run_when_write_false():
@@ -597,26 +622,33 @@ def test_resync_reference_metadata_synthetic_fixture():
     no longer reads/writes `data_score.csv` (deleted from disk this session,
     an already-retired file) -- this fixture was rewritten to put all the
     stale/mismatch fixture rows in `characterised_modes.csv` directly
-    instead of `data_score.csv`."""
+    instead of `data_score.csv`.
+
+    **2026-08-11:** the `basename` column was dropped (molecule name ==
+    on-disk basename now), so this fixture's water log/gjf pair is copied
+    under each synthetic molecule's own name (STALEMOL.log/.com,
+    MISMATCHMOL.log/.com) instead of being shared via a basename column."""
     import shutil
     from src.library_ingest import resync_reference_metadata
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         os.makedirs(os.path.join(tmp_dir, "logs"))
         os.makedirs(os.path.join(tmp_dir, "gjf"))
-        shutil.copy(os.path.join(DATA_DIR, "logs", "H2O.log"),
-                    os.path.join(tmp_dir, "logs", "H2O.log"))
-        shutil.copy(os.path.join(DATA_DIR, "gjf", "H2O.com"),
-                    os.path.join(tmp_dir, "gjf", "H2O.com"))
+        for mol in ("STALEMOL", "MISMATCHMOL"):
+            shutil.copy(os.path.join(DATA_DIR, "logs", "H2O.log"),
+                        os.path.join(tmp_dir, "logs", f"{mol}.log"))
+            shutil.copy(os.path.join(DATA_DIR, "gjf", "H2O.com"),
+                        os.path.join(tmp_dir, "gjf", f"{mol}.com"))
 
         # Roster: STALEMOL (real water log/gjf, stale CSV values to fix),
-        # MISMATCHMOL (same log, but the CSV claims a 4th mode that doesn't
-        # exist -- 3 engine modes vs. 4 claimed), NOROWSMOL (no CSV row at
-        # all -- not an error, just nothing to resync).
+        # MISMATCHMOL (own copy of the same log, but the CSV claims a 4th
+        # mode that doesn't exist -- 3 engine modes vs. 4 claimed),
+        # NOROWSMOL (no CSV row at all, and no log copy needed -- not an
+        # error, just nothing to resync).
         roster = pd.DataFrame([
-            {"molecule": "STALEMOL", "basename": "H2O"},
-            {"molecule": "MISMATCHMOL", "basename": "H2O"},
-            {"molecule": "NOROWSMOL", "basename": "H2O"},
+            {"molecule": "STALEMOL"},
+            {"molecule": "MISMATCHMOL"},
+            {"molecule": "NOROWSMOL"},
         ])
         roster.to_csv(os.path.join(tmp_dir, "mol_list_method.csv"), index=False)
 
@@ -684,40 +716,25 @@ def test_basename_to_molecule_map_translates_known_roster_basenames():
     assert m["SbH3"] == "SbH3"
     assert m["C6H6"] == "C6H6"
     assert m["H2O"] == "H2O"
+    assert m["CH4"] == "CH4"  # test-category molecule
 
 
 def test_regenerate_characterised_modes_dry_run_against_real_tree():
     """Live, read-only (write=False) check against the real data/ tree,
-    which as of 2026-07-08 (that session's own regeneration, already
-    committed) is IDEMPOTENT under regenerate_characterised_modes(): the
-    file already covers all on-disk basenames, so a fresh dry run reports
-    old == new molecule counts, nothing dropped, nothing added. (The
-    one-time 63->72 transition -- 15 molecules losing their on-disk
-    log+gjf pair, e.g. CCl4/CF4/CH4/Cl2O/NO2/SO2/..., while SnO2/BBr3/the
-    T-shaped/see-saw families gained their first-ever blank-labeled rows --
-    is exercised by the isolated synthetic fixture below instead, since the
-    real tree no longer reproduces that one-time transition after this
-    session.)
+    which is IDEMPOTENT under regenerate_characterised_modes(): the file
+    already covers all on-disk basenames, so a fresh dry run reports old ==
+    new molecule counts, nothing dropped, nothing added.
 
-    **2026-07-09 (OH4/OF4 exclusion session):** OH4/OF4's log/gjf/
-    characterised_modes.csv rows were all removed together (not genuine
-    stationary points at this project's MP2/3-21G level, so their normal
-    modes cannot be validly compared to the TeH4 ideal see-saw template),
-    so the disk scan and the characterised_modes.csv file shrank in lockstep
-    -- 72 -> 70, still idempotent (nothing dropped, nothing added, by
-    construction of this session's edit).
-
-    **2026-07-23 (commit `8a12c32`):** SnO2/FH3 removed from the roster and
-    on-disk logs/gjf/intermediate files for the same reason (not genuine
-    stationary points at this level), 70 -> 68, still idempotent. (2026-07-24's
-    CO2 ideal -> non-ideal `mol_type` retag touches only
-    `mol_list_method.csv`'s tag column, not any on-disk log/gjf file or
-    `characterised_modes.csv` row, so it does not change this disk-scan
-    count.)"""
+    **2026-08-11** (mol_list_method.csv format migration): the roster's
+    'test' category (9 held-out transferability molecules) was added, and
+    their .log/.gjf pairs plus characterised_modes.csv rows were already on
+    disk before this session -- this disk-scan-based function (unrestricted
+    by the roster) already covered them, so the count moves from 68 to 77
+    but idempotency is unaffected."""
     report = regenerate_characterised_modes(DATA_DIR, write=False)
-    assert report["n_disk_basenames"] == 68
-    assert report["n_old_molecules"] == 68
-    assert report["n_new_molecules"] == 68
+    assert report["n_disk_basenames"] == 77
+    assert report["n_old_molecules"] == 77
+    assert report["n_new_molecules"] == 77
     assert report["dropped_molecules"] == []
     assert report["added_molecules"] == []
     assert report["parse_failures"] == []

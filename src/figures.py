@@ -1283,7 +1283,7 @@ def plot_bond_scores(
     # matplotlib's mathtext supports \boldsymbol, matching the manuscript
     # prose's own notation for the per-bond |Delta|b||/|b| ratio.
     ax.set_xlabel(r"$|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$")
-    ax.set_ylabel(r"$s^{AB}$")
+    ax.set_ylabel(r"$|s^{AB}|$")
     ax.set_xlim(-0.03, bonds["abs_rel_db"].max() * 1.05)
     ax.set_ylim(-0.03, 1.05)
 
@@ -2275,6 +2275,7 @@ def _quadratic_fit_r2(x, y):
 
 def plot_ped_vs_vscore(
     csv_input="data/results/combined_ped_vs_scores.csv",
+    mol_list_csv="data/mol_list_method.csv",
     out_dir="data/figures",
     label="fig_ped_vs_vscore",
 ):
@@ -2290,9 +2291,19 @@ def plot_ped_vs_vscore(
     color alone distinguishes the category, so varying marker shape too
     would be a redundant second encoding of the same distinction (matches
     fig:bondscores' marker="o" override).
+
+    Scoped to mol_type=='test' molecules only (the 9-molecule held-out
+    transferability set): combined_ped_vs_scores.csv also happens to carry
+    C6H6 (a PED cross-check run for a different purpose), which must NOT
+    appear here -- joined in via mol_list_csv on
+    combined_ped_vs_scores.csv's `Molecule` column (note the capitalization
+    mismatch vs. the roster's lowercase `molecule`).
     """
     _style()
     df = pd.read_csv(csv_input)
+    roster = pd.read_csv(mol_list_csv)
+    test_molecules = set(roster.loc[roster["mol_type"] == "test", "molecule"])
+    df = df[df["Molecule"].isin(test_molecules)]
     df = df.dropna(subset=["PED_Stretch_pct", "V_Stretch"])
     n_raw_modes = len(df)
     df = _collapse_degenerate_freqs(
@@ -2338,6 +2349,7 @@ def plot_ped_vs_vscore(
 
 def plot_ped_vs_bondscore_by_type(
     csv_input="data/results/combined_ped_vs_scores.csv",
+    mol_list_csv="data/mol_list_method.csv",
     out_dir="data/figures",
     label="fig_ped_vs_bondscore",
 ):
@@ -2352,9 +2364,16 @@ def plot_ped_vs_bondscore_by_type(
     one plain marker color, no S/B/SB faceting. One point per physical
     frequency -- degenerate modes are averaged together first (see
     _collapse_degenerate_freqs), same as plot_ped_vs_vscore.
+
+    Scoped to mol_type=='test' molecules only -- see plot_ped_vs_vscore's
+    docstring for why (excludes C6H6, joined in via mol_list_csv on
+    combined_ped_vs_scores.csv's `Molecule` column).
     """
     _style()
     df = pd.read_csv(csv_input)
+    roster = pd.read_csv(mol_list_csv)
+    test_molecules = set(roster.loc[roster["mol_type"] == "test", "molecule"])
+    df = df[df["Molecule"].isin(test_molecules)]
 
     bond_types = [c[len("BondScore_"):] for c in df.columns
                   if c.startswith("BondScore_") and not c.endswith("_pct")]
@@ -2399,7 +2418,7 @@ def plot_ped_vs_bondscore_by_type(
         axes.flat[j].axis("off")
 
     fig.supxlabel(r"$\%\nu^{AB}$")
-    fig.supylabel(r"$s^{AB}$")
+    fig.supylabel(r"$|s^{AB}|$")
     fig.tight_layout(rect=(0.02, 0.02, 1, 1))
     pdf_path, png_path = _savefig(fig, out_dir, label)
     plt.close(fig)

@@ -27,8 +27,11 @@
   manuscript by author decision, kept as internal diagnostic); 2 open recommended items are the other
   near-term frontier: mixed-SB bucket validation library-wide, out-of-sample/leave-one-molecule-out
   evaluation.
-- Most recent session (2026-08-10): G16 promoted to canonical, G09 archived. `pytest` 132/137 green (same
-  5 pre-existing failures, unrelated — fchk/log staleness + roster/disk-count checks).
+- Most recent session (2026-08-11): `mol_list_method.csv` format migration (`basename` column dropped,
+  9-molecule `test` category added) adapted through `src/library_ingest.py`/`src/calibrate.py`/
+  `src/figures.py`. `pytest` 136/138 green (2 pre-existing failures only — fchk/log staleness in
+  `test_veda_fmt_regression.py`; the roster/disk-count-check failures this note used to also cover are
+  fixed by this change).
 
 ## Context
 
@@ -278,6 +281,20 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 > One line per session, newest first. Full narration for any entry predating 2026-08-10 is in git history:
 > `git log -p -- IMPLEMENTATION_PLAN.md`.
 
+- **2026-08-11** — `data/mol_list_method.csv` format migration: the redundant `basename` column dropped
+  (roster's `molecule` column now doubles as the on-disk basename) and a 9-molecule held-out
+  `mol_type=='test'` transferability set added (CH4, C4H4, C10H16, PCl5, C3H6, B3N3H6, CHCl3, CH3CN,
+  C3O3H6; 68 → 77 rows). `src/library_ingest.py` repointed off `basename` onto `molecule` everywhere
+  (`load_mol_roster`/`resolve_log_basename`/`_basename_to_molecule_map`/ingest+resync loops), plus a new
+  `out_of_calibration_scope_molecules()` (inclusion-filter complement, mol_type not in
+  {ideal, non-ideal}) now drives `src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE` (10 names: C6H6 + the 9 test
+  molecules) instead of the old multi-centre-only exclusion, so any future `mol_type` category drops out
+  of calibration automatically. `fig:ped_vs_vscore`/`fig:ped_vs_bondscore` scoped to `mol_type=='test'`
+  only (excludes C6H6, which appeared there only by accident before). `data/results/library_scores.csv`
+  deliberately NOT regenerated this session (still the pre-migration 68-molecule golden) — the 9 test
+  molecules' library rows are a separate, deliberate follow-up; calibration numbers
+  (`thresholds.json`/`tau_sensitivity_sweep.csv`/confusion/boxplots/mode-mixing/bondscores figures) are
+  therefore byte-for-byte unchanged. `pytest` 136/138 (2 pre-existing fchk/log-staleness failures only).
 - **2026-08-10** — G16 promoted to canonical (see Locked decisions): G09 archived under `_g09` suffixes;
   `library_scores.csv`/`thresholds.json`/all 19 figures regenerated (`τ_S` shifted ~1.5e-7, `τ_TR`/`τ_B`
   unchanged); 3 golden-value test updates (1 sign-convention flip, 2 from a real 3/846 threshold-boundary

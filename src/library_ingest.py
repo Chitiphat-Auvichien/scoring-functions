@@ -1,8 +1,11 @@
 """Library ingest: builds data/results/library_scores.csv for every molecule
-in the JCC paper's roster, ``data/mol_list_method.csv`` (72 rows: 11 "ideal"
-single-centre AB_n shapes, 60 "non-ideal" substituted variants, 1
-"multi-centre" = benzene). ``data/mol_list_method.csv`` is the single source
-of truth (roster row -> on-disk ``basename``); this module never reads a
+in the JCC paper's roster, ``data/mol_list_method.csv`` (77 rows: 11 "ideal"
+single-centre AB_n shapes, 56 "non-ideal" substituted variants, 1
+"multi-centre" = benzene, 9 "test" = a held-out transferability-test set).
+``data/mol_list_method.csv`` is the single source of truth; since 2026-08-11
+its ``molecule`` column doubles as the on-disk basename (the old, redundant
+``basename`` column was dropped -- every on-disk file was already renamed to
+match ``molecule`` in an earlier commit). This module never reads a
 precomputed spreadsheet -- every score is a fresh real-engine recompute
 (Steps 1-4: ``main.load_inputs`` -> ``main.build_scorer_and_final`` ->
 ``src.classifier.classify_all_modes``, ``ModeScorer.score_bonds()``).
@@ -10,12 +13,13 @@ precomputed spreadsheet -- every score is a fresh real-engine recompute
 Pipeline
 --------
 1. ``load_mol_roster()`` reads the roster.
-2. ``check_roster_disk_consistency()`` cross-checks every roster basename
-   against what's on disk. A roster row with no matching ``.log``+``.gjf``
-   pair is a fatal ``FileNotFoundError`` (100% coverage is expected). An
-   on-disk basename with no roster row (e.g. the gramicidin
-   ``1grm_MM_UFF`` companion-paper inputs, out of scope here) is an expected
-   orphan: non-fatal warning, excluded from the output.
+2. ``check_roster_disk_consistency()`` cross-checks every roster molecule
+   name (used directly as the on-disk basename) against what's on disk. A
+   roster row with no matching ``.log``+``.gjf`` pair is a fatal
+   ``FileNotFoundError`` (100% coverage is expected). An on-disk basename
+   with no roster row (e.g. the gramicidin ``1grm_MM_UFF`` companion-paper
+   inputs, out of scope here) is an expected orphan: non-fatal warning,
+   excluded from the output.
 3. ``score_geometry_molecule()`` runs the real engine per molecule. A
    molecule whose files exist but fail to parse/score is warned and skipped
    (excluded from the CSV), not raised -- distinct from "missing from disk".
@@ -69,11 +73,12 @@ SCHEMA_COLUMNS = [
 
 def load_mol_roster(data_dir="data"):
     """Read data/mol_list_method.csv: the authoritative molecule roster
-    (canonical `molecule` name + on-disk `basename`). Fail loud if the file
-    or either required column is missing."""
+    (canonical `molecule` name, which also doubles as the on-disk basename --
+    the `basename` column was dropped 2026-08-11 as redundant). Fail loud if
+    the file or the required column is missing."""
     path = os.path.join(data_dir, "mol_list_method.csv")
     df = pd.read_csv(path)
-    missing_cols = {"molecule", "basename"} - set(df.columns)
+    missing_cols = {"molecule"} - set(df.columns)
     if missing_cols:
         raise ValueError(f"mol_list_method.csv missing required column(s): {missing_cols}")
     return df
@@ -88,16 +93,17 @@ def load_library_scores(data_dir="data", lib_df=None):
 
 
 def check_roster_disk_consistency(roster, data_dir="data"):
-    """Cross-check roster['basename'] against discover_geometry_molecules()'s
-    directory intersection. Returns (missing, orphaned):
+    """Cross-check roster['molecule'] (== on-disk basename) against
+    discover_geometry_molecules()'s directory intersection. Returns
+    (missing, orphaned):
       missing  -- [(molecule, basename), ...] roster rows whose .log+.gjf pair
-                  is NOT present on disk.
+                  is NOT present on disk (basename == molecule here).
       orphaned -- sorted list of on-disk basenames not referenced by any
-                  roster row's basename column.
+                  roster row's molecule column.
     """
     disk_bases = set(discover_geometry_molecules(data_dir))
-    roster_bases = set(roster["basename"])
-    missing = [(m, b) for m, b in zip(roster["molecule"], roster["basename"]) if b not in disk_bases]
+    roster_bases = set(roster["molecule"])
+    missing = [(m, m) for m in roster["molecule"] if m not in disk_bases]
     orphaned = sorted(disk_bases - roster_bases)
     return missing, orphaned
 
@@ -105,9 +111,11 @@ def check_roster_disk_consistency(roster, data_dir="data"):
 def resolve_log_basename(molecule, data_dir="data"):
     """molecule (canonical mol_list_method.csv name) -> on-disk basename, or
     None if not in the roster. Kept as its own function (name/signature
-    unchanged) since src/calibrate.py calls it directly."""
+    unchanged) since src/calibrate.py calls it directly. Since the
+    `basename` column was dropped 2026-08-11, this is now effectively a
+    roster-membership check that returns the molecule name itself."""
     roster = load_mol_roster(data_dir)
-    matches = roster.loc[roster["molecule"] == molecule, "basename"]
+    matches = roster.loc[roster["molecule"] == molecule, "molecule"]
     return matches.iloc[0] if len(matches) else None
 
 
@@ -241,15 +249,30 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None, mol_type=Non
 def multi_centre_molecules(data_dir="data"):
     """Molecule names tagged mol_type=='multi-centre' in mol_list_method.csv
     -- the authoritative multi-centre / no-single-hub-atom classification.
-    Drives src/calibrate.py's SINGLE_CENTRE_ONLY_EXCLUDE; of that set's
-    historical 7 names, only C6H6 is actually in the current 72-molecule
-    roster, so this is the single roster-driven source now (forward
-    compatible with any future multi-centre addition, no code edit needed).
+    Of the historical 7-name exclusion set, only C6H6 is actually in the
+    current 77-molecule roster, so this is the single roster-driven source
+    now (forward compatible with any future multi-centre addition, no code
+    edit needed). Still used for figure filtering; src/calibrate.py's
+    SINGLE_CENTRE_ONLY_EXCLUDE is now driven by the broader
+    out_of_calibration_scope_molecules() instead (see that function).
     """
     roster = load_mol_roster(data_dir)
     if "mol_type" not in roster.columns:
         raise ValueError("mol_list_method.csv is missing the 'mol_type' column")
     return frozenset(roster.loc[roster["mol_type"] == "multi-centre", "molecule"])
+
+
+def out_of_calibration_scope_molecules(data_dir="data"):
+    """Molecule names OUTSIDE the stretch/bend calibration's inclusion scope
+    (mol_type not in {'ideal', 'non-ideal'}) -- currently the multi-centre
+    molecule (C6H6) plus the 9 held-out 'test' transferability molecules.
+    Drives src/calibrate.py's SINGLE_CENTRE_ONLY_EXCLUDE: an INCLUSION
+    filter (ideal/non-ideal only) expressed as its complement, so a future
+    mol_type category is automatically excluded from calibration with no
+    hardcoded special-case (2026-08-11 decision, replacing the old
+    multi-centre-only exclusion list now that mol_type=='test' exists)."""
+    roster = load_mol_roster(data_dir)
+    return frozenset(roster.loc[~roster["mol_type"].isin(("ideal", "non-ideal")), "molecule"])
 
 
 def attach_labels(df, csv_tables, label_lookup, freq_atol=0.05, freq_rtol=1e-4):
@@ -376,7 +399,8 @@ def _build_library_scores(data_dir, thresholds, return_skip_report):
     all_rows = []
     load_errors = []
     for _, r in roster.iterrows():
-        molecule, base = r["molecule"], r["basename"]
+        molecule = r["molecule"]
+        base = molecule  # 2026-08-11: `basename` column dropped; molecule == on-disk basename
         mol_type = mol_type_by_molecule.get(molecule)
         try:
             rows = score_geometry_molecule(base, data_dir, thresholds, mol_type=mol_type)
@@ -433,7 +457,7 @@ def _build_library_scores(data_dir, thresholds, return_skip_report):
 
 def build_library_scores(data_dir="data", thresholds=None, return_skip_report=False):
     """Build the library_scores DataFrame: real-engine recompute for every
-    one of the 72 mol_list_method.csv roster molecules. Returns a DataFrame
+    one of the 77 mol_list_method.csv roster molecules. Returns a DataFrame
     with exactly SCHEMA_COLUMNS.
 
     Raises FileNotFoundError if any roster row's .log/.gjf pair is missing
@@ -517,7 +541,8 @@ def resync_reference_metadata(data_dir="data", write=True):
     }
 
     for _, r in roster.iterrows():
-        molecule, base = r["molecule"], r["basename"]
+        molecule = r["molecule"]
+        base = molecule  # 2026-08-11: `basename` column dropped; molecule == on-disk basename
         cm_idx = list(cm.index[cm["molecule"] == molecule])
         if not cm_idx:
             report["skipped_no_rows"].append(molecule)
@@ -594,12 +619,15 @@ def resync_reference_metadata(data_dir="data", write=True):
 
 def _basename_to_molecule_map(data_dir="data"):
     """basename -> canonical roster molecule name (empty dict if roster
-    unreadable); falls back to the raw basename if no roster row matches."""
+    unreadable); falls back to the raw basename if no roster row matches.
+    Since the `basename` column was dropped 2026-08-11 (molecule == on-disk
+    basename now), this is an identity map over the roster's molecule
+    names."""
     try:
         roster = load_mol_roster(data_dir)
     except Exception:
         return {}
-    return dict(zip(roster["basename"], roster["molecule"]))
+    return dict(zip(roster["molecule"], roster["molecule"]))
 
 
 # The 7 manually-curated columns preserved verbatim across a regeneration

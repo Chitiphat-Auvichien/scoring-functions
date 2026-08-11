@@ -85,25 +85,35 @@ _HISTORICAL_SINGLE_CENTRE_EXCLUDE_7 = frozenset({
     "C2H2", "C2H4", "C2H6", "H2O2", "C6H6", "iso-C4H10", "n-C4H10",
 })
 
+# The 9-molecule held-out transferability-test set added to
+# mol_list_method.csv 2026-08-11 (mol_type=='test').
+_TEST_CATEGORY_9 = frozenset({
+    "CH4", "C4H4", "C10H16", "PCl5", "C3H6", "B3N3H6", "CHCl3", "CH3CN",
+    "C3O3H6",
+})
+
 
 def test_single_centre_only_exclude_matches_scope_decision():
-    """**2026-07-08: repointed to be roster-derived**
-    (src.library_ingest.multi_centre_molecules()) rather than the original
-    hardcoded 7-name frozenset -- see src/calibrate.py's own comment above
-    SINGLE_CENTRE_ONLY_EXCLUDE for the full rationale. Six of the historical
-    7 names are outside the finalized 72-molecule roster entirely (removed
-    2026-07-07) and were always no-ops when applied to the real
-    library_scores.csv; only C6H6 was ever actually present to be dropped,
-    and mol_list_method.csv already tags it mol_type=='multi-centre'
-    (verified, not assumed). H2O is deliberately NOT excluded (it is
-    single-centre itself and stays in the non-ideal population as a
-    familiar illustrative molecule)."""
-    assert SINGLE_CENTRE_ONLY_EXCLUDE == {"C6H6"}
+    """**2026-08-11: repointed to an INCLUSION filter**
+    (src.library_ingest.out_of_calibration_scope_molecules(), the complement
+    of mol_type in {'ideal', 'non-ideal'}) rather than the prior
+    multi-centre-only exclusion -- see src/calibrate.py's own comment above
+    SINGLE_CENTRE_ONLY_EXCLUDE for the full rationale. mol_list_method.csv's
+    new 'test' category (9 held-out transferability molecules) must drop out
+    of calibration automatically, exactly like C6H6 (multi-centre) already
+    did. H2O is deliberately NOT excluded (it is single-centre itself,
+    mol_type=='non-ideal', and stays in the population as a familiar
+    illustrative molecule)."""
+    expected = {"C6H6"} | _TEST_CATEGORY_9
+    assert SINGLE_CENTRE_ONLY_EXCLUDE == expected
+    assert len(SINGLE_CENTRE_ONLY_EXCLUDE) == 10
     assert "H2O" not in SINGLE_CENTRE_ONLY_EXCLUDE
 
-    # Byte-identical FILTERING behavior check: the roster-derived set and
-    # the historical hardcoded 7-name set must drop exactly the same
-    # molecules from the real, current library_scores.csv.
+    # The checked-in library_scores.csv golden predates the 'test'-category
+    # roster addition (not regenerated as part of that migration -- see
+    # tests/test_library_ingest.py), so only C6H6 of the 10 excluded names
+    # is actually present in it to be dropped; the 9 test molecules are
+    # simply absent from this golden, not merely filtered.
     lib_df = pd.read_csv(LIB_CSV)
     old_dropped = set(lib_df.loc[lib_df["molecule"].isin(_HISTORICAL_SINGLE_CENTRE_EXCLUDE_7),
                                   "molecule"].unique())
@@ -119,14 +129,12 @@ def test_filter_single_centre_library_drops_exactly_the_excluded_molecules():
     removes exactly whichever of the excluded molecules are actually present
     and nothing else.
 
-    **2026-07-07 update (roster-driven pipeline):** six of
-    SINGLE_CENTRE_ONLY_EXCLUDE's seven molecules (C2H2, C2H4, C2H6, H2O2,
-    iso-C4H10, n-C4H10) are two-, four-, or six-centre topologies that are
-    also absent from data/mol_list_method.csv's finalized 72-molecule
-    roster entirely -- they no longer appear in library_scores.csv at all
-    (not merely filtered out), so filter_single_centre_library() is a no-op
-    for them. Only C6H6 (benzene, six-centre, still in the roster) is
-    actually present to be dropped by this filter now."""
+    **2026-08-11 update:** SINGLE_CENTRE_ONLY_EXCLUDE now has 10 names
+    (C6H6 + the 9 'test'-category molecules), but the checked-in
+    library_scores.csv golden predates that roster addition (still 68
+    molecules, not regenerated as part of the migration -- see
+    tests/test_library_ingest.py), so only C6H6 is actually present in it to
+    be dropped by this filter, same as before."""
     lib_df = pd.read_csv(LIB_CSV)
     before_molecules = set(lib_df["molecule"].unique())
     present_of_excluded = SINGLE_CENTRE_ONLY_EXCLUDE & before_molecules

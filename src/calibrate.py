@@ -33,29 +33,36 @@ import pandas as pd
 from src.classifier import Thresholds, is_clean_external
 from src.library_ingest import (
     build_library_scores, resolve_log_basename, _EXTERNAL_SLOTS,
-    multi_centre_molecules,
+    multi_centre_molecules, out_of_calibration_scope_molecules,
 )
 
 DEFAULT_TAU_GRID = tuple(round(x, 4) for x in np.arange(0.05, 0.9991, 0.005))
 
-# Single-centre-only scope filter: the hydride-library validation (tau_S/
-# tau_B derivation + ideal/non-ideal confusion stats) is scoped to
-# single-centre AB_n topologies only. Excludes multi-/two-centre molecules
-# (currently just C6H6, benzene -- it has its own separate confusion matrix
-# in src/benzene_validation.py, unaffected by this filter). H2O (single-
-# centre AB2) is NOT excluded. Sourced from
-# src.library_ingest.multi_centre_molecules() (mol_list_method.csv's
-# 'mol_type' column) so it stays roster-driven, not hardcoded.
+# Calibration-scope filter: the hydride-library validation (tau_S/tau_B
+# derivation + ideal/non-ideal confusion stats) is scoped to single-centre
+# AB_n topologies only. As of 2026-08-11 this is expressed as an INCLUSION
+# filter -- mol_type in {'ideal', 'non-ideal'} -- rather than an exclusion
+# blacklist, so any mol_type outside that pair (multi-centre C6H6, and the
+# 9-molecule 'test' transferability set added this session) drops out of
+# calibration automatically, with no hardcoded special-case needed for a
+# future category either. out_of_calibration_scope_molecules() returns that
+# inclusion filter's complement (currently C6H6 + the 9 test molecules = 10
+# names). C6H6 has its own separate confusion matrix in
+# src/benzene_validation.py, unaffected by this filter. H2O (single-centre
+# AB2, mol_type=='non-ideal') is NOT excluded.
 #
 # IMPORTANT: if data/mol_list_method.csv can't be read at import time (e.g.
-# cwd isn't the repo root), this silently falls back to a hardcoded 7-name
-# frozenset from the pre-roster scope decision -- keeps the module importable
-# rather than crashing, but a future editor should know this fallback exists.
+# cwd isn't the repo root), this silently falls back to a hardcoded frozenset
+# covering both the pre-roster multi-centre scope decision AND the 9 known
+# test molecules -- keeps the module importable rather than crashing, but a
+# future editor should know this fallback exists.
 try:
-    SINGLE_CENTRE_ONLY_EXCLUDE = multi_centre_molecules()
+    SINGLE_CENTRE_ONLY_EXCLUDE = out_of_calibration_scope_molecules()
 except Exception:
     SINGLE_CENTRE_ONLY_EXCLUDE = frozenset({
         "C2H2", "C2H4", "C2H6", "H2O2", "C6H6", "iso-C4H10", "n-C4H10",
+        "CH4", "C4H4", "C10H16", "PCl5", "C3H6", "B3N3H6", "CHCl3",
+        "CH3CN", "C3O3H6",
     })
 
 

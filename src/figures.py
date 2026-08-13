@@ -1984,12 +1984,17 @@ def plot_cpu_time_benchmark(
     if scale == "log":
         # Log-log OLS -- the conventional way to report a power-law
         # exponent, appears as a straight line on this log-log panel.
+        # Labels carry only the equation (no "Gaussian"/"Classifier"
+        # prefix, no "log-log fit"/"linear-space fit" descriptor): color
+        # alone ties each fit line to its own series' scatter/marker, and
+        # keeping the label short is what lets the legend box be placed
+        # somewhere it doesn't overlap data or the fit lines themselves.
         ax.plot(xx, np.exp(g_intercept) * xx ** g_slope, color=gaussian_trend_color,
                 ls="--", lw=1.2, zorder=4,
-                label=f"Gaussian log-log fit: $t \\propto N^{{{g_slope:.2f}}}$ ($R^2$={g_r2:.2f})")
+                label=f"$t \\propto N^{{{g_slope:.2f}}}$ ($R^2$={g_r2:.2f})")
         ax.plot(xx, np.exp(c_intercept) * xx ** c_slope, color=COLORS["cost_classifier"],
                 ls="--", lw=1.2, zorder=4,
-                label=f"Classifier log-log fit: $t \\propto N^{{{c_slope:.2f}}}$ ($R^2$={c_r2:.2f})")
+                label=f"$t \\propto N^{{{c_slope:.2f}}}$ ($R^2$={c_r2:.2f})")
     else:
         # Linear-space nonlinear fit -- minimizes actual CPU-second
         # residuals, the curve that tracks absolute vertical distance on
@@ -1999,10 +2004,10 @@ def plot_cpu_time_benchmark(
         # is meant to show the one fit judged on the axes it's drawn on.
         ax.plot(xx, g_a_lin * xx ** g_b_lin, color=gaussian_trend_color,
                 ls="--", lw=1.2, zorder=4,
-                label=f"Gaussian linear-space fit: $t \\propto N^{{{g_b_lin:.2f}}}$ ($R^2$={g_r2_lin:.2f})")
+                label=f"$t \\propto N^{{{g_b_lin:.2f}}}$ ($R^2$={g_r2_lin:.2f})")
         ax.plot(xx, c_a_lin * xx ** c_b_lin, color=COLORS["cost_classifier"],
                 ls="--", lw=1.2, zorder=4,
-                label=f"Classifier linear-space fit: $t \\propto N^{{{c_b_lin:.2f}}}$ ($R^2$={c_r2_lin:.2f})")
+                label=f"$t \\propto N^{{{c_b_lin:.2f}}}$ ($R^2$={c_r2_lin:.2f})")
     # Proxy legend entry (no real data): the Gaussian series can't show its
     # gradient in a legend swatch, so a mid-inferno-toned circle stands in
     # (the colorbar alone carries the actual n_basis mapping).
@@ -2030,20 +2035,26 @@ def plot_cpu_time_benchmark(
         ax.set_ylim(-0.06 * y_top, y_top)
     else:
         ax.set_yscale("log")
+        # Extra headroom (x20, vs. linear's x1.28) above the tallest point
+        # (C10H16, N=26, 460s): Gaussian's low-N cluster (2-55s) already
+        # fills most of the panel's upper decade, so the legend needs a
+        # dedicated, otherwise-empty decade above ALL data (including the
+        # N=26 point) to sit in without overlapping any point -- verified
+        # clear by rendering.
         ax.set_ylim(df["classifier_cpu_s"].min() * 0.5,
-                    df["gaussian_freq_cpu_s"].max() * 1.8)
-    # Bordered legend: with the C10H16/N=26 point now in range, the fit
-    # lines span nearly the full vertical extent of both scale variants, so
-    # no corner stays reliably clear of a line crossing through it (unlike
-    # before the fit lines existed) -- a frame + opaque face keep the
-    # legend readable regardless (same treatment as plot_bond_scores' two
-    # panels, the only other legend in this module that sits on top of
-    # data rather than in clear space).
+                    df["gaussian_freq_cpu_s"].max() * 20)
+    # "upper left": low-N points/fit-line values stay well under the axis
+    # ceiling across both scale variants (linear: tallest low-N point is
+    # 55.3s against a >580s ceiling; log: tallest is the same 55.3s against
+    # a >800s ceiling), so this corner stays clear even with the C10H16/
+    # N=26 point and its steep fit line now in range -- unlike "upper
+    # right", which the steep fit line grows into as it approaches N=26.
+    # Verified clear by rendering; frameless is fine now that the shortened
+    # equation-only labels (see above) keep the box small.
     handles, labels = ax.get_legend_handles_labels()
     handles = [gaussian_handle] + handles
     labels = [gaussian_handle.get_label()] + labels
-    ax.legend(handles=handles, labels=labels, loc="upper right", frameon=True,
-              edgecolor="black", facecolor="white", framealpha=1.0,
+    ax.legend(handles=handles, labels=labels, loc="upper left", frameon=False,
               handletextpad=0.4, labelspacing=0.35, borderaxespad=0.3,
               fontsize=LEGEND_FONTSIZE)
 

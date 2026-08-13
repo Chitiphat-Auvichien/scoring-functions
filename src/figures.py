@@ -1855,24 +1855,25 @@ def plot_cpu_time_benchmark(
     and closer to showing each series' own N-scaling trend, but undersells
     the magnitude gap. ``label`` overrides the scale-based default if given.
 
-    FITTING (mirrors plot_gaussian_nbasis_scaling's convention, applied to
-    both series against N here instead of one series against n_basis): each
-    series (Gaussian, classifier) gets a log-log OLS power-law fit
-    (``np.polyfit`` on ln(t) vs. ln(N)), always drawn -- the conventional
-    way to report a scaling exponent, weighting all points by relative
-    error. The "linear" scale variant additionally draws a second fit per
-    series, nonlinear least squares directly in CPU-second space
-    (``scipy.curve_fit``), the curve that actually minimizes vertical
-    distance on a linear panel; it typically disagrees with the log-log
-    exponent for the same reason the two disagree in
-    plot_gaussian_nbasis_scaling, so both are shown rather than presenting
-    one exponent as the only answer. Fits use raw per-molecule points, not
-    per-N means, for parity with plot_gaussian_nbasis_scaling -- N=4 (24
-    molecules) dominates each regression, reflecting where the sampling
-    effort actually went rather than treating every N as equally
-    well-supported. These fit lines replace the previous per-N mean line (a
-    plain descriptive average, not a fit); that per-N mean is still
-    computed and returned in the summary dict (not drawn) for reference.
+    FITTING: each series (Gaussian, classifier) gets a power-law fit against
+    N, but -- unlike plot_gaussian_nbasis_scaling, which draws both a
+    log-log OLS fit and a linear-space nonlinear fit together on its linear
+    variant -- fig_cputime draws only the fit appropriate to the axes it's
+    shown on: the "log" variant draws the log-log OLS fit (``np.polyfit`` on
+    ln(t) vs. ln(N)), the conventional way to report a scaling exponent and
+    a straight line on log-log axes; the "linear" (default) variant instead
+    draws the linear-space nonlinear fit (``scipy.curve_fit``, minimizing
+    actual CPU-second residuals), the curve that tracks absolute vertical
+    distance on a linear panel. Both fits are always computed regardless of
+    ``scale`` and both are returned in the summary dict (``fit_vs_N_loglog_*``
+    / ``fit_vs_N_linear_space_*``) even though only one is drawn per call --
+    see plot_gaussian_nbasis_scaling for why the two typically disagree.
+    Fits use raw per-molecule points, not per-N means -- N=4 (24 molecules)
+    dominates each regression, reflecting where the sampling effort
+    actually went rather than treating every N as equally well-supported.
+    These fit lines replace the previous per-N mean line (a plain
+    descriptive average, not a fit); that per-N mean is still computed and
+    returned in the summary dict (not drawn) for reference.
 
     FILTERING: ``cpu_time_benchmark.csv`` carries ``mp2_321g``/
     ``method_basis`` joined from ``data/mol_list_method.csv`` --
@@ -1980,24 +1981,27 @@ def plot_cpu_time_benchmark(
     per_n_mean = df.groupby("N")[["gaussian_freq_cpu_s", "classifier_cpu_s"]].mean()
 
     xx = np.linspace(N_arr.min() * 0.9, N_arr.max() * 1.1, 100)
-    ax.plot(xx, np.exp(g_intercept) * xx ** g_slope, color=gaussian_trend_color,
-            ls="--", lw=1.2, zorder=4,
-            label=f"Gaussian log-log fit: $t \\propto N^{{{g_slope:.2f}}}$ ($R^2$={g_r2:.2f})")
-    ax.plot(xx, np.exp(c_intercept) * xx ** c_slope, color=COLORS["cost_classifier"],
-            ls="--", lw=1.2, zorder=4,
-            label=f"Classifier log-log fit: $t \\propto N^{{{c_slope:.2f}}}$ ($R^2$={c_r2:.2f})")
-    if scale == "linear":
-        # Second fit per series -- nonlinear least squares in raw
-        # CPU-second space, the curve that actually minimizes vertical
-        # distance on this linear panel (see plot_gaussian_nbasis_scaling
-        # for why it disagrees with the log-log fit). Dotted (not dashed)
-        # + the same series color keeps the two fits per series visually
-        # paired but distinguishable.
+    if scale == "log":
+        # Log-log OLS -- the conventional way to report a power-law
+        # exponent, appears as a straight line on this log-log panel.
+        ax.plot(xx, np.exp(g_intercept) * xx ** g_slope, color=gaussian_trend_color,
+                ls="--", lw=1.2, zorder=4,
+                label=f"Gaussian log-log fit: $t \\propto N^{{{g_slope:.2f}}}$ ($R^2$={g_r2:.2f})")
+        ax.plot(xx, np.exp(c_intercept) * xx ** c_slope, color=COLORS["cost_classifier"],
+                ls="--", lw=1.2, zorder=4,
+                label=f"Classifier log-log fit: $t \\propto N^{{{c_slope:.2f}}}$ ($R^2$={c_r2:.2f})")
+    else:
+        # Linear-space nonlinear fit -- minimizes actual CPU-second
+        # residuals, the curve that tracks absolute vertical distance on
+        # this linear panel (see plot_gaussian_nbasis_scaling for why this
+        # differs from the log-log fit); the log-log fit itself is not
+        # drawn here, only computed (see the summary dict) -- fig_cputime
+        # is meant to show the one fit judged on the axes it's drawn on.
         ax.plot(xx, g_a_lin * xx ** g_b_lin, color=gaussian_trend_color,
-                ls=":", lw=1.6, zorder=4,
+                ls="--", lw=1.2, zorder=4,
                 label=f"Gaussian linear-space fit: $t \\propto N^{{{g_b_lin:.2f}}}$ ($R^2$={g_r2_lin:.2f})")
         ax.plot(xx, c_a_lin * xx ** c_b_lin, color=COLORS["cost_classifier"],
-                ls=":", lw=1.6, zorder=4,
+                ls="--", lw=1.2, zorder=4,
                 label=f"Classifier linear-space fit: $t \\propto N^{{{c_b_lin:.2f}}}$ ($R^2$={c_r2_lin:.2f})")
     # Proxy legend entry (no real data): the Gaussian series can't show its
     # gradient in a legend swatch, so a mid-inferno-toned circle stands in
@@ -2086,10 +2090,12 @@ def plot_cpu_time_benchmark(
                     "to mp2_321g==True, excluding "
                     f"{n_excluded} molecules run at a different Gaussian "
                     "method/basis, to avoid confounding CPU-time-vs-N with "
-                    "CPU-time-vs-method. Per-N mean lines replaced with "
-                    "log-log OLS (+ linear-space nonlinear on the linear "
-                    "scale variant) power-law fits per series, fit on raw "
-                    "per-molecule points, not per-N means."),
+                    "CPU-time-vs-method. Per-N mean lines replaced with a "
+                    "power-law fit per series, fit on raw per-molecule "
+                    "points, not per-N means -- log-log OLS drawn on the "
+                    "log scale variant, linear-space nonlinear drawn on the "
+                    "linear scale variant; both fits are computed and "
+                    "returned here regardless of which is drawn."),
     }
     return summary
 

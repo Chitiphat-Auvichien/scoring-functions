@@ -1837,6 +1837,7 @@ def plot_cpu_time_benchmark(
     out_dir="data/figures",
     label=None,
     scale="linear",
+    gaussian_color_by_nbasis=True,
 ):
     """Build fig:cputime: empirical CPU time vs. atom count N, for the
     classification algorithm (this framework) against the Gaussian
@@ -1900,20 +1901,28 @@ def plot_cpu_time_benchmark(
     sharing the same integer N -- N itself is not perturbed in the
     underlying data, only the plotted x-position.
 
-    COLOR ENCODING: Gaussian points are colored by a continuous "inferno"
-    gradient keyed to ``n_basis`` (Gaussian's own AO basis-function count,
-    ``NBasis=``), not a flat color -- N alone barely explains Gaussian's CPU
-    time (see ``plot_gaussian_nbasis_scaling``: log-log R^2~0.04 vs. N,
-    R^2~0.81 vs. n_basis), so the gradient gives a reader an at-a-glance
-    reason for the vertical scatter within each N without requiring a
-    separate figure. The classifier series is Okabe-Ito bluish green
-    (``COLORS["cost_classifier"]``), unchanged since its cost does not
-    depend on n_basis. Marker SHAPE distinguishes the two series -- circles
-    for Gaussian, squares for the classifier. Markers and the colorbar are
-    drawn without edge borders (author preference against overusing
-    borders); the legend's Gaussian swatch uses a mid-gradient tone with no
-    "colored by..." qualifier in its label, since the colorbar alone
-    carries that mapping.
+    COLOR ENCODING: by default (``gaussian_color_by_nbasis=True``), Gaussian
+    points are colored by a continuous "inferno" gradient keyed to
+    ``n_basis`` (Gaussian's own AO basis-function count, ``NBasis=``), not a
+    flat color -- N alone barely explains Gaussian's CPU time (see
+    ``plot_gaussian_nbasis_scaling``: log-log R^2~0.04 vs. N, R^2~0.81 vs.
+    n_basis), so the gradient gives a reader an at-a-glance reason for the
+    vertical scatter within each N without requiring a separate figure,
+    with a colorbar carrying the mapping; the legend's Gaussian swatch uses
+    a mid-gradient tone with no "colored by..." qualifier in its label,
+    since the colorbar alone carries that mapping. Passing
+    ``gaussian_color_by_nbasis=False`` abandons this in favor of plain
+    black Gaussian markers and drops the colorbar entirely (the figure also
+    narrows to match, since there's no colorbar to leave room for) -- a
+    simpler alternative when the n_basis story isn't the point of a
+    particular use of this figure; the default label gains a ``_bw`` suffix
+    (``fig_cputime_bw`` / ``fig_cputime_log_bw``) so both variants can be
+    generated side by side without colliding. The classifier series is
+    always Okabe-Ito bluish green (``COLORS["cost_classifier"]``), unchanged
+    either way since its cost does not depend on n_basis. Marker SHAPE
+    distinguishes the two series -- circles for Gaussian, squares for the
+    classifier. Markers (and the colorbar, when present) are drawn without
+    edge borders (author preference against overusing borders).
 
     Not one of the 6 named JCC figures in this module's existing scope (see
     module docstring / IMPLEMENTATION_PLAN.md); added because the
@@ -1924,7 +1933,8 @@ def plot_cpu_time_benchmark(
     if scale not in ("linear", "log"):
         raise ValueError(f"scale must be 'linear' or 'log', got {scale!r}")
     if label is None:
-        label = "fig_cputime" if scale == "linear" else "fig_cputime_log"
+        base_label = "fig_cputime" if scale == "linear" else "fig_cputime_log"
+        label = base_label if gaussian_color_by_nbasis else f"{base_label}_bw"
 
     _style()
     df_all = pd.read_csv(benchmark_csv)
@@ -1948,30 +1958,42 @@ def plot_cpu_time_benchmark(
     jitter = rng.uniform(-0.12, 0.12, size=len(df))
     x = df["N"].to_numpy(dtype=float) + jitter
 
-    fig, ax = plt.subplots(figsize=(5.3, 3.9))
+    fig, ax = plt.subplots(figsize=(5.3, 3.9) if gaussian_color_by_nbasis else (4.6, 3.9))
 
-    n_basis_norm = mcolors.Normalize(vmin=df["n_basis"].min(), vmax=df["n_basis"].max())
-    # A dark, fixed point on the same inferno ramp used for the Gaussian
-    # points -- ties the trend line to its own series' color family instead
-    # of an unrelated black, while staying dark enough (low end of inferno)
-    # to read clearly as a line rather than blend into the marker cloud.
-    gaussian_trend_color = matplotlib.colormaps["inferno"](0.25)
+    if gaussian_color_by_nbasis:
+        # A dark, fixed point on the same inferno ramp used for the
+        # Gaussian points -- ties the trend line to its own series' color
+        # family instead of an unrelated black, while staying dark enough
+        # (low end of inferno) to read clearly as a line rather than blend
+        # into the marker cloud.
+        gaussian_trend_color = matplotlib.colormaps["inferno"](0.25)
+    else:
+        gaussian_trend_color = "black"
 
     ax.errorbar(x, df["classifier_cpu_s"], yerr=df["classifier_cpu_s_stddev"],
                 fmt="none", ecolor=COLORS["cost_classifier"], elinewidth=0.5,
                 alpha=0.35, zorder=2, capsize=0)
-    gaussian_pts = ax.scatter(x, df["gaussian_freq_cpu_s"], c=df["n_basis"],
-               cmap="inferno", norm=n_basis_norm, marker="o", s=20,
-               edgecolors="none", alpha=1.0, zorder=3)
+    if gaussian_color_by_nbasis:
+        n_basis_norm = mcolors.Normalize(vmin=df["n_basis"].min(), vmax=df["n_basis"].max())
+        gaussian_pts = ax.scatter(x, df["gaussian_freq_cpu_s"], c=df["n_basis"],
+                   cmap="inferno", norm=n_basis_norm, marker="o", s=20,
+                   edgecolors="none", alpha=1.0, zorder=3)
+        cbar = fig.colorbar(gaussian_pts, ax=ax, pad=0.02, fraction=0.06)
+        cbar.set_label(r"$N_{\mathrm{basis}}$", fontsize=LEGEND_FONTSIZE)
+        cbar.ax.tick_params(labelsize=LEGEND_FONTSIZE)
+        cbar.outline.set_visible(False)
+    else:
+        # Flat black, no colorbar -- carries its own real legend label
+        # directly, unlike the gradient version which needs a proxy handle
+        # (see gaussian_handle below) since a legend swatch can't show a
+        # continuous colormap.
+        ax.scatter(x, df["gaussian_freq_cpu_s"], marker="o", s=20,
+                   facecolors="black", edgecolors="none", alpha=1.0, zorder=3,
+                   label="Freq=hpmodes (MP2/3-21G)")
     ax.scatter(x, df["classifier_cpu_s"], marker="s", s=20,
                facecolors=COLORS["cost_classifier"],
                edgecolors="none", alpha=1.0, zorder=3,
                label="Classification algorithm")
-
-    cbar = fig.colorbar(gaussian_pts, ax=ax, pad=0.02, fraction=0.06)
-    cbar.set_label(r"$N_{\mathrm{basis}}$", fontsize=LEGEND_FONTSIZE)
-    cbar.ax.tick_params(labelsize=LEGEND_FONTSIZE)
-    cbar.outline.set_visible(False)
 
     # Per-N mean (unjittered, true N on the x-axis) -- kept only as a
     # descriptive stat in the summary dict (see per_n_mean below), no longer
@@ -2008,13 +2030,17 @@ def plot_cpu_time_benchmark(
         ax.plot(xx, c_a_lin * xx ** c_b_lin, color=COLORS["cost_classifier"],
                 ls="--", lw=1.2, zorder=4,
                 label=f"$t \\propto N^{{{c_b_lin:.2f}}}$ ($R^2$={c_r2_lin:.2f})")
-    # Proxy legend entry (no real data): the Gaussian series can't show its
-    # gradient in a legend swatch, so a mid-inferno-toned circle stands in
-    # (the colorbar alone carries the actual n_basis mapping).
-    gaussian_handle = Line2D([0], [0], marker="o", linestyle="none",
-                              markersize=5, markeredgecolor="none",
-                              markerfacecolor=matplotlib.colormaps["inferno"](0.5),
-                              label="Freq=hpmodes (MP2/3-21G)")
+    # Proxy legend entry (no real data), only needed when
+    # gaussian_color_by_nbasis=True: the gradient series can't show its
+    # colormap in a legend swatch, so a mid-inferno-toned circle stands in
+    # (the colorbar alone carries the actual n_basis mapping). When False,
+    # the flat-black scatter above already carries this same label for
+    # real, so no proxy is needed.
+    if gaussian_color_by_nbasis:
+        gaussian_handle = Line2D([0], [0], marker="o", linestyle="none",
+                                  markersize=5, markeredgecolor="none",
+                                  markerfacecolor=matplotlib.colormaps["inferno"](0.5),
+                                  label="Freq=hpmodes (MP2/3-21G)")
 
     ax.set_xlabel("Number of atoms, $N$")
     ax.set_ylabel("CPU time (s)")
@@ -2052,8 +2078,9 @@ def plot_cpu_time_benchmark(
     # Verified clear by rendering; frameless is fine now that the shortened
     # equation-only labels (see above) keep the box small.
     handles, labels = ax.get_legend_handles_labels()
-    handles = [gaussian_handle] + handles
-    labels = [gaussian_handle.get_label()] + labels
+    if gaussian_color_by_nbasis:
+        handles = [gaussian_handle] + handles
+        labels = [gaussian_handle.get_label()] + labels
     ax.legend(handles=handles, labels=labels, loc="upper left", frameon=False,
               handletextpad=0.4, labelspacing=0.35, borderaxespad=0.3,
               fontsize=LEGEND_FONTSIZE)
@@ -2070,6 +2097,7 @@ def plot_cpu_time_benchmark(
     summary = {
         "pdf": pdf_path, "png": png_path,
         "scale": scale,
+        "gaussian_color_by_nbasis": bool(gaussian_color_by_nbasis),
         "n_molecules": len(df),
         "n_excluded_non_mp2_321g": int(n_excluded),
         "N_range": (int(df["N"].min()), int(df["N"].max())),
@@ -2378,6 +2406,8 @@ def regenerate_all(verbose=True):
          lambda: plot_cpu_time_benchmark(scale="linear")),
         ("fig:cputime log (proposed, not yet in .tex)",
          lambda: plot_cpu_time_benchmark(scale="log")),
+        ("fig:cputime linear, black Gaussian markers (alt., not yet in .tex)",
+         lambda: plot_cpu_time_benchmark(scale="linear", gaussian_color_by_nbasis=False)),
         ("fig:gaussian_nbasis log (SI/diagnostic, not yet in .tex)",
          lambda: plot_gaussian_nbasis_scaling(scale="log")),
         ("fig:gaussian_nbasis linear (SI/diagnostic, not yet in .tex)",

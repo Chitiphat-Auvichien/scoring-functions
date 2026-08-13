@@ -1807,6 +1807,31 @@ def plot_sensitivity(
 # -- see this module's own docstring: figures.py never touches the .tex).
 # --------------------------------------------------------------------------
 
+def _loglog_ols_fit(x, y):
+    """Log-log OLS power-law fit y ~ a * x**b, fit as a straight line in
+    log-log space (np.polyfit on ln(y) vs. ln(x)); return (slope, intercept,
+    r2) with r2 computed on log-space residuals, matching the pattern used
+    throughout this module (see plot_gaussian_nbasis_scaling)."""
+    log_x, log_y = np.log(x), np.log(y)
+    slope, intercept = np.polyfit(log_x, log_y, 1)
+    pred = slope * log_x + intercept
+    r2 = 1 - np.sum((log_y - pred) ** 2) / np.sum((log_y - log_y.mean()) ** 2)
+    return slope, intercept, r2
+
+
+def _powerlaw_curve_fit(x, y, p0):
+    """Nonlinear least squares power-law fit y ~ a * x**b, minimizing raw
+    (non-logged) residuals directly (scipy.optimize.curve_fit); return
+    (a, b, r2) with r2 computed on linear-space residuals, matching the
+    pattern used throughout this module (see plot_gaussian_nbasis_scaling)."""
+    def _powerlaw(n, a, b):
+        return a * n ** b
+    (a, b), _ = curve_fit(_powerlaw, x, y, p0=p0)
+    pred = _powerlaw(x, a, b)
+    r2 = 1 - np.sum((y - pred) ** 2) / np.sum((y - y.mean()) ** 2)
+    return a, b, r2
+
+
 def plot_cpu_time_benchmark(
     benchmark_csv="data/results/cpu_time_benchmark.csv",
     out_dir="data/figures",
@@ -1827,9 +1852,27 @@ def plot_cpu_time_benchmark(
     Gaussian's, which dramatizes the magnitude gap (classification cost is
     negligible against the frequency calculation that supplies its input)
     but hides the classifier's own N-scaling. Log keeps both series legible
-    and closer to showing the classifier's ~N^1.7 empirical trend (log-log
-    fit on per-N medians), but undersells the magnitude gap. ``label``
-    overrides the scale-based default if given.
+    and closer to showing each series' own N-scaling trend, but undersells
+    the magnitude gap. ``label`` overrides the scale-based default if given.
+
+    FITTING (mirrors plot_gaussian_nbasis_scaling's convention, applied to
+    both series against N here instead of one series against n_basis): each
+    series (Gaussian, classifier) gets a log-log OLS power-law fit
+    (``np.polyfit`` on ln(t) vs. ln(N)), always drawn -- the conventional
+    way to report a scaling exponent, weighting all points by relative
+    error. The "linear" scale variant additionally draws a second fit per
+    series, nonlinear least squares directly in CPU-second space
+    (``scipy.curve_fit``), the curve that actually minimizes vertical
+    distance on a linear panel; it typically disagrees with the log-log
+    exponent for the same reason the two disagree in
+    plot_gaussian_nbasis_scaling, so both are shown rather than presenting
+    one exponent as the only answer. Fits use raw per-molecule points, not
+    per-N means, for parity with plot_gaussian_nbasis_scaling -- N=4 (24
+    molecules) dominates each regression, reflecting where the sampling
+    effort actually went rather than treating every N as equally
+    well-supported. These fit lines replace the previous per-N mean line (a
+    plain descriptive average, not a fit); that per-N mean is still
+    computed and returned in the summary dict (not drawn) for reference.
 
     FILTERING: ``cpu_time_benchmark.csv`` carries ``mp2_321g``/
     ``method_basis`` joined from ``data/mol_list_method.csv`` --
@@ -1890,6 +1933,16 @@ def plot_cpu_time_benchmark(
     df = df.sort_values(["N", "molecule"]).reset_index(drop=True)
     ratio = df["gaussian_freq_cpu_s"] / df["classifier_cpu_s"]
 
+    N_arr = df["N"].to_numpy(dtype=float)
+    gaussian_arr = df["gaussian_freq_cpu_s"].to_numpy(dtype=float)
+    classifier_arr = df["classifier_cpu_s"].to_numpy(dtype=float)
+    g_slope, g_intercept, g_r2 = _loglog_ols_fit(N_arr, gaussian_arr)
+    c_slope, c_intercept, c_r2 = _loglog_ols_fit(N_arr, classifier_arr)
+    g_a_lin, g_b_lin, g_r2_lin = _powerlaw_curve_fit(
+        N_arr, gaussian_arr, p0=[np.exp(g_intercept), g_slope])
+    c_a_lin, c_b_lin, c_r2_lin = _powerlaw_curve_fit(
+        N_arr, classifier_arr, p0=[np.exp(c_intercept), c_slope])
+
     rng = np.random.default_rng(0)
     jitter = rng.uniform(-0.12, 0.12, size=len(df))
     x = df["N"].to_numpy(dtype=float) + jitter
@@ -1919,29 +1972,40 @@ def plot_cpu_time_benchmark(
     cbar.ax.tick_params(labelsize=LEGEND_FONTSIZE)
     cbar.outline.set_visible(False)
 
-    # Per-N median trend line (unjittered, true N on the x-axis) -- makes
-    # the "barely grows with N" claim visible at a glance, not just implied
-    # by the scatter cloud. Gaussian's line uses a dark inferno tone (its
-    # own series' color family, not an unrelated black); classifier's
-    # matches its own green markers.
-    med = df.groupby("N")[["gaussian_freq_cpu_s", "classifier_cpu_s"]].mean()
-    ax.plot(med.index, med["gaussian_freq_cpu_s"], color=gaussian_trend_color,
-            lw=1.1, ls="--", zorder=4, alpha=0.8)
-    ax.plot(med.index, med["classifier_cpu_s"], color=COLORS["cost_classifier"],
-            lw=1.1, ls="--", zorder=4, alpha=0.8)
-    # Proxy legend entries (no real data): the Gaussian series can't show
-    # its gradient in a legend swatch, so a mid-inferno-toned square stands
-    # in (the colorbar carries the actual n_basis mapping, not the legend
-    # label) -- plus the dashed-line explainer for what the "Mean" lines are
-    # (a per-N summary statistic, not a fit) and how many molecules went
-    # into each N's point, since that varies a lot (N=4: 24 molecules,
-    # N=12: 1 molecule) and changes how much the median should be trusted.
+    # Per-N mean (unjittered, true N on the x-axis) -- kept only as a
+    # descriptive stat in the summary dict (see per_n_mean below), no longer
+    # drawn: a plain average across a wildly uneven per-N sample count
+    # (N=4: 24 molecules, N=12: 1 molecule) isn't a fit, and the power-law
+    # fit lines below now carry the figure's actual trend claim.
+    per_n_mean = df.groupby("N")[["gaussian_freq_cpu_s", "classifier_cpu_s"]].mean()
+
+    xx = np.linspace(N_arr.min() * 0.9, N_arr.max() * 1.1, 100)
+    ax.plot(xx, np.exp(g_intercept) * xx ** g_slope, color=gaussian_trend_color,
+            ls="--", lw=1.2, zorder=4,
+            label=f"Gaussian log-log fit: $t \\propto N^{{{g_slope:.2f}}}$ ($R^2$={g_r2:.2f})")
+    ax.plot(xx, np.exp(c_intercept) * xx ** c_slope, color=COLORS["cost_classifier"],
+            ls="--", lw=1.2, zorder=4,
+            label=f"Classifier log-log fit: $t \\propto N^{{{c_slope:.2f}}}$ ($R^2$={c_r2:.2f})")
+    if scale == "linear":
+        # Second fit per series -- nonlinear least squares in raw
+        # CPU-second space, the curve that actually minimizes vertical
+        # distance on this linear panel (see plot_gaussian_nbasis_scaling
+        # for why it disagrees with the log-log fit). Dotted (not dashed)
+        # + the same series color keeps the two fits per series visually
+        # paired but distinguishable.
+        ax.plot(xx, g_a_lin * xx ** g_b_lin, color=gaussian_trend_color,
+                ls=":", lw=1.6, zorder=4,
+                label=f"Gaussian linear-space fit: $t \\propto N^{{{g_b_lin:.2f}}}$ ($R^2$={g_r2_lin:.2f})")
+        ax.plot(xx, c_a_lin * xx ** c_b_lin, color=COLORS["cost_classifier"],
+                ls=":", lw=1.6, zorder=4,
+                label=f"Classifier linear-space fit: $t \\propto N^{{{c_b_lin:.2f}}}$ ($R^2$={c_r2_lin:.2f})")
+    # Proxy legend entry (no real data): the Gaussian series can't show its
+    # gradient in a legend swatch, so a mid-inferno-toned circle stands in
+    # (the colorbar alone carries the actual n_basis mapping).
     gaussian_handle = Line2D([0], [0], marker="o", linestyle="none",
                               markersize=5, markeredgecolor="none",
                               markerfacecolor=matplotlib.colormaps["inferno"](0.5),
                               label="Freq=hpmodes (MP2/3-21G)")
-    median_handle = Line2D([0], [0], color="gray", lw=1.1, ls="--",
-                            label=(f"Mean"))
 
     ax.set_xlabel("Number of atoms, $N$")
     ax.set_ylabel("CPU time (s)")
@@ -1964,13 +2028,18 @@ def plot_cpu_time_benchmark(
         ax.set_yscale("log")
         ax.set_ylim(df["classifier_cpu_s"].min() * 0.5,
                     df["gaussian_freq_cpu_s"].max() * 1.8)
-    # "upper right": nothing near N=12 (the lone large-N point, 19.1s)
-    # comes close to the y=55s N=3-4 ceiling, leaving that corner clear.
-    # Also clear on log scale -- verified by rendering.
+    # Bordered legend: with the C10H16/N=26 point now in range, the fit
+    # lines span nearly the full vertical extent of both scale variants, so
+    # no corner stays reliably clear of a line crossing through it (unlike
+    # before the fit lines existed) -- a frame + opaque face keep the
+    # legend readable regardless (same treatment as plot_bond_scores' two
+    # panels, the only other legend in this module that sits on top of
+    # data rather than in clear space).
     handles, labels = ax.get_legend_handles_labels()
-    handles = [gaussian_handle] + handles + [median_handle]
-    labels = [gaussian_handle.get_label()] + labels + [median_handle.get_label()]
-    ax.legend(handles=handles, labels=labels, loc="upper right", frameon=False,
+    handles = [gaussian_handle] + handles
+    labels = [gaussian_handle.get_label()] + labels
+    ax.legend(handles=handles, labels=labels, loc="upper right", frameon=True,
+              edgecolor="black", facecolor="white", framealpha=1.0,
               handletextpad=0.4, labelspacing=0.35, borderaxespad=0.3,
               fontsize=LEGEND_FONTSIZE)
 
@@ -2005,15 +2074,22 @@ def plot_cpu_time_benchmark(
             "median": float(ratio.median()),
             "max": float(ratio.max()), "max_molecule": str(df.loc[ratio.idxmax(), "molecule"]),
         },
-        "classifier_mean_cpu_s_by_N": med["classifier_cpu_s"].to_dict(),
-        "gaussian_mean_cpu_s_by_N": med["gaussian_freq_cpu_s"].to_dict(),
+        "classifier_mean_cpu_s_by_N": per_n_mean["classifier_cpu_s"].to_dict(),
+        "gaussian_mean_cpu_s_by_N": per_n_mean["gaussian_freq_cpu_s"].to_dict(),
+        "fit_vs_N_loglog_gaussian": {"exponent": float(g_slope), "r2": float(g_r2)},
+        "fit_vs_N_loglog_classifier": {"exponent": float(c_slope), "r2": float(c_r2)},
+        "fit_vs_N_linear_space_gaussian": {"exponent": float(g_b_lin), "r2_linear": float(g_r2_lin)},
+        "fit_vs_N_linear_space_classifier": {"exponent": float(c_b_lin), "r2_linear": float(c_r2_lin)},
         "framing": ("empirical replacement/companion for the theoretical "
                     "Big-O 'Computational cost' section (tab:cost); PROPOSED "
                     "label fig:cputime, not yet wired into the .tex. Filtered "
                     "to mp2_321g==True, excluding "
                     f"{n_excluded} molecules run at a different Gaussian "
                     "method/basis, to avoid confounding CPU-time-vs-N with "
-                    "CPU-time-vs-method."),
+                    "CPU-time-vs-method. Per-N mean lines replaced with "
+                    "log-log OLS (+ linear-space nonlinear on the linear "
+                    "scale variant) power-law fits per series, fit on raw "
+                    "per-molecule points, not per-N means."),
     }
     return summary
 
@@ -2161,6 +2237,102 @@ def plot_gaussian_nbasis_scaling(
     }
 
 
+def plot_cpu_time_scaling_comparison(
+    benchmark_csv="data/results/cpu_time_benchmark.csv",
+    out_dir="data/figures",
+    label="fig_cputime_scaling_comparison",
+):
+    """Dedicated log-log companion to fig:cputime: Gaussian frequency-calc
+    CPU time and classification-algorithm CPU time, both plotted directly
+    against atom count N on the same log-log panel, each with its own
+    log-log OLS power-law fit -- built to make the two series' N-scaling
+    exponents directly comparable at a glance, which fig:cputime itself
+    isn't built for (it carries a continuous n_basis colorbar, error bars,
+    and x-jitter for its own reasons -- see plot_cpu_time_benchmark -- that
+    compete for attention with the fit comparison this figure exists for).
+
+    Restricted to the MP2/3-21G subset (``mp2_321g == True``) -- identical
+    filter and rationale to plot_cpu_time_benchmark and
+    plot_gaussian_nbasis_scaling: mixing methods/bases confounds a CPU-time-
+    vs-N fit with CPU-time-vs-method, so the excluded molecules are dropped
+    entirely rather than diluting the trend.
+
+    Log-log-only by design (no linear-scale variant, unlike the other two
+    cpu-time figures): this figure's whole purpose is exponent comparison,
+    which is a log-log-native question -- a linear-space fit answers "what
+    curve tracks absolute CPU time," a question already covered by
+    plot_cpu_time_benchmark's linear-scale variant. No jitter, colorbar, or
+    error bars either: those exist elsewhere to explain vertical scatter
+    within a given N (n_basis for Gaussian) or measurement uncertainty
+    (classifier stddev), neither of which this figure is trying to convey --
+    it deliberately trades that detail for legibility of the two exponents.
+
+    Fits use raw per-molecule points, not per-N means, for consistency with
+    plot_cpu_time_benchmark's and plot_gaussian_nbasis_scaling's own fits.
+    """
+    _style()
+    df_all = pd.read_csv(benchmark_csv).copy()
+    df = df_all[df_all["mp2_321g"] == True].copy()  # noqa: E712 -- explicit bool filter
+    n_excluded = len(df_all) - len(df)
+
+    N_arr = df["N"].to_numpy(float)
+    gaussian_arr = df["gaussian_freq_cpu_s"].to_numpy(float)
+    classifier_arr = df["classifier_cpu_s"].to_numpy(float)
+    g_slope, g_intercept, g_r2 = _loglog_ols_fit(N_arr, gaussian_arr)
+    c_slope, c_intercept, c_r2 = _loglog_ols_fit(N_arr, classifier_arr)
+
+    fig, ax = plt.subplots(figsize=(4.6, 3.9))
+
+    # Same color family as plot_cpu_time_benchmark's own Gaussian fit line
+    # and classifier series, so a reader moving between the two figures
+    # doesn't have to re-learn which color is which.
+    gaussian_color = matplotlib.colormaps["inferno"](0.25)
+    ax.scatter(N_arr, gaussian_arr, marker="o", s=24,
+               facecolors=gaussian_color, edgecolors="none",
+               alpha=1.0, zorder=3, label="Freq=hpmodes (MP2/3-21G)")
+    ax.scatter(N_arr, classifier_arr, marker="s", s=24,
+               facecolors=COLORS["cost_classifier"], edgecolors="none",
+               alpha=1.0, zorder=3, label="Classification algorithm")
+
+    xx = np.linspace(N_arr.min() * 0.9, N_arr.max() * 1.1, 100)
+    ax.plot(xx, np.exp(g_intercept) * xx ** g_slope, color=gaussian_color,
+            ls="--", lw=1.2, zorder=4,
+            label=f"Gaussian log-log fit: $t \\propto N^{{{g_slope:.2f}}}$ ($R^2$={g_r2:.2f})")
+    ax.plot(xx, np.exp(c_intercept) * xx ** c_slope, color=COLORS["cost_classifier"],
+            ls="--", lw=1.2, zorder=4,
+            label=f"Classifier log-log fit: $t \\propto N^{{{c_slope:.2f}}}$ ($R^2$={c_r2:.2f})")
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("Number of atoms, $N$")
+    ax.set_ylabel("CPU time (s)")
+    # Bordered legend (see plot_cpu_time_benchmark's identical choice): the
+    # Gaussian scatter is dense enough at low N that a frameless legend
+    # text ends up sitting directly over several points.
+    ax.legend(loc="upper left", frameon=True, edgecolor="black",
+              facecolor="white", framealpha=1.0, handletextpad=0.4,
+              labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    return {
+        "pdf": pdf_path, "png": png_path,
+        "n_molecules": len(df),
+        "n_excluded_non_mp2_321g": int(n_excluded),
+        "N_range": (int(df["N"].min()), int(df["N"].max())),
+        "fit_vs_N_loglog_gaussian": {"exponent": float(g_slope), "r2": float(g_r2)},
+        "fit_vs_N_loglog_classifier": {"exponent": float(c_slope), "r2": float(c_r2)},
+        "framing": ("dedicated log-log companion to fig:cputime, isolating "
+                    "each series' own N-scaling exponent without the "
+                    "colorbar/error-bar/jitter apparatus needed there; "
+                    "PROPOSED label fig:cputime_scaling_comparison, not yet "
+                    "referenced in the .tex. Filtered to mp2_321g==True for "
+                    "the same reason as fig:cputime/fig:gaussian_nbasis."),
+    }
+
+
 def regenerate_all(verbose=True):
     """Regenerate every manuscript figure in one call. Each figure function
     reads its own already-computed ``data/results/*.csv`` inputs with their
@@ -2193,6 +2365,8 @@ def regenerate_all(verbose=True):
          lambda: plot_gaussian_nbasis_scaling(scale="log")),
         ("fig:gaussian_nbasis linear (SI/diagnostic, not yet in .tex)",
          lambda: plot_gaussian_nbasis_scaling(scale="linear")),
+        ("fig:cputime_scaling_comparison (SI/diagnostic, not yet in .tex)",
+         plot_cpu_time_scaling_comparison),
         ("fig:ped_vs_vscore (proposed, not yet in .tex)", plot_ped_vs_vscore),
         ("fig:ped_vs_bondscore (exploratory, not a manuscript figure)",
          plot_ped_vs_bondscore_by_type),

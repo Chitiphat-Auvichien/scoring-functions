@@ -1,0 +1,178 @@
+
+missing of returns in file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt
+Veda create new C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt, old file --> C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt.old 0 1 2 3 4 5 6 7 8 9 10 11 12
+##########
+Coordinates of  12 atoms have been read
+  1   9   F    0.000000    1.376794    1.736915   18.998403
+  2   6   C    0.000000    0.699861    0.533370   12.000000
+  3   6   C    0.000000    1.401365   -0.670617   12.000000
+  4   6   C    0.000000    0.702558   -1.890334   12.000000
+  5   6   C    0.000000   -0.702558   -1.890334   12.000000
+  6   6   C    0.000000   -1.401365   -0.670617   12.000000
+  7   6   C    0.000000   -0.699861    0.533370   12.000000
+  8   9   F    0.000000   -1.376794    1.736915   18.998403
+  9   1   H    0.000000    2.485375   -0.640347    1.007825
+ 10   1   H    0.000000    1.251909   -2.826406    1.007825
+ 11   1   H    0.000000   -1.251909   -2.826406    1.007825
+ 12   1   H    0.000000   -2.485375   -0.640347    1.007825
+the matrix F has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt
+atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt
+
+connection matrix MPO has been created: file skra.mpo
+ 3. C 2: F 1, C 3, C 7
+ 3. C 3: C 2, C 4, H 9
+ 3. C 4: C 3, C 5, H 10
+ 3. C 5: C 4, C 6, H 11
+ 3. C 6: C 5, C 7, H 12
+ 3. C 7: C 2, C 6, F 8
+copy skra.mpo --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\odifluorobenzene_fchk\odifluorobenzene_fchk.mpo
+File C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmv was created
+create DD2 file due to atoms connection in MPO
+ring No.  1 ... 
+  ... broken  6 5
+stretching 11, bending 10, torsion 7, out-of-plane 2
+regarded 1 rings, 0 XY3 non-flat groups
+alternative coordinates 33
+the new file skra.dd2
+creation of Coordinates Definitions: DD2 file skra.dd2
+... prepare for optimization
+Preoptimization: file  skra.dd2
+TED < 150 has been achieved
+OPT 0  <EPm>=34.79  delta=34.79
+============================================================
+Optimization START <EPm> = 34.7884683745931
+Base optimization for EPm < 75
+Fine Optimization  . NOT  (for EPm < 90)
+   TED near 100 . .  NOT
+Force normalization YES
+Mix CH / NotCH . . NOT
+CH before NotCH .  NOT
+not tested coordinates with EPm >= 75
+Change Alt.Modes   NOT 
+Add  Alt. Modes . .  NOT
+coordinates Optimum "STRE" . .YES
+NotCH modes
+OPT 1  <EPm>=37.20  delta=2.41  crd=72.24  SUPER! mskra.ved
+Alternative coordinates supplemented by 4
+OPT 2  <EPm>=39.18  delta=1.98  crd=59.49  SUPER! mskra.ved
+Alternative coordinates supplemented by 1
+OPT 3  <EPm>=40.38  delta=1.20  crd=35.94  SUPER! mskra.ved
+Alternative coordinates supplemented by 2
+OPT 4  <EPm>=40.67  delta=0.29  crd=8.63  SUPER! mskra.ved
+OPT 5  <EPm>=41.15  delta=0.49  crd=14.66  SUPER! mskra.ved
+Reduce Mixed coordinates, type STRE
+OPT 19  <EPm>=41.33  delta=0.18  crd=5.35  SUPER! mskra.ved
+OPT 20  <EPm>=42.10  delta=0.77  crd=23.13  SUPER! mskra.ved
+OPT 26  <EPm>=42.39  delta=0.29  crd=8.59  SUPER! mskra.ved
+OPT 28  <EPm>=42.45  delta=0.06  crd=1.88  SUPER! mskra.ved
+ 4 coordinates reduced by 4
+CH modes
+OPT 35  <EPm>=47.04  delta=4.59  crd=137.70  SUPER! mskra.ved
+Alternative coordinates supplemented by 4
+OPT 36  <EPm>=48.82  delta=1.78  crd=53.32  SUPER! mskra.ved
+Reduce Mixed coordinates, type STRE
+coordinates Optimum "BEND" . .YES
+NotCH modes
+OPT 37  <EPm>=50.31  delta=1.49  crd=44.78  SUPER! mskra.ved
+Alternative coordinates supplemented by 2
+OPT 39  <EPm>=50.66  delta=0.35  crd=10.41  SUPER! mskra.ved
+Alternative coordinates supplemented by 4
+OPT 40  <EPm>=51.73  delta=1.07  crd=32.02  SUPER! mskra.ved
+Reduce Mixed coordinates, type BEND
+OPT 49  <EPm>=52.16  delta=0.43  crd=13.00  SUPER! mskra.ved
+OPT 50  <EPm>=52.18  delta=0.02  crd=0.55  SUPER! mskra.ved
+OPT 55  <EPm>=52.32  delta=0.15  crd=4.38  SUPER! mskra.ved
+OPT 61  <EPm>=52.58  delta=0.26  crd=7.70  SUPER! mskra.ved
+OPT 69  <EPm>=52.62  delta=0.03  crd=1.02  SUPER! mskra.ved
+ 4 coordinates reduced by 5
+CH modes
+OPT 71  <EPm>=55.69  delta=3.08  crd=92.32  SUPER! mskra.ved
+Alternative coordinates supplemented by 4
+OPT 72  <EPm>=56.67  delta=0.97  crd=29.17  SUPER! mskra.ved
+Reduce Mixed coordinates, type BEND
+OPT 78  <EPm>=56.70  delta=0.04  crd=1.19  SUPER! mskra.ved
+ 1 coordinates reduced by 1
+coordinates Optimum "TORS" . .YES 
+NotCH modes
+OPT 89  <EPm>=59.66  delta=2.95  crd=88.57  SUPER! mskra.ved
+Alternative coordinates supplemented by 4
+OPT 91  <EPm>=61.38  delta=1.72  crd=51.57  SUPER! mskra.ved
+Reduce Mixed coordinates, type TORS & OUT
+CH modes
+OPT 107  <EPm>=65.65  delta=4.27  crd=128.23  SUPER! mskra.ved
+Alternative coordinates supplemented by 4
+OPT 108  <EPm>=67.11  delta=1.46  crd=43.78  SUPER! mskra.ved
+Reduce Mixed coordinates, type TORS & OUT
+OPT 109  <EPm>=67.42  delta=0.31  crd=9.37  SUPER! mskra.ved
+ 1 coordinates reduced by 1
+Marriage DD2 files  NOT
+Improve bad Coord  NOT
+ADM reassignment  NOT
+Return to 1st step   YES
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RETURN No. 1
+copy skra.dd2 coordinates --> rskra.dd2
+not tested coordinates with EPm >= 75
+Change Alt.Modes   NOT 
+Add  Alt. Modes . .  NOT
+coordinates Optimum "STRE" . .YES
+NotCH modes
+CH modes
+coordinates Optimum "BEND" . .YES
+NotCH modes
+CH modes
+coordinates Optimum "TORS" . .YES 
+NotCH modes
+CH modes
+Marriage DD2 files  NOT
+Improve bad Coord  NOT
+ADM reassignment  NOT
+Return to 1st step   YES
+there is no reason for return
+Normalize to 1 . . .  NOT
+Reduce Complex C. YES            
+not reduced coordinates --> uskra.dd2
+not tested coordinates with EPm >= 75
+Reduce Complex coordinates, type STRE
+coordinate No. 5
+coordinate No. 6
+OPT 138  <EPm>=67.48  delta=0.06  crd=1.88  SUPER! mskra.ved
+the best <EPm> worsen to 67.4257
+coordinate No. 7
+coordinate No. 8
+coordinate No. 9
+coordinate No. 10
+coordinate No. 11
+Reduce Complex coordinates, type BEND
+coordinate No. 12
+coordinate No. 13
+coordinate No. 14
+coordinate No. 15
+the best <EPm> worsen to 67.3905
+the best <EPm> worsen to 67.3127
+coordinate No. 16
+coordinate No. 18
+OPT 181  <EPm>=67.47  delta=0.16  crd=4.85  SUPER! nskra.ved
+coordinate No. 19
+coordinate No. 21
+Reduce Complex coordinates, type TORS & OUT
+coordinate No. 27
+coordinate No. 28
+coordinate No. 30
+ 3 coordinates reduced by 5
+Strong Normalize .. NOT
+Strong Reduce CC. NOT            
+Cycle at the End . . NOT
+time of optimization [min] : 0.13
+CALCULATION VEDA4, cycle No.  1
+linear dependence of B matrix is checked
+transformation F to internal coordinates 
+scaling;  eigenvectors  &  eigenvalues
+3244.37  3238.91  3225.35  3210.69  1624.53  1610.05  1556.69  1504.04  1336.91  1321.87  1320.19  1259.00  1233.43  1142.18  1045.82   945.76   940.94   891.38   873.94   782.65   769.93   710.41   599.41   574.53   549.25   486.00   439.81   307.90   273.78   193.76
+diagonality factor = 68.40  <EPm>=67.47   improve<EPm>=32.69
+PED/TED saved in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\odifluorobenzene_fchk\odifluorobenzene_fchk.ved
+TED Above 100 Factor TAF=0.381
+(PED abbreviation in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\odifluorobenzene_fchk\odifluorobenzene_fchk.vdf)
+skra.dd2 --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\odifluorobenzene_fchk\odifluorobenzene_fchk.dd2
+calculation time [sec] : 0.35 - 0.24
+END of CYCLE  1

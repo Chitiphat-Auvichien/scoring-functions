@@ -1,0 +1,13 @@
+abbreviation of: c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\hocl_fchk\hocl_fchk.ved
+IR spectrum from file: C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\HOCl_fchk\hocl_fchk.fmt
+diagonality factor = 81.01   <EPm> = 99.48
+    IR      CM-1
+  15.33  3393.66   s1 100
+  51.63  1291.14   s3 99
+   0.27   687.19   s2 99
+
+Frequencies/PED calculated by Veda
+definitions of modes c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\hocl_fchk\hocl_fchk.dd2
+s  1   STRE OH   f3394 100
+s  2   STRE ClO   f687 99
+s  3   BEND HOCl   f1291 99

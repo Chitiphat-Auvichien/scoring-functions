@@ -1,0 +1,77 @@
+
+missing of returns in file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\FormicAcid_fchk\formicacid_fchk.fmt
+Veda create new C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\FormicAcid_fchk\formicacid_fchk.fmt, old file --> C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\FormicAcid_fchk\formicacid_fchk.fmt.old 0 1 2 3 4 5
+##########
+Coordinates of  5 atoms have been read
+  1   8   O    1.057124   -0.462988    0.000000   15.994915
+  2   6   C    0.000000    0.436811    0.000000   12.000000
+  3   8   O   -1.194544    0.128275    0.000000   15.994915
+  4   1   H    0.685171   -1.388164    0.000000    1.007825
+  5   1   H    0.414192    1.445005    0.000000    1.007825
+the matrix F has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\FormicAcid_fchk\formicacid_fchk.fmt
+atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\FormicAcid_fchk\formicacid_fchk.fmt
+
+connection matrix MPO has been created: file skra.mpo
+ 3. C 2: O 1, O 3, H 5
+ 2. O 1: C 2, H 4
+copy skra.mpo --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\formicacid_fchk\formicacid_fchk.mpo
+File C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\FormicAcid_fchk\formicacid_fchk.fmv was created
+create DD2 file due to atoms connection in MPO
+stretching 4, bending 3, torsion 2, out-of-plane 0
+regarded 0 rings, 0 XY3 non-flat groups
+alternative coordinates 4
+the new file skra.dd2
+creation of Coordinates Definitions: DD2 file skra.dd2
+... prepare for optimization
+Preoptimization: file  skra.dd2
+TED < 150 has been achieved
+OPT 0  <EPm>=83.15  delta=83.15
+============================================================
+Optimization START <EPm> = 83.1533052480565
+Base optimization for EPm < 95
+Fine Optimization  . NOT  (for EPm < 99)
+   TED near 100 . .  NOT
+Force normalization YES
+Mix CH / NotCH . . NOT
+CH before NotCH .  NOT
+not tested coordinates with EPm >= 95
+Change Alt.Modes   NOT 
+Add  Alt. Modes . .  NOT
+coordinates Optimum "STRE" . .YES
+NotCH modes
+CH modes
+coordinates Optimum "BEND" . .YES
+NotCH modes
+CH modes
+coordinates Optimum "TORS" . .YES 
+NotCH modes
+CH modes
+Marriage DD2 files  NOT
+Improve bad Coord  NOT
+ADM reassignment  NOT
+Return to 1st step   YES
+there is no reason for return
+Normalize to 1 . . .  NOT
+Reduce Complex C. YES            
+not reduced coordinates --> uskra.dd2
+not tested coordinates with EPm >= 95
+Reduce Complex coordinates, type STRE
+Reduce Complex coordinates, type BEND
+Reduce Complex coordinates, type TORS & OUT
+ 0 coordinates reduced by 0
+Strong Normalize .. NOT
+Strong Reduce CC. NOT            
+Cycle at the End . . NOT
+time of optimization [min] : 0.00
+CALCULATION VEDA4, cycle No.  1
+linear dependence of B matrix is checked
+transformation F to internal coordinates 
+scaling;  eigenvectors  &  eigenvalues
+3492.57  3148.70  1703.78  1462.81  1343.70  1084.24  1055.85   674.44   611.02
+diagonality factor = 77.51  <EPm>=83.15   improve<EPm>=0.00
+PED/TED saved in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\formicacid_fchk\formicacid_fchk.ved
+TED Above 100 Factor TAF=0.000
+(PED abbreviation in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\formicacid_fchk\formicacid_fchk.vdf)
+skra.dd2 --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\formicacid_fchk\formicacid_fchk.dd2
+calculation time [sec] : 0.10 - 0.07
+END of CYCLE  1

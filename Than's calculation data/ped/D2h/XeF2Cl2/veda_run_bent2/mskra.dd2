@@ -1,0 +1,38 @@
+Average max. Potential Energy <EPm> = 96.027
+TED Above 100 Factor TAF=0.000
+Average coordinate population 1.444
+Most complex coordinate No. 1 , population = 2 
+s 1     1.00   STRE    1    2   XeF    1.974955  f674 100
+       -1.00           1    3   XeF    1.974955
+s 2     1.00   STRE    1    2   XeF    1.974955  f560 100
+        1.00           1    3   XeF    1.974955
+s 3     1.00   STRE    1    4   XeCl    2.540839  f335 92
+       -1.00           1    5   XeCl    2.540839
+s 4     1.00   STRE    1    4   XeCl    2.540839  f224 100
+        1.00           1    5   XeCl    2.540839
+s 5     1.00   BEND    2    1    5   FXeCl    92.00  f153 99
+s 6     1.00   BEND    3    1    2   FXeF   178.00  f186 92
+s 7     1.00   BEND    5    1    4   ClXeCl   178.00  f86 100
+s 8     1.00   OUT     3    4    2    1   FClFXe     0.00  f249 92
+s 9     1.00   OUT     2    4    5    1   FClClXe     0.00  f98 92
+****
+ 4 STRE modes:
+  1  2  3  4
+ 3 BEND modes:
+  5  6  7
+ 2 TORS modes:
+  8  9
+ 0 CH modes:
+
+ 0 USER modes:
+
+
+alternative coordinates 8 
+k 5     1.00   BEND    2    1    4   FXeCl    86.00
+k 6     1.00   BEND    3    1    5   FXeCl    90.00
+k 8     1.00   OUT     1    4    5    3   XeClClF     0.00
+k 8     1.00   OUT     1    2    4    3   XeFClF     0.00
+k 8     1.00   OUT     1    5    2    3   XeClFF     0.00
+k 9     1.00   OUT     1    5    4    2   XeClClF     0.00
+k 9     1.00   OUT     1    2    4    5   XeFClCl     0.00
+k 9     1.00   OUT     1    5    2    4   XeClFCl     0.00

@@ -1,0 +1,67 @@
+abbreviation of: skra.ved
+IR spectrum from file: C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt
+diagonality factor = 68.40   <EPm> = 67.47
+    IR      CM-1
+   0.63  3244.35   s4 95
+   1.37  3238.89   s1 91
+   6.54  3225.33   s3 96
+   1.14  3210.67   s2 92
+   3.72  1624.52   s5 57   s16 14   s17 15
+  20.12  1610.04   s6 -65   s12 10
+ 106.93  1556.68   s7 -10   s8 25   s13 46
+   9.37  1504.02   s14 64   s21 -24
+  15.73  1336.90   s8 70   s13 -16
+   3.72  1321.90   s10 14   s16 51   s21 13
+  37.65  1320.18   s9 -66   s13 -13
+  17.61  1258.98   s5 18   s10 31   s16 -14   s21 18
+   0.01  1233.42   s9 -17   s15 72
+  14.59  1142.16   s7 12   s14 -13   s18 18   s19 33
+   5.07  1045.82   s7 57   s13 21   s19 -12
+  16.15   945.85   s24 -78   s27 10
+   0.00   940.93   s22 78
+  12.11   891.37   s10 -38   s19 21   s21 26
+   0.00   873.95   s23 89
+ 104.59   782.58   s25 85
+  17.66   769.93   s11 74   s12 -12
+   0.00   710.40   s26 22   s27 -10   s28 57
+   3.72   599.40   s6 -12   s11 -18   s12 -55
+   0.00   574.56   s22 -12   s30 66
+   2.58   549.24   s5 -10   s17 71
+   2.74   486.00   s27 -65   s29 14
+   0.70   439.77   s18 61   s19 16
+   0.03   307.76   s29 -77
+   0.56   273.78   s20 -87
+   0.00   193.74   s26 -65   s28 21   s30 -10
+
+Frequencies/PED calculated by Veda
+definitions of modes skra.dd2
+s  1   STRE CH   f3239 91
+s  2   STRE CH   f3211 92
+s  3   STRE CH   f3225 96
+s  4   STRE CH   f3244 95
+s  5   STRE CC   f1625 57   f1259 18   f549 -10
+s  6   STRE CC   f1610 -65   f599 -12
+s  7   STRE CC   f1557 -10   f1142 12   f1046 57
+s  8   STRE CC   f1557 25   f1337 70
+s  9   STRE CC   f1320 -66   f1233 -17
+s 10   STRE FC   f1322 14   f1259 31   f891 -38
+s 11   STRE CC   f770 74   f599 -18
+s 12   BEND CCC   f1610 10   f770 -12   f599 -55
+s 13   BEND HCC   f1557 46   f1337 -16   f1320 -13   f1046 21
+s 14   BEND HCC   f1504 64   f1142 -13
+s 15   BEND HCC   f1233 72
+s 16   BEND HCC   f1625 14   f1322 51   f1259 -14
+s 17   BEND CCC   f1625 15   f549 71
+s 18   BEND CCF   f1142 18   f440 61
+s 19   BEND CCC   f1142 33   f1046 -12   f891 21   f440 16
+s 20   BEND CCF   f274 -87
+s 21   BEND CCC   f1504 -24   f1322 13   f1259 18   f891 26
+s 22   TORS HCCC   f941 78   f575 -12
+s 23   TORS HCCC   f874 89
+s 24   TORS HCCC   f946 -78
+s 25   TORS HCCC   f783 85
+s 26   TORS CCCC   f710 22   f194 -65
+s 27   TORS CCCC   f946 10   f710 -10   f486 -65
+s 28   TORS CCCC   f710 57   f194 21
+s 29   TORS CCCC   f486 14   f308 -77
+s 30   TORS CCCC   f575 66   f194 -10

@@ -1,0 +1,85 @@
+abbreviation of: skra.ved
+IR spectrum from file: C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Cycloheptatriene_fchk\cycloheptatriene_fchk.fmt
+diagonality factor = 64.38   <EPm> = 62.84
+    IR      CM-1
+   9.33  3202.16   s5 18   s6 74
+  33.34  3196.84   s1 79   s2 20
+  40.35  3181.44   s4 79   s6 -11
+   7.90  3167.89   s1 -18   s2 63   s3 19
+   2.68  3163.45   s4 -16   s5 71
+   0.02  3152.10   s2 -18   s3 80
+   9.34  3146.23   s7 78   s8 -13
+  20.24  3069.16   s7 14   s8 86
+   1.94  1644.22   s10 57   s18 30
+   0.18  1637.67   s9 72   s21 -10
+   5.84  1559.83   s23 97
+   0.72  1548.89   s11 76
+   0.40  1506.87   s17 -80
+   3.86  1469.34   s16 -86
+   0.84  1442.85   s19 92
+   2.80  1351.14   s34 87
+   1.83  1326.98   s9 13   s22 47   s24 -10
+   0.30  1307.11   s20 80
+   0.11  1267.58   s21 -75
+   0.39  1265.82   s10 30   s18 -58
+   0.69  1068.01   s26 40   s31 -12
+   0.56  1054.44   s14 50   s17 13
+   0.63   975.99   s30 -81
+   0.17   973.99   s32 74
+   0.22   967.75   s35 -56   s38 -12
+   0.08   953.20   s12 -49   s24 -10
+   0.30   926.77   s13 55   s28 16
+   3.73   918.44   s12 -11   s14 10   s26 -12   s31 13   s37 -10
+   0.03   908.31   s12 -14   s24 57
+   4.12   804.88   s13 -23   s28 55
+  34.72   771.11   s33 76
+  77.31   735.09   s29 -61
+  17.09   681.86   s26 14   s27 -15   s29 23   s35 -15
+   5.00   605.78   s25 12   s32 -12   s33 16   s36 28   s37 10   s38 -12
+   8.14   431.10   s31 -41   s36 18
+   0.77   416.00   s14 -10   s25 37   s37 -15
+   1.68   368.19   s27 59
+   0.79   290.98   s39 -64
+   0.21   236.66   s15 24   s25 19   s27 10   s28 11   s37 12
+
+Frequencies/PED calculated by Veda
+definitions of modes skra.dd2
+s  1   STRE CH   f3197 79   f3168 -18
+s  2   STRE CH   f3197 20   f3168 63   f3152 -18
+s  3   STRE CH   f3168 19   f3152 80
+s  4   STRE CH   f3181 79   f3163 -16
+s  5   STRE CH   f3202 18   f3163 71
+s  6   STRE CH   f3202 74   f3181 -11
+s  7   STRE CH   f3146 78   f3069 14
+s  8   STRE CH   f3146 -13   f3069 86
+s  9   STRE CC   f1638 72   f1327 13
+s 10   STRE CC   f1644 57   f1266 30
+s 11   STRE CC   f1549 76
+s 12   STRE CC   f953 -49   f918 -11   f908 -14
+s 13   STRE CC   f927 55   f805 -23
+s 14   STRE CC   f1054 50   f918 10   f416 -10
+s 15   BEND CCC   f237 24
+s 16   BEND HCC   f1469 -86
+s 17   BEND HCC   f1507 -80   f1054 13
+s 18   BEND HCC   f1644 30   f1266 -58
+s 19   BEND HCC   f1443 92
+s 20   BEND HCC   f1307 80
+s 21   BEND HCC   f1638 -10   f1268 -75
+s 22   BEND HCC   f1327 47
+s 23   BEND HCH   f1560 97
+s 24   BEND CCC   f1327 -10   f953 -10   f908 57
+s 25   BEND CCC   f606 12   f416 37   f237 19
+s 26   BEND CCC   f1068 40   f918 -12   f682 14
+s 27   BEND CCC   f682 -15   f368 59   f237 10
+s 28   TORS HCCC   f927 16   f805 55   f237 11
+s 29   TORS HCCC   f735 -61   f682 23
+s 30   TORS HCCC   f976 -81
+s 31   TORS HCCC   f1068 -12   f918 13   f431 -41
+s 32   TORS HCCC   f974 74   f606 -12
+s 33   TORS HCCC   f771 76   f606 16
+s 34   TORS HCCC   f1351 87
+s 35   TORS HCCC   f968 -56   f682 -15
+s 36   TORS CCCC   f606 28   f431 18
+s 37   TORS CCCC   f918 -10   f606 10   f416 -15   f237 12
+s 38   TORS CCCC   f968 -12   f606 -12
+s 39   TORS CCCC   f291 -64

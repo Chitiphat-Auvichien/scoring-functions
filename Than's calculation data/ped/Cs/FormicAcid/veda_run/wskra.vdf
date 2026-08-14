@@ -1,0 +1,25 @@
+abbreviation of: skra.ved
+IR spectrum from file: C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\FormicAcid_fchk\formicacid_fchk.fmt
+diagonality factor = 77.51   <EPm> = 83.15
+    IR      CM-1
+  20.19  3492.51   s1 99
+  50.41  3148.68   s2 99
+ 170.82  1703.76   s3 82
+   1.27  1462.69   s3 11   s6 83
+   8.05  1343.68   s4 18   s5 61   s7 -14
+   6.44  1084.10   s8 -13   s9 87
+ 246.89  1055.83   s4 70   s5 -21
+ 191.23   674.21   s8 87   s9 13
+  47.61   610.92   s7 80
+
+Frequencies/PED calculated by Veda
+definitions of modes skra.dd2
+s  1   STRE OH   f3493 99
+s  2   STRE CH   f3149 99
+s  3   STRE OC   f1704 82   f1463 11
+s  4   STRE OC   f1344 18   f1056 70
+s  5   BEND HOC   f1344 61   f1056 -21
+s  6   BEND HCO   f1463 83
+s  7   BEND OCO   f1344 -14   f611 80
+s  8   TORS HOCO   f1084 -13   f674 87
+s  9   TORS HCOH   f1084 87   f674 13

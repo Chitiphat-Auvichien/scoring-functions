@@ -1,14 +1,16 @@
-%chk=H2O-MP2-321G.chk
-# opt freq=hpmodes mp2/3-21g geom=connectivity
+%mem=8GB
+%nprocshared=8
+%chk=H2O.chk
+# opt freq=hpmodes mp2/3-21g* geom=connectivity
 
-h2o vibration
+H2O - size1_C2v
 
 0 1
- O                  0.00000000    0.00000000   -0.11085125
- H                  0.00000000   -0.78383672    0.44340501
- H                  0.00000000    0.78383672    0.44340501
+ O        0.000000      0.000000      0.117300
+ H        0.000000      0.757200     -0.469200
+ H        0.000000     -0.757200     -0.469200
 
- 1 2 1.0 3 1.0
- 2
- 3
+1 2 1.0 3 1.0
+2
+3
 

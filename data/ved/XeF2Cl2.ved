@@ -1,0 +1,34 @@
+"****veda**** version 4.99e    c:\users\yourname\downloads\xef2cl2_bent2_fchk\xef2cl2_bent2_fchk.ved"
+F matrix & atom's orientation: C:\Users\YourName\Downloads\XeF2Cl2_bent2_fchk\xef2cl2_bent2_fchk.fmt
+diagonality factor = 90.22   <EPm> = 96.03
+
+   674.47   560.06   335.41   249.44   223.90   185.58   153.06    98.17
+    86.28
+
+PED: sign = direction,  column = coordinate,  row = No. of mode
+       1   2   3   4   5   6   7   8   9
+   1 100   0   0   0   0   0   0   0   0   1 
+   2   0 100   0   0   0   0   0   0   0   2 
+   3   0   0 -92   0   0   8   0   0   0   3 
+   4   0   0   0   0   0   0   0  92  -8   4 
+   5   0   0   0 100   0   0   0   0   0   5 
+   6   0   0   8   0  -1  92   0   0   0   6 
+   7   0   0   0   0  99   0   0   0   0   7 
+   8   0   0   0   0   0   0   0   8  92   8 
+   9   0   0   0   0   0   0 100   0   0   9 
+       1   2   3   4   5   6   7   8   9
+
+TED:    sum = 100,   column = coordinate,  row = No. of mode
+       1   2   3   4   5   6   7   8   9
+   1 100   0   0   0   0   0   0   0   0   1 
+   2   0 100   0   0   0   0   0   0   0   2 
+   3   0   0  92   0   0   8   0   0   0   3 
+   4   0   0   0   0   0   0   0  92   8   4 
+   5   0   0   0 100   0   0   0   0   0   5 
+   6   0   0   8   0   1  91   0   0   0   6 
+   7   0   0   0   0 100   0   0   0   0   7 
+   8   0   0   0   0   0   0   0   8  92   8 
+   9   0   0   0   0   0   0 100   0   0   9 
+       1   2   3   4   5   6   7   8   9
+
+TED Above 100 Factor TAF=0.000

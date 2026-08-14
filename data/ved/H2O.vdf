@@ -1,0 +1,13 @@
+abbreviation of: c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\h2o\h2o_reconstructed_fchk.ved
+IR spectrum from file: C:\Users\User\OneDrive\Chulalongkorn University\Research\Classifying modes of motion\veda4\H2O\h2o_reconstructed_fchk.fmt
+diagonality factor = 80.75   <EPm> = 99.26
+    IR      CM-1
+   0.01  3660.80   s1 100
+   7.62  3501.51   s2 99
+  48.28  1722.46   s3 99
+
+Frequencies/PED calculated by Veda
+definitions of modes c:\users\user\onedrive\chulalongkorn university\research\classifying modes of motion\veda4\h2o\h2o_reconstructed_fchk.dd2
+s  1   STRE OH   f3661 100
+s  2   STRE OH   f3502 99
+s  3   BEND HOH   f1722 99

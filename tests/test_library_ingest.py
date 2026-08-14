@@ -656,9 +656,15 @@ def test_resync_reference_metadata_synthetic_fixture():
 
     **2026-08-14:** `data/logs/H2O.log` was rerun at mp2/3-21g* (was
     mp2/3-21g), shifting its engine frequencies by a few cm^-1 -- this
-    fixture's "already exact" mode 2/3 freq values are updated to match
-    (3501.5073/3660.7973 -> 3504.6214/3663.325), so mode 1 stays the only
-    one that actually changes."""
+    fixture's "already exact" mode 2/3 freq values were updated to match
+    (3501.5073/3660.7973 -> 3504.6214/3663.325), so mode 1 stayed the only
+    one that actually changed.
+
+    **2026-08-14 (later same day):** `data/logs/H2O.log`/`.com` reverted
+    back to mp2/3-21g (undoing the mp2/3-21g* rerun above), so this
+    fixture's mode 2/3 "already exact" values revert too
+    (3504.6214/3663.325 -> 3501.5073/3660.7973), and mode 1's corrected
+    value reverts from 1722.4734 back to 1722.4570."""
     import shutil
     from src.library_ingest import resync_reference_metadata
 
@@ -689,10 +695,10 @@ def test_resync_reference_metadata_synthetic_fixture():
             # 2/3 already exact -- proves per-mode-only-when-changed reporting.
             {"molecule": "STALEMOL", "mode": 1, "freq": 1700.0, "μ": 1.0,
              "k": 1.0, "irrep": "A₁"},
-            {"molecule": "STALEMOL", "mode": 2, "freq": 3504.6214, "μ": 1.0,
-             "k": 7.5042, "irrep": "A₁"},
-            {"molecule": "STALEMOL", "mode": 3, "freq": 3663.325, "μ": 1.0,
-             "k": 8.5592, "irrep": "B₂"},
+            {"molecule": "STALEMOL", "mode": 2, "freq": 3501.5073, "μ": 1.0,
+             "k": 7.4906, "irrep": "A₁"},
+            {"molecule": "STALEMOL", "mode": 3, "freq": 3660.7973, "μ": 1.0,
+             "k": 8.5478, "irrep": "B₂"},
             # MISMATCHMOL: 4 rows claimed, engine (same water log) has only 3.
             {"molecule": "MISMATCHMOL", "mode": 1, "freq": 1700.0, "μ": 1.0,
              "k": 1.0, "irrep": "A₁"},
@@ -719,13 +725,13 @@ def test_resync_reference_metadata_synthetic_fixture():
         assert len(freq_changes) == 1
         assert freq_changes[0]["mode"] == 1
         assert freq_changes[0]["old"] == "1700.0"
-        assert freq_changes[0]["new"] == "1722.4734"
+        assert freq_changes[0]["new"] == "1722.457"
 
         cm_after = pd.read_csv(os.path.join(tmp_dir, "characterised_modes.csv"), dtype=str)
         stale_after = cm_after[cm_after["molecule"] == "STALEMOL"].set_index("mode")
-        assert stale_after.loc["1", "freq"] == "1722.4734"
-        assert stale_after.loc["2", "freq"] == "3504.6214"
-        assert stale_after.loc["3", "freq"] == "3663.325"
+        assert stale_after.loc["1", "freq"] == "1722.457"
+        assert stale_after.loc["2", "freq"] == "3501.5073"
+        assert stale_after.loc["3", "freq"] == "3660.7973"
         # irrep is deliberately NEVER touched, even for the corrected mode.
         assert stale_after.loc["1", "irrep"] == "A₁"
 

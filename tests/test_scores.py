@@ -88,14 +88,17 @@ def test_water_tab_water():
     assert abs(t["Vib1"]["V"] - 0.1343) < TOL         # bend (sigma)
     assert abs(t["Vib2"]["V"] - 0.9966) < TOL         # nu_s
     assert abs(t["Vib3"]["V"] - 0.9984) < TOL         # nu_as
-    # 2026-08-10 G16 promotion: Vib3's Tx/Rz pair flipped sign together
-    # (old G09 H2O.log: Tx=-0.1963, Rz=-0.2959; new G16 H2O.log: Tx=+0.1963,
-    # Rz=+0.2959) -- an arbitrary principal-axis/eigensolver sign convention
+    # 2026-08-14: H2O.gjf/.log reverted to mp2/3-21g (undoing the mp2/3-21g*
+    # rerun), and the reverted file is byte-for-byte the pre-2026-08-10 G09
+    # input/output (old %chk=H2O-MP2-321G.chk header, no G16 promotion) --
+    # so Vib3's Tx/Rz pair flips back to the sign it had before the 2026-08-10
+    # G16 promotion (see that commit's note, previously: Tx=-0.1963,
+    # Rz=-0.2959 (G09) -> Tx=+0.1963, Rz=+0.2959 (G16); now reverted to the
+    # G09 value). An arbitrary principal-axis/eigensolver sign convention
     # (CLAUDE.md: "sign-of-frame is arbitrary; classification uses |score|"),
-    # not a logic bug -- both components flipped together and magnitudes are
-    # bit-identical to 4 dp, confirming a coherent frame flip.
-    assert abs(t["Vib3"]["Tx"] - 0.1963) < TOL
-    assert abs(t["Vib3"]["Rz"] - 0.2959) < TOL
+    # not a logic bug -- frequencies and magnitudes are unchanged to 4 dp.
+    assert abs(t["Vib3"]["Tx"] - (-0.1963)) < TOL
+    assert abs(t["Vib3"]["Rz"] - (-0.2959)) < TOL
 
 
 def test_co2_linear():

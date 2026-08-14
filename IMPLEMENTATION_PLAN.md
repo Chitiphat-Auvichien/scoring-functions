@@ -14,7 +14,8 @@
 > `git log -p -- IMPLEMENTATION_PLAN.md`. Every decision, formula, and numeric target that was still live
 > is preserved below in **Locked decisions** / **Authoritative spec** / the Phase checklists.
 >
-> Last updated: 2026-08-14 (test-category roster expanded 9 → 18 molecules — see Recent history).
+> Last updated: 2026-08-14 (H2O reverted to mp2/3-21g + VEDA PED added for 8 test molecules — see
+> Recent history).
 
 ## Status snapshot (current stage)
 - **Phases 0–3: DONE.** Core engine, unified classifier, EMIT projection, library ingest, τ-calibration,
@@ -27,7 +28,39 @@
   manuscript by author decision, kept as internal diagnostic); 2 open recommended items are the other
   near-term frontier: mixed-SB bucket validation library-wide, out-of-sample/leave-one-molecule-out
   evaluation.
-- Most recent session (2026-08-14): `test`-category transferability roster expanded 9 → 18 molecules
+- Most recent session (2026-08-14, later same day): H2O.gjf/.log reverted mp2/3-21g* → mp2/3-21g
+  (undoing the prior session's rerun — an exact byte revert to the pre-G16-promotion G09 input/output),
+  and VEDA4 `.ved`+`.vdf` PED output added for all 9 previously-missing `test`-category molecules (H2O
+  + the 8 that had none: CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8). `reproduce.py` (no
+  `--molecules` override needed — `discover_molecules()` found the same 26 `<mol>_normal.csv` files as
+  last session) rebuilt everything. **Bug found+fixed in the process:** `data/intermediate/H2O_normal_
+  data.txt`'s mtime-based cache didn't invalidate on the revert, because the reverted `H2O.log`/`.com`
+  carry an OLDER mtime (2026-07-07, from the original file) than the stale 3-21g*-era intermediate cache
+  (2026-08-14) — `_cache_is_fresh()`'s `inter_mtime >= source_mtime` check is blind to a source going
+  *backward* in time while staying content-different. First `reproduce.py` pass silently reused the
+  stale cache (H2O still showed Tx→Rz=0.0414, freqs 1722.4734/3504.6214/3663.3250, and the `ped` stage
+  logged spurious "residual exceeds tolerance" warnings against the newly-added VEDA data, which was
+  computed against the *reverted* geometry). Fixed by deleting the stale intermediate file and
+  rerunning; confirmed H2O now reverts to the pre-3-21g* values byte-for-byte (Tx→Rz=0.0411, freqs
+  1722.4570/3501.5073/3660.7973) with no ped-residual warnings. This is a latent cache-invalidation gap
+  (mtime can't detect "reverted to older content") worth a follow-up (e.g. hash-based invalidation), not
+  fixed here — noted for a future session. `resync_reference_metadata(write=True)` re-corrected H2O's
+  `characterised_modes.csv` freq/k back to the reverted values (irrep/ref_label untouched), clearing the
+  label-join warning again. τ_TR/τ_S/τ_B unchanged bit-for-bit (H2O still out of calibration scope). PED
+  merge went 10/85 → 19/85 molecules (`combined_ped_vs_scores.csv`); `fig_ped_vs_vscore`/
+  `fig_ped_vs_bondscore` are the only figures that materially changed (more `mol_type=='test'` points);
+  `fig_cputime*`/`fig_gaussian_nbasis*` changed too but only from run-to-run timing-benchmark noise, not
+  from either input change; all other figures byte-identical modulo PDF `CreationDate`/`ModDate`/`ID`
+  metadata. The 8 new molecules still lack `characterised_modes.csv` ground-truth rows (only freq/k/μ
+  get resynced, not irrep/ref_label) — the 18-molecule transferability confusion-matrix figure remains
+  blocked on hand-curation, not on PED data, confirmed unchanged. `pytest` 139/141 green (2 pre-existing
+  `test_veda_fmt_regression.py` failures only, unrelated to either input change); 2 golden-value tests
+  repinned for H2O's reverted numbers (`tests/test_scores.py::test_water_tab_water` — Vib3 Tx/Rz sign
+  flipped back to the pre-G16-promotion convention, `-0.1963`/`-0.2959`; `tests/test_library_ingest.py::
+  test_resync_reference_metadata_synthetic_fixture` — fixture's "already exact" mode 2/3 values and
+  mode 1's corrected value reverted with the log). Roster-count/exclusion-set golden values from the
+  prior session (18-molecule `test` set, 85-molecule roster, 19-name exclusion) untouched, as instructed.
+- Prior session (2026-08-14): `test`-category transferability roster expanded 9 → 18 molecules
   (H2O moved `non-ideal` → `test`, rerun at mp2/3-21g*; 8 new molecules added: CH3COCH3, C6H4F2,
   XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8). Full roster 77 → 85. `reproduce.py --molecules <union>` run
   end-to-end; `resync_reference_metadata(write=True)` corrected H2O's stale

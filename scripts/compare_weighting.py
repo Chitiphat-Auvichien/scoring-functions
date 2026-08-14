@@ -14,6 +14,15 @@ Exit status is 1 if a homoleptic molecule's scores moved, so this can gate a
 regeneration. Label changes on homoleptic molecules are reported but do NOT
 fail: a mode can cross tau_S without its own score budging, purely because the
 threshold moved. That is expected and is called out separately.
+
+CAVEAT on comparing against an archive: an archived CSV is a snapshot of what
+was on disk, which is not necessarily what the code of the day would produce.
+Some archived per-molecule CSVs were found to predate an intervening engine
+change, so an archive-vs-new diff can conflate "the weighting changed this"
+with "this file was already stale". The airtight comparison is to regenerate
+BOTH sides with the current code (py reproduce.py --v-weighting none / mu) and
+diff those; against an archive, treat small diffs on homoleptic molecules as
+suspect rather than as evidence about the weighting.
 """
 
 import argparse
@@ -26,7 +35,14 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_OLD = os.path.join(REPO_ROOT, "data", "results", "archive_unweighted",
                            "library_scores.csv")
 DEFAULT_NEW = os.path.join(REPO_ROOT, "data", "results", "library_scores.csv")
-SCORE_TOL = 0.0  # homoleptic invariance is exact, not approximate
+# Within a single run the homoleptic invariance is EXACT -- both weightings
+# produce bit-identical floats, and tests/test_scores.py asserts that with ==.
+# Comparing two CSVs written by different runs is a weaker setting: the
+# archived file carries last-bit (~1e-16) noise from its own generation that
+# has nothing to do with the weighting (verified by re-scoring homoleptic
+# molecules both ways through this same code path -- diff exactly 0.0). So the
+# cross-run gate sits above that noise floor and well below anything physical.
+SCORE_TOL = 1e-12
 
 
 def bond_types(data_dir="data"):
@@ -82,11 +98,15 @@ def compare(old_path, new_path, data_dir="data"):
     print(f"\n{'='*66}\nHOMOLEPTIC (one bond type -- mu cancels, scores MUST NOT move)")
     print(f"{'='*66}")
     violations = [r for r in homoleptic if r[1] > SCORE_TOL]
+    noisy = [r for r in homoleptic if 0.0 < r[1] <= SCORE_TOL]
     relabelled = [r for r in homoleptic if r[2] > 0]
     print(f"  {len(homoleptic)} molecules, max |dV| over all of them = "
           f"{max((r[1] for r in homoleptic), default=0.0):.3e}")
     for mol, dv, n in violations:
         print(f"  !! {mol}: max |dV| = {dv:.3e}  -- SCORES MOVED, investigate")
+    if noisy:
+        print(f"  {len(noisy)} molecule(s) differ only at the last bit "
+              f"(<= {SCORE_TOL:g}) -- cross-run float noise, not the weighting.")
     if relabelled:
         print("  Label changes with unchanged scores (threshold moved, expected):")
         for mol, _dv, n in relabelled:

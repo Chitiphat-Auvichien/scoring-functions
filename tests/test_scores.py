@@ -35,16 +35,17 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from src.parser import GaussianParser, EMITParser   # noqa: E402
-from src.scoring import ModeScorer                  # noqa: E402
+from src.scoring import ModeScorer, V_WEIGHTINGS    # noqa: E402
 
 TOL = 5e-4  # 3 decimal places
 
 
-def _normal_table(mol):
+def _normal_table(mol, v_weighting=None):
     """Mirror main.py for normal modes: parse -> MIT(rotate) -> +ideal T/R -> score."""
     gp = GaussianParser(os.path.join(ROOT, "data", "logs", f"{mol}.log"))
     data = gp.parse(parse_modes=True)
-    scorer = ModeScorer(data["atoms"], data["coords"], data["bonds"])
+    scorer = ModeScorer(data["atoms"], data["coords"], data["bonds"],
+                        v_weighting=v_weighting)
     rotated = scorer.MIT(data["modes"], rotate_modes=True)
     labels = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"] + [f"Vib{i+1}" for i in range(len(rotated))]
     modes = scorer.construct_T() + scorer.construct_R() + rotated
@@ -153,27 +154,96 @@ def test_tscore_ignores_subthreshold_noise():
 
 
 def test_score_ranges():
-    """s[T],s[R] in [-1,1]; s[V_S] in [0,1] across all modes of water and benzene."""
-    for mol in ["H2O", "C6H6"]:
-        _, t = _normal_table(mol)
-        for lbl, row in t.items():
-            for k in ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"]:
-                assert -1.0 - TOL <= row[k] <= 1.0 + TOL, f"{mol} {lbl} {k}={row[k]}"
-            assert -TOL <= row["V"] <= 1.0 + TOL, f"{mol} {lbl} V={row['V']}"
+    """s[T],s[R] in [-1,1]; s[V_S] in [0,1] across all modes of water and
+    benzene -- under BOTH weightings, since s[V_S] is a weighted mean of
+    per-bond cosines whichever non-negative weights it uses."""
+    for weighting in V_WEIGHTINGS:
+        for mol in ["H2O", "C6H6"]:
+            _, t = _normal_table(mol, v_weighting=weighting)
+            for lbl, row in t.items():
+                for k in ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"]:
+                    assert -1.0 - TOL <= row[k] <= 1.0 + TOL, f"{weighting} {mol} {lbl} {k}={row[k]}"
+                assert -TOL <= row["V"] <= 1.0 + TOL, f"{weighting} {mol} {lbl} V={row['V']}"
 
 
 def test_bond_decomposition_sums_to_vscore():
     """Sum of per-bond |s_AB| equals s[V_S] for every mode (water + benzene).
     s_AB is signed (positive = stretching, negative = compressing); s[V_S]
-    itself sums magnitudes, so the comparison must too."""
-    for mol in ["H2O", "C6H6"]:
+    itself sums magnitudes, so the comparison must too.
+
+    Checked under both weightings: the bond weight scales numerator and
+    denominator alike, so it divides straight out of this identity.
+    """
+    for weighting in V_WEIGHTINGS:
+        for mol in ["H2O", "C6H6"]:
+            gp = GaussianParser(os.path.join(ROOT, "data", "logs", f"{mol}.log"))
+            data = gp.parse(parse_modes=True)
+            scorer = ModeScorer(data["atoms"], data["coords"], data["bonds"],
+                                v_weighting=weighting)
+            for m in scorer.MIT(data["modes"], rotate_modes=True):
+                scorer.calculate_scores(m["vector"])
+                total = sum(abs(b["s_AB"]) for b in scorer.score_bonds())
+                assert abs(total - scorer.Vscore()) < 1e-6, \
+                    f"{weighting} {mol}: Sum |s_AB| != s[V_S]"
+
+
+# Every bond is the same element pair, so mu_AB is the same for all of them.
+_HOMOLEPTIC = ["H2O", "CH4", "CO2", "PCl5", "TeH6", "SbH5", "SnH4"]
+
+
+def test_homoleptic_molecules_are_weighting_invariant():
+    """mu_AB cancels between eq:vscore's numerator and denominator whenever
+    every bond carries the same reduced mass, so a homoleptic AB_n molecule
+    must score IDENTICALLY under both weightings -- exactly, not approximately.
+    _bond_weights() rescales by the maximum, so those weights are all exactly
+    1.0 and the arithmetic is bit-for-bit the same.
+
+    This is the property that makes the whole variant auditable: it says which
+    of the library's results were allowed to move (only the heteroleptic ones)
+    and which were not. If this test ever goes red, the weighting has leaked
+    into molecules it has no business touching.
+    """
+    for mol in _HOMOLEPTIC:
         gp = GaussianParser(os.path.join(ROOT, "data", "logs", f"{mol}.log"))
         data = gp.parse(parse_modes=True)
-        scorer = ModeScorer(data["atoms"], data["coords"], data["bonds"])
-        for m in scorer.MIT(data["modes"], rotate_modes=True):
-            scorer.calculate_scores(m["vector"])
-            total = sum(abs(b["s_AB"]) for b in scorer.score_bonds())
-            assert abs(total - scorer.Vscore()) < 1e-6, f"{mol}: Sum |s_AB| != s[V_S]"
+        sc_none = ModeScorer(data["atoms"], data["coords"], data["bonds"], v_weighting="none")
+        sc_mu = ModeScorer(data["atoms"], data["coords"], data["bonds"], v_weighting="mu")
+
+        # State the premise rather than assuming it.
+        assert set(sc_mu.bond_weights.tolist()) == {1.0}, \
+            f"{mol} is not homoleptic: weights {sc_mu.bond_weights}"
+
+        for m_n, m_m in zip(sc_none.MIT(data["modes"], rotate_modes=True),
+                            sc_mu.MIT(data["modes"], rotate_modes=True)):
+            sc_none.calculate_scores(m_n["vector"])
+            sc_mu.calculate_scores(m_m["vector"])
+            assert sc_none.Vscore() == sc_mu.Vscore(), \
+                f"{mol}: s[V_S] moved under mu weighting ({sc_none.Vscore()} -> {sc_mu.Vscore()})"
+            for b_n, b_m in zip(sc_none.score_bonds(), sc_mu.score_bonds()):
+                assert b_n["s_AB"] == b_m["s_AB"], f"{mol}: s_AB moved under mu weighting"
+
+
+def test_heteroleptic_molecule_changes_under_mu_weighting():
+    """The mirror image: XeOH4 mixes Xe-O (mu ~ 14.3) with Xe-H (mu ~ 1.0), so
+    its scores MUST move -- otherwise the switch is not actually live.
+
+    Pinned on Vib 11 because it is the whole library's tau_S: tau_S is defined
+    as the minimum ideal-molecule stretching score, and XeOH4's degenerate
+    1817.843 cm-1 pair is where that minimum sits. So this single number is
+    what moves the stretch/bend boundary for every molecule in the study.
+    """
+    gp = GaussianParser(os.path.join(ROOT, "data", "logs", "XeOH4.log"))
+    data = gp.parse(parse_modes=True)
+    got = {}
+    for weighting in ("none", "mu"):
+        scorer = ModeScorer(data["atoms"], data["coords"], data["bonds"],
+                            v_weighting=weighting)
+        modes = scorer.MIT(data["modes"], rotate_modes=True)
+        scorer.calculate_scores(modes[10]["vector"])   # Vib 11, 0-based
+        got[weighting] = scorer.Vscore()
+
+    assert abs(got["none"] - 0.9036818966195127) < 1e-9, got["none"]
+    assert abs(got["mu"] - 0.9012868462693647) < 1e-9, got["mu"]
 
 
 def test_parser_fails_loud_on_bad_emit():

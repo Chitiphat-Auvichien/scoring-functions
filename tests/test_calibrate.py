@@ -375,13 +375,22 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     assert res["per_category"]["translation"]["recall"] == 1.0
     assert res["per_category"]["rotation"]["recall"] == 1.0
 
+    # 2026-08-14 reduced-mass weighting: 122 -> 123. The one extra is AsCl3
+    # mode 4 (V_Stretch 0.901666), and it is worth being precise about why,
+    # because it looks like a contradiction: AsCl3 is homoleptic, so mu
+    # cancels and its score did NOT move by a single bit. What moved is the
+    # boundary underneath it -- tau_S fell 0.9036818966195127 ->
+    # 0.9012868462693647 (XeOH4, the only heteroleptic ideal molecule, sets
+    # tau_S) and AsCl3 mode 4 was sitting in the gap. SB -> S.
     stretch = res["per_category"]["stretch"]
-    assert stretch["tp"] == 122
-    assert stretch["n_pred"] == 122
+    assert stretch["tp"] == 123
+    assert stretch["n_pred"] == 123
     assert stretch["n_ref"] == 203
-    assert abs(stretch["recall"] - 0.6009852216748769) < 1e-6
-    assert abs(stretch["mixed_fraction"] - 0.39901477832512317) < 1e-6
+    assert abs(stretch["recall"] - 0.6059113300492611) < 1e-6
+    assert abs(stretch["mixed_fraction"] - 0.39408866995073893) < 1e-6
 
+    # Bend is UNCHANGED by the weighting: tau_B is set by IH3, which is
+    # homoleptic, so the bending boundary did not move at all.
     bend = res["per_category"]["bend"]
     assert bend["tp"] == 193
     assert bend["n_pred"] == 193
@@ -465,7 +474,10 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
 
     # Non-ideal tier -- grew by CO2's 4 modes this session (see docstring above).
     assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.9006211180124224) < 1e-6
-    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.5060975609756098) < 1e-6
+    # 2026-08-14 reduced-mass weighting: 0.5060975609756098 -> AsCl3 mode 4
+    # (non-ideal/stretch) joins the numerator when tau_S falls. See the sibling
+    # test's comment -- its own score is bit-for-bit unchanged.
+    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.5121951219512195) < 1e-6
     assert res["per_category"]["bend"]["n_ref_nonideal"] == 161
     assert res["per_category"]["stretch"]["n_ref_nonideal"] == 164
 
@@ -483,8 +495,11 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     # actually from the PRIOR SnO2/FH3 session, not from today's CO2 change).
     # 2026-08-10 G16 promotion: stretch recall 0.5960591133004927 ->
     # 0.6009852216748769 (ClH3 mode 4 flip, see sibling test's docstring);
+    # 2026-08-14 reduced-mass weighting: -> 0.6059113300492611 (AsCl3 mode 4
+    # crosses the lowered tau_S; bend recall again UNCHANGED, tau_B is set by
+    # homoleptic IH3 and did not move);
     # bend recall UNCHANGED (the FBr3 pair cancels net).
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.6009852216748769) < 1e-6
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.6059113300492611) < 1e-6
     assert abs(res["per_category"]["bend"]["recall"] - 0.9234449760765551) < 1e-6
 
 

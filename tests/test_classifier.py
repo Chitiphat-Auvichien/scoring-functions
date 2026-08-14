@@ -146,6 +146,27 @@ def test_classify_to_rows_shape():
         assert expected_cols | {freq_col} == cols, cols
 
 
+def test_rejects_thresholds_calibrated_for_the_other_weighting():
+    """tau_S/tau_B are cut points on an s[V_S] distribution, so they only mean
+    anything against the definition that produced it. Pairing them with the
+    other definition would still label every mode -- just wrongly, and with no
+    error to notice. classify_all_modes() refuses instead.
+    """
+    raw, _ = load_inputs("H2O", "normal", os.path.join(ROOT, "data"))
+    scorer, final = build_scorer_and_final(raw, "normal", v_weighting="mu")
+
+    raised = False
+    try:
+        classify_all_modes(scorer, final, Thresholds(v_weighting="none"))
+    except ValueError as e:
+        raised = "mismatch" in str(e)
+    assert raised, "mu scorer + 'none' thresholds should raise"
+
+    # Matching, and the '*' bootstrap sentinel, both go through.
+    assert classify_all_modes(scorer, final, Thresholds(v_weighting="mu"))
+    assert classify_all_modes(scorer, final, Thresholds.bootstrap())
+
+
 if __name__ == "__main__":
     # Standalone runner so the suite works even without pytest installed.
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]

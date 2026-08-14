@@ -339,7 +339,9 @@ def benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data"):
 
     Returns one row per mode (21, 22, 23, 24): mode_index, freq, V_Stretch,
     ref_label, predicted_label, predicted_bucket, case
-    ('blind_spot_bend' for 21/22, 'overflagged_mixed' for 23/24), cc_total,
+    ('overflagged_mixed' for 23/24; for the SB modes the case is derived from
+    what was actually predicted -- 'blind_spot_bend' if the classifier called
+    them clean bending, 'recovered_mixed' if it called them mixed), cc_total,
     ch_total, cc_fraction_of_V, plus one 's_AB[<bond>]' column per C-C bond.
 
     Raises ValueError if benzene has no ref_label=='SB' modes (literature
@@ -361,7 +363,24 @@ def benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data"):
     freq_group_sizes = candidates.groupby("freq")["mode_index"].transform("count")
     contrast_modes = candidates.loc[freq_group_sizes > 1, "mode_index"].astype(int).tolist()
 
-    case_by_mode = {m: "blind_spot_bend" for m in sb_modes}
+    # The SB modes' case is DERIVED from what the classifier actually did, not
+    # asserted from ref_label. Under the original unweighted V-score both were
+    # called clean BENDING -- the tau_B "bending blind spot" this diagnostic
+    # was written to expose. Under reduced-mass weighting they come out MIXED,
+    # matching the literature, so hardcoding 'blind_spot_bend' would have this
+    # table reporting a failure that is no longer happening.
+    # Internal rows only -- external rows carry slot names ("Tx") in
+    # mode_index, not integers. A dict rather than a Series, because integer
+    # .get() on a Series is a positional lookup, not a label one.
+    _internal = detail[detail["kind"] == "internal"]
+    sb_bucket = dict(zip(_internal["mode_index"].astype(int),
+                         _internal["predicted_bucket"]))
+    case_by_mode = {
+        m: ("blind_spot_bend" if sb_bucket.get(m) == "bend" else
+            "recovered_mixed" if sb_bucket.get(m) == "mixed" else
+            f"sb_predicted_{sb_bucket.get(m)}")
+        for m in sb_modes
+    }
     case_by_mode.update({m: "overflagged_mixed" for m in contrast_modes})
     internal_detail = detail[detail["kind"] == "internal"].copy()
     internal_detail["mode_index"] = internal_detail["mode_index"].astype(int)

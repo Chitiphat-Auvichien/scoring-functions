@@ -24,6 +24,9 @@ The order is not arbitrary; these are the couplings that force it:
   * benzene_validation has no main.py flag of its own, and several figures read
     the CSVs only it produces -- omitting it leaves those figures silently
     stale. That is exactly why it is a named stage here.
+  * the CPU-time benchmark has to precede the figures too: four of them read
+    cpu_time_benchmark.csv, and since it times OUR classifier rather than
+    Gaussian, a change to the per-bond arithmetic moves it as well.
 
 Writes data/results/_run_manifest.json recording which weighting, which commit
 and which stages produced the current outputs -- the provenance record for the
@@ -123,15 +126,33 @@ def stage_projection(ctx):
 
 
 def stage_ped(ctx):
-    """VEDA4 PED merge: back into <mol>_normal.csv + the combined table."""
-    from ped.merge_ped_scores import build_combined_table, _read_roster, _REPO_ROOT
+    """VEDA4 PED merge: back into <mol>_normal.csv, the combined table, and the
+    per-molecule full PED tables."""
+    from ped.merge_ped_scores import (build_combined_table, full_ped_table,
+                                      _read_roster, _resolve_ved_paths, _REPO_ROOT)
     molecules = _read_roster(_REPO_ROOT)
     combined, per_molecule = build_combined_table(
         molecules, _REPO_ROOT, skip_missing=True)
     out = os.path.join(ctx["data_dir"], "results", "combined_ped_vs_scores.csv")
     combined.to_csv(out, index=False, float_format="%.4f")
     ctx["outputs"].append(out)
-    return f"{len(per_molecule)}/{len(molecules)} molecules, {len(combined)} rows -> {out}"
+
+    # The full per-coordinate PED tables are a separate --full-table pass in
+    # merge_ped_scores' own CLI, one molecule at a time; without them the
+    # <mol>_full_ped_table.csv files silently go missing from a rebuild.
+    n_full = 0
+    for mol in molecules:
+        ved, vdf, missing = _resolve_ved_paths(mol, ctx["data_dir"])
+        if missing:
+            continue
+        table = full_ped_table(ved, vdf)
+        path = os.path.join(ctx["data_dir"], "results", f"{mol}_full_ped_table.csv")
+        table.to_csv(path, index=False, float_format="%.4f")
+        ctx["outputs"].append(path)
+        n_full += 1
+
+    return (f"{len(per_molecule)}/{len(molecules)} merged, {len(combined)} combined "
+            f"rows, {n_full} full PED tables")
 
 
 def stage_benzene_validation(ctx):
@@ -152,12 +173,67 @@ def stage_benzene_validation(ctx):
     return f"{len(paths)} diagnostic CSVs"
 
 
+# The manuscript's images/ is a manual copy of data/figures/, not a live link.
+# Three of the figures it actually \includegraphics are hand-annotated variants
+# built in a vector editor from the generated PDFs; nothing here can rebuild
+# them, so they are reported as stale rather than silently left alone.
+ANNOTATED_FIGURES = {
+    "fig_bondscores": "fig_bondscores_annot.pdf",
+    "fig_benzene_normal": "fig_benzene_normal_annot.pdf",
+    "fig_benzene_emit_counts": "fig_benzene_emit_counts_annot.pdf",
+}
+DEFAULT_MANUSCRIPT_IMAGES = os.path.normpath(os.path.join(
+    REPO_ROOT, "..", "..", "JCC", "JCC_man_scoring", "images"))
+
+
+def sync_manuscript(figures_dir, images_dir, dry_run=False):
+    """Copy regenerated figures into the manuscript's images/ and report what
+    moved. Returns (copied, skipped, stale_annotated)."""
+    import filecmp
+    import shutil
+
+    copied, skipped, stale = [], [], []
+    for name in sorted(os.listdir(figures_dir)):
+        if not name.endswith((".pdf", ".png")):
+            continue
+        src = os.path.join(figures_dir, name)
+        dst = os.path.join(images_dir, name)
+        if not os.path.exists(dst):
+            skipped.append(name)          # not used by the manuscript
+            continue
+        if filecmp.cmp(src, dst, shallow=False):
+            continue
+        if not dry_run:
+            shutil.copy2(src, dst)
+        copied.append(name)
+        stem = os.path.splitext(name)[0]
+        if stem in ANNOTATED_FIGURES:
+            stale.append(ANNOTATED_FIGURES[stem])
+    return copied, skipped, sorted(set(stale))
+
+
+def stage_sync_manuscript(ctx):
+    """Copy regenerated figures into the manuscript images/ (manual copy)."""
+    images = ctx.get("images_dir") or DEFAULT_MANUSCRIPT_IMAGES
+    if not os.path.isdir(images):
+        return f"SKIPPED: no manuscript images dir at {images}"
+    copied, skipped, stale = sync_manuscript(
+        os.path.join(ctx["data_dir"], "figures"), images)
+    ctx["outputs"] += [os.path.join(images, n) for n in copied]
+    msg = f"{len(copied)} updated, {len(skipped)} not used by the manuscript"
+    if stale:
+        msg += ("\n    STALE, needs manual re-annotation in a vector editor "
+                "(their .svg sources are in images/): " + ", ".join(stale))
+    return msg
+
+
 def stage_benchmark(ctx):
-    """CPU-time benchmark. A timing measurement, not a score -- slow, and only
-    worth re-running when the per-bond op count actually changed."""
+    """CPU-time benchmark -> cpu_time_benchmark.csv (four figures read it)."""
     from scripts.benchmark_cpu_time import main as benchmark_main
     benchmark_main()
-    return "cpu_time_benchmark.csv"
+    path = os.path.join(results_dir(ctx["data_dir"]), "cpu_time_benchmark.csv")
+    ctx["outputs"].append(path)
+    return path
 
 
 def stage_figures(ctx):
@@ -180,9 +256,15 @@ STAGES = [
     ("projection", stage_projection),
     ("ped", stage_ped),
     ("benzene_validation", stage_benzene_validation),
+    # Must precede 'figures': four of them read cpu_time_benchmark.csv, and it
+    # measures OUR classifier, so the weighting change moves it too.
+    ("benchmark", stage_benchmark),
     ("figures", stage_figures),
 ]
-OPTIONAL_STAGES = [("benchmark", stage_benchmark)]
+# Opt-in: writes outside data/, so never part of a default run.
+OPTIONAL_STAGES = [
+    ("sync_manuscript", stage_sync_manuscript),
+]
 OPTIONAL_NAMES = {name for name, _ in OPTIONAL_STAGES}
 ALL_STAGES = STAGES + OPTIONAL_STAGES
 STAGE_NAMES = [name for name, _ in ALL_STAGES]
@@ -240,6 +322,9 @@ def main(argv=None):
     ap.add_argument("--molecules", nargs="+",
                     help="Override the per-molecule list (default: whatever "
                          "already has a <mol>_normal.csv).")
+    ap.add_argument("--images-dir", default=None,
+                    help="Manuscript images/ for the sync_manuscript stage "
+                         f"(default: {DEFAULT_MANUSCRIPT_IMAGES}).")
     ap.add_argument("--dry-run", action="store_true",
                     help="List the stages that would run, then stop.")
     args = ap.parse_args(argv)
@@ -250,7 +335,7 @@ def main(argv=None):
 
     molecules = args.molecules or discover_molecules(args.data_dir)
     ctx = {"data_dir": args.data_dir, "molecules": molecules,
-           "outputs": [], "stages_run": []}
+           "images_dir": args.images_dir, "outputs": [], "stages_run": []}
 
     print(f"reproduce.py: v_weighting={get_v_weighting()}, "
           f"{len(molecules)} molecule(s), {len(selected)} stage(s)")

@@ -1,5 +1,5 @@
-"****veda**** version 4.99e    c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\acetone_fchk\acetone_fchk.ved"
-F matrix & atom's orientation: C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Acetone_fchk\acetone_fchk.fmt
+"****veda**** version 4.99e    c:\users\yourname\downloads\ped_inputs_3-21g\c2v\acetone\acetone_fchk.ved"
+F matrix & atom's orientation: C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\Acetone\acetone_fchk.fmt
 diagonality factor = 74.01   <EPm> = 73.60
 
   3192.70  3191.50  3157.03  3150.36  3088.67  3084.34  1672.67  1591.92
@@ -21,7 +21,7 @@ PED: sign = direction,  column = coordinate,  row = No. of mode
   11   0   0   0   0   0   0  16   0   0  -2   3  -5   0 -62   0   0   0  -1   0   0   0  12   0   0   11 
   12   0   0   0   0   0   0  -1   0   0  -6   8   0  83   0   0   0   0   0   0   0   0   0   0   0   12 
   13   0   0   0   0   0   0   0  -1   0 -82   0  -9  -5   0   0   0   0   0   0   0   0   0   0   0   13 
-  14   0   0   0   0   0   0   0  38   0  -1   1   1   0   0 -13  18   0  25   0   0  -1   0   4   0   14 
+  14   0   0   0   0   0   0   0 -38   0   1  -1  -1   0   0  13 -18   0 -25   0   0   1   0  -4   0   14 
   15   0   0   0   0   0   0   0   0   0   0  13  -3  -2   0   0   0   0  -3   0   0  -5   0  58 -14   15 
   16   0   0   0   0   0   0 -11   0   0   0   1  -1   0 -17   0   0   6  -3   0   0   0  61  -2   0   16 
   17   0   0   0   0   0   0   0   0   0  -2   2  11   0   0   0   0   0  -6   4 -72   0   3  -1   0   17 

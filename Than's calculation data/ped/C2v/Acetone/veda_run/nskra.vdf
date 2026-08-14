@@ -1,5 +1,5 @@
 abbreviation of: skra.ved
-IR spectrum from file: C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Acetone_fchk\acetone_fchk.fmt
+IR spectrum from file: C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\Acetone\acetone_fchk.fmt
 diagonality factor = 46.31   <EPm> = 36.93
     IR      CM-1
    7.11  3192.67   s2 40   s6 40
@@ -12,19 +12,19 @@ diagonality factor = 46.31   <EPm> = 36.93
   24.04  1591.91   s11 -18   s12 18   s13 18   s15 -18
    0.00  1572.71   s11 -19   s12 19   s13 -19   s15 19
    0.69  1566.54   s10 -25   s14 25
-  32.72  1559.32   s7 17   s10 -22   s14 -22
-  19.80  1467.23   s10 -16   s11 -17   s12 -17   s13 -17   s14 -16   s15 -17
-  39.11  1458.05   s10 14   s11 17   s12 17   s13 -17   s14 -14   s15 -17
+  32.72  1559.32   s7 -17   s10 22   s14 22
+  19.80  1467.23   s10 16   s11 17   s12 17   s13 17   s14 16   s15 17
+  39.11  1458.05   s10 -14   s11 -17   s12 -17   s13 17   s14 14   s15 17
   89.99  1236.61   s8 38   s16 19
-   3.65  1177.86   s18 11   s20 11   s21 -11   s22 -11   s24 -24
-   0.10  1119.25   s7 -13   s18 15   s20 -15   s21 15   s22 -15
+   3.65  1177.86   s18 -11   s20 -11   s21 11   s22 11   s24 24
+   0.10  1119.25   s7 13   s18 -15   s20 15   s21 -15   s22 15
    0.00   967.14   s19 34   s23 34
   11.08   915.95   s8 47   s18 -10   s20 10   s21 10   s22 -10
    1.05   753.40   s9 95
   11.65   513.20   s8 -14   s16 79
    0.00   507.91   s19 -15   s23 15   s24 56
    0.45   383.05   s17 89
-   0.27   170.42   s24 16   s19 16   s20 13   s21 -13   s22 -13   s23 -16
+   0.27   170.42   s24 -16   s19 -16   s20 -13   s21 13   s22 13   s23 16
    0.00   117.67   s18 20   s19 10   s20 20   s21 20   s22 20   s23 10
 
 Frequencies/PED calculated by Veda
@@ -35,21 +35,21 @@ s  3   STRE CH   f3157 25   f3150 25   f3089 20   f3084 -20
 s  4   STRE CH   f3157 25   f3150 -25   f3089 20   f3084 20
 s  5   STRE CH   f3157 -25   f3150 25   f3089 20   f3084 20
 s  6   STRE CH   f3193 40   f3191 40   f3089 10   f3084 10
-s  7   STRE OC   f1673 66   f1559 17   f1119 -13
+s  7   STRE OC   f1673 66   f1559 -17   f1119 13
 s  8   STRE CC   f1237 38   f916 47   f513 -14
 s  9   STRE CC   f753 95
-s 10   BEND HCH   f1567 -25   f1559 -22   f1467 -16   f1458 14
-s 11   BEND HCH   f1592 -18   f1573 -19   f1467 -17   f1458 17
-s 12   BEND HCH   f1592 18   f1573 19   f1467 -17   f1458 17
-s 13   BEND HCH   f1592 18   f1573 -19   f1467 -17   f1458 -17
-s 14   BEND HCH   f1567 25   f1559 -22   f1467 -16   f1458 -14
-s 15   BEND HCH   f1592 -18   f1573 19   f1467 -17   f1458 -17
+s 10   BEND HCH   f1567 -25   f1559 22   f1467 16   f1458 -14
+s 11   BEND HCH   f1592 -18   f1573 -19   f1467 17   f1458 -17
+s 12   BEND HCH   f1592 18   f1573 19   f1467 17   f1458 -17
+s 13   BEND HCH   f1592 18   f1573 -19   f1467 17   f1458 17
+s 14   BEND HCH   f1567 25   f1559 22   f1467 16   f1458 14
+s 15   BEND HCH   f1592 -18   f1573 19   f1467 17   f1458 17
 s 16   BEND OCC   f1237 19   f513 79
 s 17   BEND CCC   f383 89
-s 18   TORS HCCC   f1178 11   f1119 15   f916 -10   f170 13   f118 20
-s 19   TORS HCCC   f967 34   f508 -15   f170 16   f118 10
-s 20   TORS HCCC   f1178 11   f1119 -15   f916 10   f170 13   f118 20
-s 21   TORS HCCC   f1178 -11   f1119 15   f916 10   f170 -13   f118 20
-s 22   TORS HCCC   f1178 -11   f1119 -15   f916 -10   f170 -13   f118 20
-s 23   TORS HCCC   f967 34   f508 15   f170 -16   f118 10
-s 24   OUT  OCCC   f1178 -24   f508 56   f170 16
+s 18   TORS HCCC   f1178 -11   f1119 -15   f916 -10   f170 -13   f118 20
+s 19   TORS HCCC   f967 34   f508 -15   f170 -16   f118 10
+s 20   TORS HCCC   f1178 -11   f1119 15   f916 10   f170 -13   f118 20
+s 21   TORS HCCC   f1178 11   f1119 -15   f916 10   f170 13   f118 20
+s 22   TORS HCCC   f1178 11   f1119 15   f916 -10   f170 13   f118 20
+s 23   TORS HCCC   f967 34   f508 15   f170 16   f118 10
+s 24   OUT  OCCC   f1178 24   f508 56   f170 -16

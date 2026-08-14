@@ -1,18 +1,18 @@
 
-missing of returns in file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\HOCl_fchk\hocl_fchk.fmt
-Veda create new C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\HOCl_fchk\hocl_fchk.fmt, old file --> C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\HOCl_fchk\hocl_fchk.fmt.old 0 1 2 3
+missing of returns in file C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\HOCl\hocl_fchk.fmt
+Veda create new C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\HOCl\hocl_fchk.fmt, old file --> C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\HOCl\hocl_fchk.fmt.old 0 1 2 3
 ##########
 Coordinates of  3 atoms have been read
-  1   8   O    0.037764    1.146769    0.000000   15.994915
-  2   1   H   -0.944091    1.354429    0.000000    1.007825
-  3  17  Cl    0.037764   -0.619328    0.000000   34.968853
-the matrix F has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\HOCl_fchk\hocl_fchk.fmt
-atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\HOCl_fchk\hocl_fchk.fmt
+  1   8   O    0.038069    1.197522    0.000000   15.994915
+  2   1   H   -0.951724    1.378354    0.000000    1.007825
+  3  17  Cl    0.038069   -0.644619    0.000000   34.968853
+the matrix F has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\HOCl\hocl_fchk.fmt
+atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\HOCl\hocl_fchk.fmt
 
 connection matrix MPO has been created: file skra.mpo
  2. O 1: H 2, Cl 3
-copy skra.mpo --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\hocl_fchk\hocl_fchk.mpo
-File C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\HOCl_fchk\hocl_fchk.fmv was created
+copy skra.mpo --> c:\users\yourname\downloads\ped_inputs_3-21g\cs\hocl\hocl_fchk.mpo
+File C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\HOCl\hocl_fchk.fmv was created
 create DD2 file due to atoms connection in MPO
 stretching 2, bending 1, torsion 0, out-of-plane 0
 regarded 0 rings, 0 XY3 non-flat groups
@@ -21,9 +21,9 @@ creation of Coordinates Definitions: DD2 file skra.dd2
 ... prepare for optimization
 Preoptimization: file  skra.dd2
 TED < 150 has been achieved
-OPT 0  <EPm>=99.48  delta=99.48
+OPT 0  <EPm>=99.35  delta=99.35
 ============================================================
-Optimization START <EPm> = 99.4751729064401
+Optimization START <EPm> = 99.3536359522812
 Base optimization for EPm < 99
    TED near 100 . .  NOT
 Force normalization YES
@@ -62,11 +62,11 @@ CALCULATION VEDA4, cycle No.  1
 linear dependence of B matrix is checked
 transformation F to internal coordinates 
 scaling;  eigenvectors  &  eigenvalues
-3393.69  1291.02   687.20
-diagonality factor = 81.01  <EPm>=99.48   improve<EPm>=0.00
-PED/TED saved in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\hocl_fchk\hocl_fchk.ved
+3368.57  1255.95   667.65
+diagonality factor = 80.86  <EPm>=99.35   improve<EPm>=0.00
+PED/TED saved in c:\users\yourname\downloads\ped_inputs_3-21g\cs\hocl\hocl_fchk.ved
 TED Above 100 Factor TAF=0.000
-(PED abbreviation in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\hocl_fchk\hocl_fchk.vdf)
-skra.dd2 --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\hocl_fchk\hocl_fchk.dd2
-calculation time [sec] : 0.06 - 0.04
+(PED abbreviation in c:\users\yourname\downloads\ped_inputs_3-21g\cs\hocl\hocl_fchk.vdf)
+skra.dd2 --> c:\users\yourname\downloads\ped_inputs_3-21g\cs\hocl\hocl_fchk.dd2
+calculation time [sec] : 0.11 - 0.07
 END of CYCLE  1

@@ -1,7 +1,7 @@
 %mem=8GB
 %nprocshared=8
 %chk=oDifluorobenzene.chk
-# opt freq=hpmodes mp2/3-21g* geom=connectivity
+# opt freq=hpmodes mp2/3-21g geom=connectivity
 
 1,2-Difluorobenzene - size6to10_C2v
 

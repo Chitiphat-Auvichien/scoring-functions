@@ -1,5 +1,5 @@
 abbreviation of: skra.ved
-IR spectrum from file: C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Acetone_fchk\acetone_fchk.fmt
+IR spectrum from file: C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\Acetone\acetone_fchk.fmt
 diagonality factor = 74.01   <EPm> = 73.60
     IR      CM-1
    7.11  3192.67   s5 -21   s6 79
@@ -15,7 +15,7 @@ diagonality factor = 74.01   <EPm> = 73.60
   32.72  1559.32   s7 16   s14 -62   s22 12
   19.80  1467.23   s13 83
   39.11  1458.05   s10 -82
-  89.99  1236.61   s8 38   s15 -13   s16 18   s18 25
+  89.99  1236.61   s8 -38   s15 13   s16 -18   s18 -25
    3.65  1177.86   s11 13   s23 58   s24 -14
    0.10  1119.25   s7 -11   s14 -17   s22 61
    0.00   967.14   s12 11   s20 -72
@@ -36,17 +36,17 @@ s  4   STRE CH   f3150 100
 s  5   STRE CH   f3193 -21   f3089 79
 s  6   STRE CH   f3193 79   f3089 21
 s  7   STRE OC   f1673 65   f1559 16   f1119 -11
-s  8   STRE CC   f1237 38   f916 46   f513 -14
+s  8   STRE CC   f1237 -38   f916 46   f513 -14
 s  9   STRE CC   f753 95
 s 10   BEND HCH   f1458 -82
 s 11   BEND HCH   f1592 53   f1573 -11   f1178 13
 s 12   BEND HCH   f1592 -12   f1573 -52   f967 11
 s 13   BEND HCH   f1467 83
 s 14   BEND HCH   f1673 19   f1559 -62   f1119 -17
-s 15   BEND HCH   f1567 72   f1237 -13   f916 13
-s 16   BEND OCC   f1237 18   f513 79
+s 15   BEND HCH   f1567 72   f1237 13   f916 13
+s 16   BEND OCC   f1237 -18   f513 79
 s 17   BEND CCC   f383 88
-s 18   TORS HCCC   f1567 -16   f1237 25   f916 -31
+s 18   TORS HCCC   f1567 -16   f1237 -25   f916 -31
 s 19   TORS HCCC   f118 94
 s 20   TORS HCCC   f1573 26   f967 -72
 s 21   TORS HCCC   f508 16   f170 -79

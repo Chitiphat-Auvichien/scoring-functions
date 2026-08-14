@@ -1,6 +1,6 @@
 
-missing of returns in file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Cycloheptatriene_fchk\cycloheptatriene_fchk.fmt
-Veda create new C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Cycloheptatriene_fchk\cycloheptatriene_fchk.fmt, old file --> C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Cycloheptatriene_fchk\cycloheptatriene_fchk.fmt.old 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+missing of returns in file C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\Cycloheptatriene\cycloheptatriene_fchk.fmt
+Veda create new C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\Cycloheptatriene\cycloheptatriene_fchk.fmt, old file --> C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\Cycloheptatriene\cycloheptatriene_fchk.fmt.old 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
 ##########
 Coordinates of  15 atoms have been read
   1   6   C   -0.273760    0.959676   -1.220163   12.000000
@@ -18,8 +18,8 @@ Coordinates of  15 atoms have been read
  13   1   H   -0.797268    1.676845    1.848893    1.007825
  14   1   H    0.534620    2.561393    0.000000    1.007825
  15   1   H    1.503151    1.059354    0.000000    1.007825
-the matrix F has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Cycloheptatriene_fchk\cycloheptatriene_fchk.fmt
-atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Cycloheptatriene_fchk\cycloheptatriene_fchk.fmt
+the matrix F has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\Cycloheptatriene\cycloheptatriene_fchk.fmt
+atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\Cycloheptatriene\cycloheptatriene_fchk.fmt
 
 connection matrix MPO has been created: file skra.mpo
  4. C 7: C 1, C 6, H 14, H 15
@@ -29,8 +29,8 @@ connection matrix MPO has been created: file skra.mpo
  3. C 5: C 4, C 6, H 12
  3. C 6: C 5, C 7, H 13
  3. C 1: C 2, C 7, H 8
-copy skra.mpo --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\cycloheptatriene_fchk\cycloheptatriene_fchk.mpo
-File C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Cycloheptatriene_fchk\cycloheptatriene_fchk.fmv was created
+copy skra.mpo --> c:\users\yourname\downloads\ped_inputs_3-21g\cs\cycloheptatriene\cycloheptatriene_fchk.mpo
+File C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\Cycloheptatriene\cycloheptatriene_fchk.fmv was created
 create DD2 file due to atoms connection in MPO
 ring No.  1 ... 
   ... broken  1 7
@@ -44,7 +44,7 @@ Preoptimization: file  skra.dd2
 TED < 150 has been achieved
 OPT 0  <EPm>=33.20  delta=33.20
 ============================================================
-Optimization START <EPm> = 33.1964908154319
+Optimization START <EPm> = 33.1964905307217
 Base optimization for EPm < 75
 Fine Optimization  . NOT  (for EPm < 90)
    TED near 100 . .  NOT
@@ -208,16 +208,16 @@ coordinate No. 39
 Strong Normalize .. NOT
 Strong Reduce CC. NOT            
 Cycle at the End . . NOT
-time of optimization [min] : 0.31
+time of optimization [min] : 0.27
 CALCULATION VEDA4, cycle No.  1
 linear dependence of B matrix is checked
 transformation F to internal coordinates 
 scaling;  eigenvectors  &  eigenvalues
 3202.18  3196.86  3181.46  3167.91  3163.47  3152.12  3146.26  3069.19  1644.23  1637.68  1559.84  1548.90  1506.89  1469.36  1442.84  1351.15  1326.99  1307.11  1267.59  1265.83  1068.01  1054.44   976.02   974.00   967.77   953.19   926.76   918.44   908.31   804.86   771.06   735.09   681.86   605.81   431.12   416.00   368.19   291.00   236.65
 diagonality factor = 64.38  <EPm>=62.84   improve<EPm>=29.64
-PED/TED saved in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\cycloheptatriene_fchk\cycloheptatriene_fchk.ved
+PED/TED saved in c:\users\yourname\downloads\ped_inputs_3-21g\cs\cycloheptatriene\cycloheptatriene_fchk.ved
 TED Above 100 Factor TAF=0.000
-(PED abbreviation in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\cycloheptatriene_fchk\cycloheptatriene_fchk.vdf)
-skra.dd2 --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\cycloheptatriene_fchk\cycloheptatriene_fchk.dd2
-calculation time [sec] : 0.35 - 0.21
+(PED abbreviation in c:\users\yourname\downloads\ped_inputs_3-21g\cs\cycloheptatriene\cycloheptatriene_fchk.vdf)
+skra.dd2 --> c:\users\yourname\downloads\ped_inputs_3-21g\cs\cycloheptatriene\cycloheptatriene_fchk.dd2
+calculation time [sec] : 0.35 - 0.20
 END of CYCLE  1

@@ -1,0 +1,10 @@
+point_group,molecule,basis,gaussian_files,ped_input_files,veda_run_files,veda_run_stem
+C2v,Acetone,3-21G,3,1,25,acetone_fchk
+C2v,H2O_C2v,3-21G,3,1,22,h2o_c2v_fchk
+C2v,oDifluorobenzene,3-21G,3,1,25,odifluorobenzene_fchk
+Cs,Cycloheptatriene,3-21G,3,1,25,cycloheptatriene_fchk
+Cs,FormicAcid,3-21G,3,1,21,formicacid_fchk
+Cs,HOCl,3-21G,3,1,21,hocl_fchk
+D2h,Ethylene,3-21G,3,1,25,ethylene_fchk
+D2h,Naphthalene,3-21G,3,1,22,naphthalene_fchk
+D2h,XeF2Cl2,3-21G*,3,3,22,xef2cl2_bent2_fchk

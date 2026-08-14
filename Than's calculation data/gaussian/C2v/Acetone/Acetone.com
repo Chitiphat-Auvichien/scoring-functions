@@ -1,7 +1,7 @@
 %mem=8GB
 %nprocshared=8
 %chk=Acetone.chk
-# opt freq=hpmodes mp2/3-21g* geom=connectivity symmetry=loose
+# opt freq=hpmodes mp2/3-21g geom=connectivity symmetry=loose
 
 Acetone (CH3)2CO - size2to5_C2v
 

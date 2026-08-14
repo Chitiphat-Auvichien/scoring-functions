@@ -2,8 +2,8 @@
  Input=H2O.com
  Output=H2O.log
  Initial command:
- /opt/g16/g16/l1.exe "/home/pnatt/scratch/Gau-3465464.inp" -scrdir="/home/pnatt/scratch/"
- Entering Link 1 = /opt/g16/g16/l1.exe PID=   3465469.
+ /opt/g16/g16/l1.exe "/home/pnatt/scratch/Gau-2531142.inp" -scrdir="/home/pnatt/scratch/"
+ Entering Link 1 = /opt/g16/g16/l1.exe PID=   2531160.
   
  Copyright (c) 1988-2019, Gaussian, Inc.  All Rights Reserved.
   
@@ -76,18 +76,18 @@
  
  ******************************************
  Gaussian 16:  ES64L-G16RevC.01  3-Jul-2019
-                 7-Aug-2026 
+                14-Aug-2026 
  ******************************************
  %mem=8GB
  %nprocshared=8
  Will use up to    8 processors via shared memory.
  %chk=H2O.chk
- -----------------------------------------------
- # opt freq=hpmodes mp2/3-21g* geom=connectivity
- -----------------------------------------------
+ ----------------------------------------------
+ # opt freq=hpmodes mp2/3-21g geom=connectivity
+ ----------------------------------------------
  1/18=20,19=15,38=1,57=2/1,3;
  2/9=110,12=2,17=6,18=5,40=1/2;
- 3/5=5,7=1,11=9,25=1,30=1,71=1/1,2,3;
+ 3/5=5,11=9,25=1,30=1,71=1/1,2,3;
  4//1;
  5/5=2,38=5/2;
  8/6=4,10=1/1;
@@ -99,7 +99,7 @@
  2/9=110/2;
  99//99;
  2/9=110/2;
- 3/5=5,7=1,11=9,25=1,30=1,71=1/1,2,3;
+ 3/5=5,11=9,25=1,30=1,71=1/1,2,3;
  4/5=5,16=3,69=1/1;
  5/5=2,38=5/2;
  8/6=4,10=1/1;
@@ -167,7 +167,7 @@
       3          1           0       -0.000000   -0.757200   -0.469200
  ---------------------------------------------------------------------
  Rotational constants (GHZ):         820.7510204         437.3013824         285.2945990
- Standard basis: 3-21G* (6D, 7F)
+ Standard basis: 3-21G (6D, 7F)
  There are     7 symmetry adapted cartesian basis functions of A1  symmetry.
  There are     0 symmetry adapted cartesian basis functions of A2  symmetry.
  There are     2 symmetry adapted cartesian basis functions of B1  symmetry.
@@ -264,12 +264,12 @@
      1  O   -0.727579
      2  H    0.363789
      3  H    0.363789
- Sum of Mulliken charges =  -0.00000
+ Sum of Mulliken charges =   0.00000
  Mulliken charges with hydrogens summed into heavy atoms:
                1
-     1  O   -0.000000
+     1  O    0.000000
  Electronic spatial extent (au):  <R**2>=             18.5212
- Charge=             -0.0000 electrons
+ Charge=              0.0000 electrons
  Dipole moment (field-independent basis, Debye):
     X=             -0.0000    Y=              0.0000    Z=             -2.4356  Tot=              2.4356
  Quadrupole moment (field-independent basis, Debye-Ang):
@@ -364,12 +364,12 @@
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
  ---------------------------------------------------------------------
-      1          8           0        0.000000    0.000000    0.116767
+      1          8           0       -0.000000   -0.000000    0.116767
       2          1           0        0.000000    0.794739   -0.467068
       3          1           0       -0.000000   -0.794739   -0.467068
  ---------------------------------------------------------------------
  Rotational constants (GHZ):         828.2615323         396.9658215         268.3514358
- Standard basis: 3-21G* (6D, 7F)
+ Standard basis: 3-21G (6D, 7F)
  There are     7 symmetry adapted cartesian basis functions of A1  symmetry.
  There are     0 symmetry adapted cartesian basis functions of A2  symmetry.
  There are     2 symmetry adapted cartesian basis functions of B1  symmetry.
@@ -389,8 +389,8 @@
  NBasis=    13 RedAO= T EigKep=  1.14D-01  NBF=     7     0     2     4
  NBsUse=    13 1.00D-06 EigRej= -1.00D+00 NBFU=     7     0     2     4
  Initial guess from the checkpoint file:  "H2O.chk"
- B after Tr=    -0.000000    0.000000   -0.000000
-         Rot=    1.000000   -0.000000   -0.000000    0.000000 Ang=   0.00 deg.
+ B after Tr=    -0.000000   -0.000000   -0.000000
+         Rot=    1.000000    0.000000   -0.000000    0.000000 Ang=   0.00 deg.
  Initial guess orbital symmetries:
        Occupied  (A1) (A1) (B2) (A1) (B1)
        Virtual   (A1) (B2) (B2) (A1) (B1) (A1) (B2) (A1)
@@ -450,7 +450,7 @@
  Center     Atomic                   Forces (Hartrees/Bohr)
  Number     Number              X              Y              Z
  -------------------------------------------------------------------
-      1        8          -0.000000000    0.000000000    0.006745650
+      1        8          -0.000000000   -0.000000000    0.006745650
       2        1           0.000000000   -0.001715149   -0.003372825
       3        1           0.000000000    0.001715149   -0.003372825
  -------------------------------------------------------------------
@@ -482,7 +482,7 @@
  Iteration  1 RMS(Cart)=  0.02010535 RMS(Int)=  0.00027069
  Iteration  2 RMS(Cart)=  0.00026071 RMS(Int)=  0.00000001
  Iteration  3 RMS(Cart)=  0.00000001 RMS(Int)=  0.00000000
- ClnCor:  largest displacement from symmetrization is 1.73D-15 for atom     3.
+ ClnCor:  largest displacement from symmetrization is 6.00D-16 for atom     1.
  Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
                                  (Linear)    (Quad)   (Total)
     R1        1.86354   0.00061  -0.00425   0.00863   0.00438   1.86791
@@ -501,7 +501,7 @@
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
  ---------------------------------------------------------------------
-      1          8           0       -0.000000    0.000000    0.126300
+      1          8           0        0.000000   -0.000000    0.126300
       2          1           0        0.000000    0.785522   -0.473700
       3          1           0       -0.000000   -0.785522   -0.473700
  ---------------------------------------------------------------------
@@ -526,7 +526,7 @@
       3          1           0       -0.000000   -0.785522   -0.480000
  ---------------------------------------------------------------------
  Rotational constants (GHZ):         784.2323467         406.3359657         267.6552069
- Standard basis: 3-21G* (6D, 7F)
+ Standard basis: 3-21G (6D, 7F)
  There are     7 symmetry adapted cartesian basis functions of A1  symmetry.
  There are     0 symmetry adapted cartesian basis functions of A2  symmetry.
  There are     2 symmetry adapted cartesian basis functions of B1  symmetry.
@@ -546,8 +546,8 @@
  NBasis=    13 RedAO= T EigKep=  1.14D-01  NBF=     7     0     2     4
  NBsUse=    13 1.00D-06 EigRej= -1.00D+00 NBFU=     7     0     2     4
  Initial guess from the checkpoint file:  "H2O.chk"
- B after Tr=     0.000000   -0.000000   -0.000000
-         Rot=    1.000000   -0.000000    0.000000    0.000000 Ang=   0.00 deg.
+ B after Tr=     0.000000   -0.000000    0.000000
+         Rot=    1.000000   -0.000000   -0.000000   -0.000000 Ang=   0.00 deg.
  Initial guess orbital symmetries:
        Occupied  (A1) (A1) (B2) (A1) (B1)
        Virtual   (A1) (B2) (B2) (A1) (B1) (A1) (B2) (A1)
@@ -634,11 +634,11 @@
  ITU=  1  1  0
  Use linear search instead of GDIIS.
      Eigenvalues ---    0.17495   0.51879   0.55955
- RFO step:  Lambda=-7.26362942D-07 EMin= 1.74951118D-01
+ RFO step:  Lambda=-7.26362937D-07 EMin= 1.74951118D-01
  Quartic linear search produced a step of  0.04681.
  Iteration  1 RMS(Cart)=  0.00090407 RMS(Int)=  0.00000078
  Iteration  2 RMS(Cart)=  0.00000090 RMS(Int)=  0.00000000
- ClnCor:  largest displacement from symmetrization is 4.00D-16 for atom     3.
+ ClnCor:  largest displacement from symmetrization is 1.11D-15 for atom     3.
  Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
                                  (Linear)    (Quad)   (Total)
     R1        1.86791   0.00044   0.00020   0.00085   0.00105   1.86896
@@ -657,7 +657,7 @@
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
  ---------------------------------------------------------------------
-      1          8           0       -0.000000   -0.000000    0.126972
+      1          8           0        0.000000   -0.000000    0.126972
       2          1           0        0.000000    0.785452   -0.474036
       3          1           0       -0.000000   -0.785452   -0.474036
  ---------------------------------------------------------------------
@@ -682,7 +682,7 @@
       3          1           0       -0.000000   -0.785452   -0.480806
  ---------------------------------------------------------------------
  Rotational constants (GHZ):         781.6044295         406.4086849         267.3799005
- Standard basis: 3-21G* (6D, 7F)
+ Standard basis: 3-21G (6D, 7F)
  There are     7 symmetry adapted cartesian basis functions of A1  symmetry.
  There are     0 symmetry adapted cartesian basis functions of A2  symmetry.
  There are     2 symmetry adapted cartesian basis functions of B1  symmetry.
@@ -702,8 +702,8 @@
  NBasis=    13 RedAO= T EigKep=  1.15D-01  NBF=     7     0     2     4
  NBsUse=    13 1.00D-06 EigRej= -1.00D+00 NBFU=     7     0     2     4
  Initial guess from the checkpoint file:  "H2O.chk"
- B after Tr=     0.000000    0.000000   -0.000000
-         Rot=    1.000000    0.000000    0.000000   -0.000000 Ang=   0.00 deg.
+ B after Tr=     0.000000    0.000000    0.000000
+         Rot=    1.000000    0.000000   -0.000000    0.000000 Ang=   0.00 deg.
  Initial guess orbital symmetries:
        Occupied  (A1) (A1) (B2) (A1) (B1)
        Virtual   (A1) (B2) (B2) (A1) (B1) (A1) (B2) (A1)
@@ -754,7 +754,7 @@
  Center     Atomic                   Forces (Hartrees/Bohr)
  Number     Number              X              Y              Z
  -------------------------------------------------------------------
-      1        8          -0.000000000    0.000000000    0.000050179
+      1        8          -0.000000000   -0.000000000    0.000050179
       2        1           0.000000000    0.000040836   -0.000025089
       3        1           0.000000000   -0.000040836   -0.000025089
  -------------------------------------------------------------------
@@ -785,7 +785,7 @@
  DidBck=F Rises=F RFO-DIIS coefs:    1.04717   -0.04717
  Iteration  1 RMS(Cart)=  0.00007212 RMS(Int)=  0.00000000
  Iteration  2 RMS(Cart)=  0.00000000 RMS(Int)=  0.00000000
- ClnCor:  largest displacement from symmetrization is 2.48D-16 for atom     3.
+ ClnCor:  largest displacement from symmetrization is 8.67D-16 for atom     3.
  Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
                                  (Linear)    (Quad)   (Total)
     R1        1.86896   0.00005   0.00005   0.00006   0.00011   1.86907
@@ -796,7 +796,7 @@
  RMS     Force            0.000039     0.000300     YES
  Maximum Displacement     0.000078     0.001800     YES
  RMS     Displacement     0.000072     0.001200     YES
- Predicted change in Energy=-4.996147D-09
+ Predicted change in Energy=-4.996146D-09
  Optimization completed.
     -- Stationary point found.
                            ----------------------------
@@ -816,7 +816,7 @@
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
  ---------------------------------------------------------------------
-      1          8           0       -0.000000   -0.000000    0.126972
+      1          8           0        0.000000   -0.000000    0.126972
       2          1           0        0.000000    0.785452   -0.474036
       3          1           0       -0.000000   -0.785452   -0.474036
  ---------------------------------------------------------------------
@@ -865,10 +865,10 @@
      1  O   -0.717940
      2  H    0.358970
      3  H    0.358970
- Sum of Mulliken charges =   0.00000
+ Sum of Mulliken charges =  -0.00000
  Mulliken charges with hydrogens summed into heavy atoms:
                1
-     1  O    0.000000
+     1  O   -0.000000
  Electronic spatial extent (au):  <R**2>=             18.9498
  Charge=              0.0000 electrons
  Dipole moment (field-independent basis, Debye):
@@ -888,35 +888,35 @@
  XXXZ=             -0.0000 YYYX=             -0.0000 YYYZ=             -0.0000 ZZZX=             -0.0000
  ZZZY=             -0.0000 XXYY=             -1.9221 XXZZ=             -1.6754 YYZZ=             -1.5295
  XXYZ=              0.0000 YYXZ=              0.0000 ZZXY=              0.0000
- N-N= 8.897762629563D+00 E-N=-1.974582537899D+02  KE= 7.534720474068D+01
+ N-N= 8.897762629551D+00 E-N=-1.974582537899D+02  KE= 7.534720474068D+01
  Symmetry A1   KE= 6.741230839749D+01
  Symmetry A2   KE= 0.000000000000D+00
- Symmetry B1   KE= 4.667967546091D+00
+ Symmetry B1   KE= 4.667967546093D+00
  Symmetry B2   KE= 3.266928797099D+00
  Unable to Open any file for archive entry.
- 1\1\GINC-BS001\FOpt\RMP2-FC\3-21G*\H2O1\PNATT\07-Aug-2026\0\\# opt fre
- q=hpmodes mp2/3-21g* geom=connectivity\\H2O - size1_C2v\\0,1\O,0.,0.,0
- .1269719753\H,0.,0.7854518019,-0.4740359877\H,0.,-0.7854518019,-0.4740
- 359877\\Version=ES64L-G16RevC.01\State=1-A1\HF=-75.5850196\MP2=-75.707
- 8012\RMSD=4.439e-09\RMSF=2.811e-05\Dipole=0.,0.,-0.9081879\PG=C02V [C2
- (O1),SGV(H2)]\\@
+ 1\1\GINC-BS001\FOpt\RMP2-FC\3-21G\H2O1\PNATT\14-Aug-2026\0\\# opt freq
+ =hpmodes mp2/3-21g geom=connectivity\\H2O - size1_C2v\\0,1\O,0.,0.,0.1
+ 269719753\H,0.,0.7854518019,-0.4740359877\H,0.,-0.7854518019,-0.474035
+ 9877\\Version=ES64L-G16RevC.01\State=1-A1\HF=-75.5850196\MP2=-75.70780
+ 12\RMSD=4.439e-09\RMSF=2.811e-05\Dipole=0.,0.,-0.9081879\PG=C02V [C2(O
+ 1),SGV(H2)]\\@
  The archive entry for this job was punched.
 
 
- FLOATING POINT NUMBERS ARE LIKE SANDPILES:
- EVERY TIME THAT YOU MOVE ONE, YOU LOSE A LITTLE SAND 
- AND YOU PICK UP A LITTLE DIRT.
- Job cpu time:       0 days  0 hours  0 minutes 33.5 seconds.
- Elapsed time:       0 days  0 hours  0 minutes  4.4 seconds.
+ WHERE THERE IS MUCH DESIRE TO LEARN, THERE OF NECESSITY WILL BE
+ MUCH ARGUING, MUCH WRITING, MANY OPINIONS; FOR OPINION IN GOOD MEN
+ IS BUT KNOWLEDGE IN THE MAKING. -- JOHN MILTON.
+ Job cpu time:       0 days  0 hours  0 minutes 33.0 seconds.
+ Elapsed time:       0 days  0 hours  0 minutes  4.3 seconds.
  File lengths (MBytes):  RWF=      6 Int=      0 D2E=      0 Chk=      1 Scr=      1
- Normal termination of Gaussian 16 at Fri Aug  7 15:49:56 2026.
+ Normal termination of Gaussian 16 at Fri Aug 14 18:18:38 2026.
  Link1:  Proceeding to internal job step number  2.
- --------------------------------------------------------------------
- #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk RMP2(FC)/3-21G* Freq
- --------------------------------------------------------------------
+ -------------------------------------------------------------------
+ #N Geom=AllCheck Guess=TCheck SCRF=Check GenChk RMP2(FC)/3-21G Freq
+ -------------------------------------------------------------------
  1/10=4,29=7,30=1,38=1,40=1/1,3;
  2/12=2,40=1/2;
- 3/5=5,7=1,11=1,14=-4,25=1,30=1,70=2,71=2,116=1,140=1/1,2,3;
+ 3/5=5,11=1,14=-4,25=1,30=1,70=2,71=2,116=1,140=1/1,2,3;
  4/5=101/1;
  5/5=2,38=6,98=1/2;
  8/6=3,8=1,10=1,19=11,30=-1/1;
@@ -963,7 +963,7 @@
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
  ---------------------------------------------------------------------
-      1          8           0       -0.000000   -0.000000    0.126972
+      1          8           0        0.000000   -0.000000    0.126972
       2          1           0        0.000000    0.785452   -0.474036
       3          1           0       -0.000000   -0.785452   -0.474036
  ---------------------------------------------------------------------
@@ -983,12 +983,12 @@
  Center     Atomic      Atomic             Coordinates (Angstroms)
  Number     Number       Type             X           Y           Z
  ---------------------------------------------------------------------
-      1          8           0       -0.000000    0.000000    0.120202
-      2          1           0       -0.000000    0.785452   -0.480806
+      1          8           0        0.000000    0.000000    0.120202
+      2          1           0        0.000000    0.785452   -0.480806
       3          1           0       -0.000000   -0.785452   -0.480806
  ---------------------------------------------------------------------
  Rotational constants (GHZ):         781.6044295         406.4086849         267.3799005
- Standard basis: 3-21G* (6D, 7F)
+ Standard basis: 3-21G (6D, 7F)
  There are     7 symmetry adapted cartesian basis functions of A1  symmetry.
  There are     0 symmetry adapted cartesian basis functions of A2  symmetry.
  There are     2 symmetry adapted cartesian basis functions of B1  symmetry.
@@ -1008,8 +1008,8 @@
  NBasis=    13 RedAO= T EigKep=  1.15D-01  NBF=     7     0     2     4
  NBsUse=    13 1.00D-06 EigRej= -1.00D+00 NBFU=     7     0     2     4
  Initial guess from the checkpoint file:  "H2O.chk"
- B after Tr=     0.000000    0.000000    0.000000
-         Rot=    1.000000    0.000000   -0.000000   -0.000000 Ang=   0.00 deg.
+ B after Tr=    -0.000000   -0.000000   -0.000000
+         Rot=    1.000000   -0.000000    0.000000   -0.000000 Ang=   0.00 deg.
  Initial guess orbital symmetries:
        Occupied  (A1) (A1) (B2) (A1) (B1)
        Virtual   (A1) (B2) (B2) (A1) (B1) (A1) (B2) (A1)
@@ -1160,23 +1160,23 @@
    XY=              0.0000   XZ=              0.0000   YZ=             -0.0000
  Octapole moment (field-independent basis, Debye-Ang**2):
   XXX=              0.0000  YYY=             -0.0000  ZZZ=             -1.1978  XYY=             -0.0000
-  XXY=             -0.0000  XXZ=             -0.2891  XZZ=             -0.0000  YZZ=             -0.0000
+  XXY=              0.0000  XXZ=             -0.2891  XZZ=             -0.0000  YZZ=             -0.0000
   YYZ=             -1.2601  XYZ=             -0.0000
  Hexadecapole moment (field-independent basis, Debye-Ang**3):
  XXXX=             -4.2559 YYYY=             -5.6947 ZZZZ=             -5.4898 XXXY=             -0.0000
  XXXZ=             -0.0000 YYYX=             -0.0000 YYYZ=             -0.0000 ZZZX=             -0.0000
  ZZZY=             -0.0000 XXYY=             -1.9221 XXZZ=             -1.6754 YYZZ=             -1.5295
  XXYZ=              0.0000 YYXZ=              0.0000 ZZXY=              0.0000
- N-N= 8.897762629563D+00 E-N=-1.974582538208D+02  KE= 7.534720475851D+01
- Symmetry A1   KE= 6.741230841386D+01
+ N-N= 8.897762629551D+00 E-N=-1.974582538208D+02  KE= 7.534720475851D+01
+ Symmetry A1   KE= 6.741230841385D+01
  Symmetry A2   KE= 0.000000000000D+00
- Symmetry B1   KE= 4.667967542232D+00
+ Symmetry B1   KE= 4.667967542234D+00
  Symmetry B2   KE= 3.266928802420D+00
-  Exact polarizability:       0.778       0.000       7.157       0.000      -0.000       4.117
+  Exact polarizability:       0.778       0.000       7.157       0.000       0.000       4.117
  Approx polarizability:       0.559       0.000       5.125       0.000       0.000       3.184
  Calling FoFJK, ICntrl=  10100127 FMM=F ISym2X=1 I1Cent= 0 IOpClX= 0 NMat=1 NMatS=1 NMatT=0.
  Full mass-weighted force constant matrix:
- Low frequencies ---  -26.8579  -26.4139  -25.5383   -0.0012   -0.0010    0.0011
+ Low frequencies ---  -26.8579  -26.4139  -25.5383   -0.0010   -0.0004    0.0006
  Low frequencies --- 1722.4734 3504.6214 3663.3250
  Diagonal vibrational polarizability:
         0.0000000       0.0000127       0.4541903
@@ -1192,8 +1192,8 @@
     IR Intensities ---    48.2376    7.6009    0.0063
  Coord Atom Element:
    1     1     8         -0.00000   0.00000  -0.00000
-   2     1     8          0.00000  -0.00000  -0.07059
-   3     1     8         -0.07477   0.04411  -0.00000
+   2     1     8          0.00000   0.00000  -0.07059
+   3     1     8         -0.07477   0.04411   0.00000
    1     2     1          0.00000   0.00000  -0.00000
    2     2     1          0.38106   0.61362   0.56017
    3     2     1          0.59330  -0.35000  -0.42863
@@ -1211,7 +1211,7 @@
  Frc consts  --      1.9082                 7.5042                 8.5592
  IR Inten    --     48.2376                 7.6009                 0.0063
   Atom  AN      X      Y      Z        X      Y      Z        X      Y      Z
-     1   8    -0.00   0.00  -0.07     0.00  -0.00   0.04    -0.00  -0.07  -0.00
+     1   8    -0.00   0.00  -0.07     0.00   0.00   0.04    -0.00  -0.07   0.00
      2   1     0.00   0.38   0.59     0.00   0.61  -0.35    -0.00   0.56  -0.43
      3   1     0.00  -0.38   0.59    -0.00  -0.61  -0.35     0.00   0.56   0.43
 
@@ -1226,9 +1226,9 @@
  Principal axes and moments of inertia in atomic units:
                            1         2         3
      Eigenvalues --     2.30902   4.44071   6.74973
-           X            0.00000   0.00000   1.00000
-           Y            1.00000   0.00000  -0.00000
-           Z            0.00000   1.00000   0.00000
+           X           -0.00000   0.00000   1.00000
+           Y            1.00000   0.00000   0.00000
+           Z           -0.00000   1.00000   0.00000
  This molecule is an asymmetric top.
  Rotational symmetry number  2.
  Rotational temperatures (Kelvin)     37.51110    19.50454    12.83221
@@ -1267,7 +1267,7 @@
  Center     Atomic                   Forces (Hartrees/Bohr)
  Number     Number              X              Y              Z
  -------------------------------------------------------------------
-      1        8          -0.000000000    0.000000000    0.000050179
+      1        8          -0.000000000   -0.000000000    0.000050179
       2        1          -0.000000000    0.000040836   -0.000025090
       3        1           0.000000000   -0.000040836   -0.000025090
  -------------------------------------------------------------------
@@ -1292,7 +1292,7 @@
  Linear search not attempted -- first point.
  Iteration  1 RMS(Cart)=  0.00007434 RMS(Int)=  0.00000000
  Iteration  2 RMS(Cart)=  0.00000000 RMS(Int)=  0.00000000
- ClnCor:  largest displacement from symmetrization is 8.67D-16 for atom     3.
+ ClnCor:  largest displacement from symmetrization is 3.51D-17 for atom     1.
  Variable       Old X    -DE/DX   Delta X   Delta X   Delta X     New X
                                  (Linear)    (Quad)   (Total)
     R1        1.86896   0.00005   0.00000   0.00011   0.00011   1.86907
@@ -1345,7 +1345,7 @@
  ----------------------------------------------------------------------
 
  Dipole orientation:
-     8         -0.00000000          0.00000000         -0.23994226
+     8         -0.00000000         -0.00000000         -0.23994226
      1          0.00000000         -1.48428879          0.89579819
      1         -0.00000000          1.48428879          0.89579819
 
@@ -1372,29 +1372,30 @@
 
  ----------------------------------------------------------------------
  Unable to Open any file for archive entry.
- 1\1\GINC-BS001\Freq\RMP2-FC\3-21G*\H2O1\PNATT\07-Aug-2026\0\\#N Geom=A
- llCheck Guess=TCheck SCRF=Check GenChk RMP2(FC)/3-21G* Freq\\H2O - siz
- e1_C2v\\0,1\O,0.,0.,0.1269719753\H,0.,0.7854518019,-0.4740359877\H,0.,
- -0.7854518019,-0.4740359877\\Version=ES64L-G16RevC.01\State=1-A1\HF=-7
- 5.5850196\MP2=-75.7078012\RMSD=3.063e-10\RMSF=2.811e-05\ZeroPoint=0.02
- 02539\Thermal=0.0230883\ETot=-75.6847129\HTot=-75.6837687\GTot=-75.705
- 2676\Dipole=0.,0.,-0.9081879\DipoleDeriv=-0.7996439,0.,0.,0.,-0.276314
- 1,0.,0.,0.,-0.193435,0.3998219,0.,0.,0.,0.1381571,0.1353872,0.,0.20021
- 94,0.0967175,0.3998219,0.,0.,0.,0.1381571,-0.1353872,0.,-0.2002194,0.0
- 967175\Polar=0.7778678,0.,7.157062,0.,0.,4.1167314\PG=C02V [C2(O1),SGV
- (H2)]\NImag=0\\-0.00004418,0.,0.59809153,0.,0.,0.37018501,0.00002209,0
- .,0.,-0.00002480,0.,-0.29904576,0.14831786,0.,0.33611526,0.,0.22883920
- ,-0.18509250,0.,-0.18857853,0.18008350,0.00002209,0.,0.,0.00000271,0.,
- 0.,-0.00002480,0.,-0.29904576,-0.14831786,0.,-0.03706950,-0.04026067,0
- .,0.33611526,0.,-0.22883920,-0.18509250,0.,0.04026067,0.00500901,0.,0.
- 18857853,0.18008350\\0.,0.,-0.00005018,0.,-0.00004084,0.00002509,0.,0.
- 00004084,0.00002509\\\@
+ 1\1\GINC-BS001\Freq\RMP2-FC\3-21G\H2O1\PNATT\14-Aug-2026\0\\#N Geom=Al
+ lCheck Guess=TCheck SCRF=Check GenChk RMP2(FC)/3-21G Freq\\H2O - size1
+ _C2v\\0,1\O,0.,0.,0.1269719753\H,0.,0.7854518019,-0.4740359877\H,0.,-0
+ .7854518019,-0.4740359877\\Version=ES64L-G16RevC.01\State=1-A1\HF=-75.
+ 5850196\MP2=-75.7078012\RMSD=3.063e-10\RMSF=2.811e-05\ZeroPoint=0.0202
+ 539\Thermal=0.0230883\ETot=-75.6847129\HTot=-75.6837687\GTot=-75.70526
+ 76\Dipole=0.,0.,-0.9081879\DipoleDeriv=-0.7996439,0.,0.,0.,-0.2763141,
+ 0.,0.,0.,-0.193435,0.3998219,0.,0.,0.,0.1381571,0.1353872,0.,0.2002194
+ ,0.0967175,0.3998219,0.,0.,0.,0.1381571,-0.1353872,0.,-0.2002194,0.096
+ 7175\Polar=0.7778678,0.,7.157062,0.,0.,4.1167314\PG=C02V [C2(O1),SGV(H
+ 2)]\NImag=0\\-0.00004418,0.,0.59809153,0.,0.,0.37018501,0.00002209,0.,
+ 0.,-0.00002480,0.,-0.29904576,0.14831786,0.,0.33611526,0.,0.22883920,-
+ 0.18509250,0.,-0.18857853,0.18008350,0.00002209,0.,0.,0.00000271,0.,0.
+ ,-0.00002480,0.,-0.29904576,-0.14831786,0.,-0.03706950,-0.04026067,0.,
+ 0.33611526,0.,-0.22883920,-0.18509250,0.,0.04026067,0.00500901,0.,0.18
+ 857853,0.18008350\\0.,0.,-0.00005018,0.,-0.00004084,0.00002509,0.,0.00
+ 004084,0.00002509\\\@
  The archive entry for this job was punched.
 
 
- There was a great rattling of the words for the fewness of ideas.
-                   -- Charles Baxter in Gryphon
- Job cpu time:       0 days  0 hours  0 minutes 17.5 seconds.
- Elapsed time:       0 days  0 hours  0 minutes  2.2 seconds.
+ HOW IS IT THAT THE SKY FEEDS THE STARS?
+
+                           -- LUCRETIUS
+ Job cpu time:       0 days  0 hours  0 minutes 17.6 seconds.
+ Elapsed time:       0 days  0 hours  0 minutes  2.3 seconds.
  File lengths (MBytes):  RWF=     19 Int=      0 D2E=      0 Chk=      1 Scr=      1
- Normal termination of Gaussian 16 at Fri Aug  7 15:49:58 2026.
+ Normal termination of Gaussian 16 at Fri Aug 14 18:18:41 2026.

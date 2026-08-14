@@ -1,6 +1,6 @@
 
-missing of returns in file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt
-Veda create new C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt, old file --> C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt.old 0 1 2 3 4 5 6 7 8 9 10 11 12
+missing of returns in file C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\oDifluorobenzene\odifluorobenzene_fchk.fmt
+Veda create new C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\oDifluorobenzene\odifluorobenzene_fchk.fmt, old file --> C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\oDifluorobenzene\odifluorobenzene_fchk.fmt.old 0 1 2 3 4 5 6 7 8 9 10 11 12
 ##########
 Coordinates of  12 atoms have been read
   1   9   F    0.000000    1.376794    1.736915   18.998403
@@ -15,8 +15,8 @@ Coordinates of  12 atoms have been read
  10   1   H    0.000000    1.251909   -2.826406    1.007825
  11   1   H    0.000000   -1.251909   -2.826406    1.007825
  12   1   H    0.000000   -2.485375   -0.640347    1.007825
-the matrix F has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt
-atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmt
+the matrix F has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\oDifluorobenzene\odifluorobenzene_fchk.fmt
+atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\oDifluorobenzene\odifluorobenzene_fchk.fmt
 
 connection matrix MPO has been created: file skra.mpo
  3. C 2: F 1, C 3, C 7
@@ -25,8 +25,8 @@ connection matrix MPO has been created: file skra.mpo
  3. C 5: C 4, C 6, H 11
  3. C 6: C 5, C 7, H 12
  3. C 7: C 2, C 6, F 8
-copy skra.mpo --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\odifluorobenzene_fchk\odifluorobenzene_fchk.mpo
-File C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\oDifluorobenzene_fchk\odifluorobenzene_fchk.fmv was created
+copy skra.mpo --> c:\users\yourname\downloads\ped_inputs_3-21g\c2v\odifluorobenzene\odifluorobenzene_fchk.mpo
+File C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\oDifluorobenzene\odifluorobenzene_fchk.fmv was created
 create DD2 file due to atoms connection in MPO
 ring No.  1 ... 
   ... broken  6 5
@@ -163,16 +163,16 @@ coordinate No. 30
 Strong Normalize .. NOT
 Strong Reduce CC. NOT            
 Cycle at the End . . NOT
-time of optimization [min] : 0.13
+time of optimization [min] : 0.12
 CALCULATION VEDA4, cycle No.  1
 linear dependence of B matrix is checked
 transformation F to internal coordinates 
 scaling;  eigenvectors  &  eigenvalues
 3244.37  3238.91  3225.35  3210.69  1624.53  1610.05  1556.69  1504.04  1336.91  1321.87  1320.19  1259.00  1233.43  1142.18  1045.82   945.76   940.94   891.38   873.94   782.65   769.93   710.41   599.41   574.53   549.25   486.00   439.81   307.90   273.78   193.76
 diagonality factor = 68.40  <EPm>=67.47   improve<EPm>=32.69
-PED/TED saved in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\odifluorobenzene_fchk\odifluorobenzene_fchk.ved
+PED/TED saved in c:\users\yourname\downloads\ped_inputs_3-21g\c2v\odifluorobenzene\odifluorobenzene_fchk.ved
 TED Above 100 Factor TAF=0.381
-(PED abbreviation in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\odifluorobenzene_fchk\odifluorobenzene_fchk.vdf)
-skra.dd2 --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\odifluorobenzene_fchk\odifluorobenzene_fchk.dd2
-calculation time [sec] : 0.35 - 0.24
+(PED abbreviation in c:\users\yourname\downloads\ped_inputs_3-21g\c2v\odifluorobenzene\odifluorobenzene_fchk.vdf)
+skra.dd2 --> c:\users\yourname\downloads\ped_inputs_3-21g\c2v\odifluorobenzene\odifluorobenzene_fchk.dd2
+calculation time [sec] : 0.25 - 0.15
 END of CYCLE  1

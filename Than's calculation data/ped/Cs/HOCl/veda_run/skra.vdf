@@ -1,13 +1,13 @@
 abbreviation of: skra.ved
-IR spectrum from file: C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\HOCl_fchk\hocl_fchk.fmt
-diagonality factor = 81.01   <EPm> = 99.48
+IR spectrum from file: C:\Users\YourName\Downloads\PED_inputs_3-21G\Cs\HOCl\hocl_fchk.fmt
+diagonality factor = 80.86   <EPm> = 99.35
     IR      CM-1
-  15.33  3393.66   s1 100
-  51.63  1291.14   s3 99
-   0.27   687.19   s2 99
+   8.03  3368.54   s1 100
+  53.16  1256.00   s3 99
+   0.50   667.64   s2 99
 
 Frequencies/PED calculated by Veda
 definitions of modes skra.dd2
-s  1   STRE OH   f3394 100
-s  2   STRE ClO   f687 99
-s  3   BEND HOCl   f1291 99
+s  1   STRE OH   f3369 100
+s  2   STRE ClO   f668 99
+s  3   BEND HOCl   f1256 99

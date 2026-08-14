@@ -1,6 +1,6 @@
 
-missing of returns in file C:\Users\YourName\Downloads\XeF2Cl2_bent2_fchk\xef2cl2_bent2_fchk.fmt
-Veda create new C:\Users\YourName\Downloads\XeF2Cl2_bent2_fchk\xef2cl2_bent2_fchk.fmt, old file --> C:\Users\YourName\Downloads\XeF2Cl2_bent2_fchk\xef2cl2_bent2_fchk.fmt.old 0 1 2 3 4 5
+missing of returns in file C:\Users\YourName\Downloads\PED_inputs_3-21G\D2h\XeF2Cl2_3-21Gstar\xef2cl2_bent2_fchk.fmt
+Veda create new C:\Users\YourName\Downloads\PED_inputs_3-21G\D2h\XeF2Cl2_3-21Gstar\xef2cl2_bent2_fchk.fmt, old file --> C:\Users\YourName\Downloads\PED_inputs_3-21G\D2h\XeF2Cl2_3-21Gstar\xef2cl2_bent2_fchk.fmt.old 0 1 2 3 4 5
 ##########
 Coordinates of  5 atoms have been read
   1  54  Xe    0.000000    0.000000    0.000000  131.904200
@@ -8,13 +8,13 @@ Coordinates of  5 atoms have been read
   3   9   F    0.000000   -1.974955    0.000000   18.998403
   4  17  Cl    0.000000    0.088674    2.539291   34.968853
   5  17  Cl    0.000000    0.000000   -2.540839   34.968853
-the matrix F has been read from file C:\Users\YourName\Downloads\XeF2Cl2_bent2_fchk\xef2cl2_bent2_fchk.fmt
-atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\XeF2Cl2_bent2_fchk\xef2cl2_bent2_fchk.fmt
+the matrix F has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\D2h\XeF2Cl2_3-21Gstar\xef2cl2_bent2_fchk.fmt
+atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\D2h\XeF2Cl2_3-21Gstar\xef2cl2_bent2_fchk.fmt
 
 connection matrix MPO has been created: file skra.mpo
  4. Xe 1: F 2, F 3, Cl 4, Cl 5
-copy skra.mpo --> c:\users\yourname\downloads\xef2cl2_bent2_fchk\xef2cl2_bent2_fchk.mpo
-File C:\Users\YourName\Downloads\XeF2Cl2_bent2_fchk\xef2cl2_bent2_fchk.fmv was created
+copy skra.mpo --> c:\users\yourname\downloads\ped_inputs_3-21g\d2h\xef2cl2_3-21gstar\xef2cl2_bent2_fchk.mpo
+File C:\Users\YourName\Downloads\PED_inputs_3-21G\D2h\XeF2Cl2_3-21Gstar\xef2cl2_bent2_fchk.fmv was created
 create DD2 file due to atoms connection in MPO
 stretching 4, bending 3, torsion 0, out-of-plane 2
 regarded 0 rings, 0 XY3 non-flat groups
@@ -90,9 +90,9 @@ transformation F to internal coordinates
 scaling;  eigenvectors  &  eigenvalues
 674.47   560.06   335.41   249.44   223.90   185.58   153.06    98.17    86.28
 diagonality factor = 90.22  <EPm>=96.03   improve<EPm>=21.25
-PED/TED saved in c:\users\yourname\downloads\xef2cl2_bent2_fchk\xef2cl2_bent2_fchk.ved
+PED/TED saved in c:\users\yourname\downloads\ped_inputs_3-21g\d2h\xef2cl2_3-21gstar\xef2cl2_bent2_fchk.ved
 TED Above 100 Factor TAF=0.000
-(PED abbreviation in c:\users\yourname\downloads\xef2cl2_bent2_fchk\xef2cl2_bent2_fchk.vdf)
-skra.dd2 --> c:\users\yourname\downloads\xef2cl2_bent2_fchk\xef2cl2_bent2_fchk.dd2
-calculation time [sec] : 0.14 - 0.11
+(PED abbreviation in c:\users\yourname\downloads\ped_inputs_3-21g\d2h\xef2cl2_3-21gstar\xef2cl2_bent2_fchk.vdf)
+skra.dd2 --> c:\users\yourname\downloads\ped_inputs_3-21g\d2h\xef2cl2_3-21gstar\xef2cl2_bent2_fchk.dd2
+calculation time [sec] : 0.12 - 0.07
 END of CYCLE  1

@@ -1,6 +1,6 @@
 
-missing of returns in file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Acetone_fchk\acetone_fchk.fmt
-Veda create new C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Acetone_fchk\acetone_fchk.fmt, old file --> C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Acetone_fchk\acetone_fchk.fmt.old 0 1 2 3 4 5 6 7 8 9 10
+missing of returns in file C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\Acetone\acetone_fchk.fmt
+Veda create new C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\Acetone\acetone_fchk.fmt, old file --> C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\Acetone\acetone_fchk.fmt.old 0 1 2 3 4 5 6 7 8 9 10
 ##########
 Coordinates of  10 atoms have been read
   1   6   C    0.000000    1.290616   -0.635718   12.000000
@@ -13,15 +13,15 @@ Coordinates of  10 atoms have been read
   8   1   H   -0.887340   -1.326520   -1.278250    1.007825
   9   1   H    0.887340   -1.326520   -1.278250    1.007825
  10   1   H    0.000000   -2.145920    0.043739    1.007825
-the matrix F has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Acetone_fchk\acetone_fchk.fmt
-atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Acetone_fchk\acetone_fchk.fmt
+the matrix F has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\Acetone\acetone_fchk.fmt
+atom displacement matrix ADM has been read from file C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\Acetone\acetone_fchk.fmt
 
 connection matrix MPO has been created: file skra.mpo
  4. C 1: C 2, H 5, H 6, H 7
  4. C 4: C 2, H 8, H 9, H 10
  3. C 2: C 1, O 3, C 4
-copy skra.mpo --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\acetone_fchk\acetone_fchk.mpo
-File C:\Users\YourName\Downloads\ped_inputs-20260813T073020Z-1-001\ped_inputs\Acetone_fchk\acetone_fchk.fmv was created
+copy skra.mpo --> c:\users\yourname\downloads\ped_inputs_3-21g\c2v\acetone\acetone_fchk.mpo
+File C:\Users\YourName\Downloads\PED_inputs_3-21G\C2v\Acetone\acetone_fchk.fmv was created
 create DD2 file due to atoms connection in MPO
 stretching 9, bending 8, torsion 6, out-of-plane 1
 regarded 0 rings, 2 XY3 non-flat groups
@@ -33,7 +33,7 @@ Preoptimization: file  skra.dd2
 TED < 150 has been achieved
 OPT 0  <EPm>=35.03  delta=35.03
 ============================================================
-Optimization START <EPm> = 35.0342690973184
+Optimization START <EPm> = 35.0342691362578
 Base optimization for EPm < 75
 Fine Optimization  . NOT  (for EPm < 90)
    TED near 100 . .  NOT
@@ -155,9 +155,9 @@ transformation F to internal coordinates
 scaling;  eigenvectors  &  eigenvalues
 3192.70  3191.50  3157.03  3150.36  3088.67  3084.34  1672.67  1591.92  1572.73  1566.55  1559.33  1467.24  1458.07  1236.54  1177.79  1119.26   967.06   915.96   753.40   513.31   508.05   383.06   170.34   117.59
 diagonality factor = 74.01  <EPm>=73.60   improve<EPm>=38.57
-PED/TED saved in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\acetone_fchk\acetone_fchk.ved
+PED/TED saved in c:\users\yourname\downloads\ped_inputs_3-21g\c2v\acetone\acetone_fchk.ved
 TED Above 100 Factor TAF=0.522
-(PED abbreviation in c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\acetone_fchk\acetone_fchk.vdf)
-skra.dd2 --> c:\users\yourname\downloads\ped_inputs-20260813t073020z-1-001\ped_inputs\acetone_fchk\acetone_fchk.dd2
-calculation time [sec] : 0.26 - 0.17
+(PED abbreviation in c:\users\yourname\downloads\ped_inputs_3-21g\c2v\acetone\acetone_fchk.vdf)
+skra.dd2 --> c:\users\yourname\downloads\ped_inputs_3-21g\c2v\acetone\acetone_fchk.dd2
+calculation time [sec] : 0.20 - 0.12
 END of CYCLE  1

@@ -1,7 +1,7 @@
 %mem=8GB
 %nprocshared=8
 %chk=HOCl.chk
-# opt freq=hpmodes mp2/3-21g* geom=connectivity
+# opt freq=hpmodes mp2/3-21g geom=connectivity
 
 HOCl - size1_Cs
 

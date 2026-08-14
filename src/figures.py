@@ -63,6 +63,7 @@ from src.classifier import (
     Thresholds, classification_bucket,
     is_clean_external, is_mixed_external, external_axis,
 )
+from src.csv_label_ingest import TYPE_TO_REF_LABEL
 
 # --------------------------------------------------------------------------
 # Shared house style
@@ -1629,6 +1630,9 @@ def plot_irrep_coupling(
     internal["mode"] = internal["mode"].astype("Int64")
 
     df = cm.merge(internal, on=["molecule", "mode"], how="inner")
+    # cm['type'] is the abbreviated "B"/"S"/"SB" storage form; normalize to
+    # the full words the categories tuples below match against.
+    df["type"] = df["type"].map(TYPE_TO_REF_LABEL).fillna(df["type"])
     df = df[df["molecule"].isin(nonideal_molecules)]
     df = df.dropna(subset=["|d_CA|"])  # multi-centre/no-central-atom rows
 

@@ -6,8 +6,10 @@
   mode index). Engine-derivable columns (``freq``/``mu``/``k``) are
   regenerated from disk by ``src.library_ingest.regenerate_characterised_
   modes()``, while manually-curated literature columns are preserved --
-  ``type`` (the literature ``ref_label``: ``"bend"``/``"stretch"``/``"SB"``,
-  the last a genuine 3rd class for two benzene modes) and ``ref`` (a citation
+  ``type`` (the literature ``ref_label``, stored abbreviated as
+  ``"B"``/``"S"``/``"SB"`` -- translated to ``"bend"``/``"stretch"``/``"SB"``
+  by ``_filtered_ref_label()`` below; ``"SB"`` is a genuine 3rd class for two
+  benzene modes) and ``ref`` (a citation
   key, e.g. ``"Shi1972"``; only partially back-filled, not a bug).
 - ``ref-label_citation.csv``: citation key -> bibliographic metadata (doi,
   1st author, journal, year, note).
@@ -42,6 +44,12 @@ import pandas as pd
 # blanks) in the 'type' column maps to None rather than being accepted silently.
 ALLOWED_REF_LABELS = ("bend", "stretch", "SB")
 
+# characterised_modes.csv's 'type' column stores the abbreviated form
+# ("B"/"S"/"SB"); ref_label (consumed by calibrate.py/figures.py) stays the
+# full word internally. Public so any other direct reader of the raw CSV
+# (e.g. src/figures.py's irrep-coupling figure) can normalize the same way.
+TYPE_TO_REF_LABEL = {"B": "bend", "S": "stretch", "SB": "SB"}
+
 LABEL_CSV_FILES = {
     "characterised_modes": "characterised_modes.csv",
     "citations": "ref-label_citation.csv",
@@ -62,7 +70,8 @@ def _filtered_ref_label(raw_type):
     if pd.isna(raw_type):
         return None
     raw_type = str(raw_type).strip()
-    return raw_type if raw_type in ALLOWED_REF_LABELS else None
+    ref_label = TYPE_TO_REF_LABEL.get(raw_type, raw_type)
+    return ref_label if ref_label in ALLOWED_REF_LABELS else None
 
 
 def build_label_lookup(tables):

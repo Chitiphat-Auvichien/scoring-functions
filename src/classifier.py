@@ -44,7 +44,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from src.scoring import format_bond_map
+from src.scoring import format_bond_map, DEFAULT_V_WEIGHTING
 
 # Phase-3 calibration output (src/calibrate.py); Thresholds() below is the
 # explicit hardcoded fallback used if this file doesn't exist yet.
@@ -133,6 +133,11 @@ class Thresholds:
     tau_TR : purity bar for a clean external (near 1; PDF example 0.95).
     tau_S  : stretching bar on s[V_S] (>= -> STRETCHING).
     tau_B  : bending bar on s[V_S] (<= -> BENDING); also gate 2 of Step 3.
+    v_weighting : which eq:vscore bond weighting these thresholds were
+        calibrated against ('mu' or 'none'), or '*' to match any. tau_S and
+        tau_B are read off an s[V_S] distribution, so they are only meaningful
+        against the definition that produced it -- classify_all_modes() refuses
+        a mismatch rather than silently mislabelling modes.
 
     Defaults (0.95/0.9/0.2) are the provisional pre-calibration constants,
     deliberately NOT auto-overwritten by Phase-3 calibration -- use
@@ -144,6 +149,7 @@ class Thresholds:
     tau_TR: float = 0.95
     tau_S: float = 0.9
     tau_B: float = 0.2
+    v_weighting: str = DEFAULT_V_WEIGHTING
 
     @classmethod
     def calibrated(cls, path=DEFAULT_CALIBRATION_PATH):
@@ -151,8 +157,24 @@ class Thresholds:
         if os.path.exists(path):
             with open(path) as f:
                 data = json.load(f)
-            return cls(tau_TR=data["tau_TR"], tau_S=data["tau_S"], tau_B=data["tau_B"])
+            # A thresholds.json written before the weighting variant existed
+            # carries no stamp, and was by definition calibrated unweighted.
+            return cls(tau_TR=data["tau_TR"], tau_S=data["tau_S"], tau_B=data["tau_B"],
+                       v_weighting=data.get("v_weighting", "none"))
         return cls()
+
+    @classmethod
+    def bootstrap(cls):
+        """Provisional thresholds that match ANY weighting (sentinel '*').
+
+        Needed for the chicken-and-egg first pass after switching variants:
+        building library_scores.csv requires thresholds, but the calibrated
+        ones are still stamped for the old definition. Safe because tau_S/tau_B
+        derivation reads V_Stretch only and is itself threshold-independent --
+        only the provisional pass's predicted_label column is affected, which
+        is why --library is run again after --calibrate.
+        """
+        return cls(v_weighting="*")
 
 
 def is_linear(scorer, tol=LINEAR_TOL):
@@ -189,6 +211,27 @@ def _score_slot(scores, slot):
     return scores[axis_type][axis]
 
 
+def _assert_weighting_match(scorer, thresholds):
+    """Refuse to classify when the thresholds were calibrated against a
+    different V-score definition than the scorer is producing.
+
+    tau_S/tau_B are cut points on an s[V_S] distribution, so pairing them with
+    the other definition shifts every stretch/bend boundary silently -- the
+    modes would still be labelled, just wrongly. Every pipeline funnels through
+    classify_all_modes(), so this one check covers them all.
+    """
+    if thresholds.v_weighting in ("*", scorer.v_weighting):
+        return
+    raise ValueError(
+        f"V-score definition mismatch: thresholds were calibrated with "
+        f"v_weighting={thresholds.v_weighting!r} but this scorer is using "
+        f"{scorer.v_weighting!r}. tau_S/tau_B are cut points on the s[V_S] "
+        f"distribution, so mixing the two silently mislabels stretches and "
+        f"bends. Either re-run `python main.py --library --calibrate` under "
+        f"the current weighting, or score with "
+        f"`--v-weighting {thresholds.v_weighting}`.")
+
+
 def classify_all_modes(scorer, final, thresholds=None):
     """Algorithm 1: score every mode, globally assign externals (Step 2:
     plain Hungarian assignment, no degenerate-axis special-casing -- Decision
@@ -210,6 +253,7 @@ def classify_all_modes(scorer, final, thresholds=None):
     'annotation' is "vibration=<vib_label>" for mixed-external modes, "" otherwise.
     """
     thresholds = thresholds or Thresholds.calibrated()
+    _assert_weighting_match(scorer, thresholds)
     n_T, n_R, slots = external_slots(scorer)
 
     # ---- Step 1: score every mode (+ per-bond s_AB) ----

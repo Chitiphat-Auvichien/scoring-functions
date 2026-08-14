@@ -48,7 +48,7 @@ import pandas as pd
 
 from src import csv_label_ingest
 from src.parser import GaussianParser
-from src.scoring import format_bond_map
+from src.scoring import format_bond_map, get_v_weighting
 from src.utils import find_file
 
 _EXTERNAL_SLOTS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
@@ -68,6 +68,9 @@ SCHEMA_COLUMNS = [
     # hub atom (_central_atom_index()); null otherwise (external rows,
     # multi-centre molecules, no-unique-hub cases).
     "d_CA",
+    # Which eq:vscore bond weighting produced V_Stretch/s_AB on this row, so
+    # the CSV is self-describing about its own scoring definition.
+    "v_weighting",
 ]
 
 
@@ -203,6 +206,7 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None, mol_type=Non
                 "d_CA": None,  # central-atom amplitude is an INTERNAL-mode
                                 # quantity only; construct_T/construct_R
                                 # slots never set it.
+                "v_weighting": scorer.v_weighting,
             })
             continue
 
@@ -242,6 +246,7 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None, mol_type=Non
             "force_constant": m.get("force_constant"),
             "irrep": m.get("irrep"),
             "d_CA": d_ca,
+            "v_weighting": scorer.v_weighting,
         })
     return rows
 
@@ -455,6 +460,33 @@ def _build_library_scores(data_dir, thresholds, return_skip_report):
     return df
 
 
+def _thresholds_for_current_weighting():
+    """Calibrated thresholds if they match the active V-score weighting, else
+    provisional bootstrap ones with a warning.
+
+    Breaks the chicken-and-egg after a variant switch: this pass has to score
+    the library to produce the distribution the new tau_S/tau_B are derived
+    FROM, but the thresholds.json on disk is still stamped for the old
+    definition and classify_all_modes() would refuse it. Only the
+    predicted_label column depends on thresholds -- V_Stretch, which drives the
+    derivation, does not -- so a provisional pass is sound, and --library is
+    re-run after --calibrate to make the labels consistent.
+    """
+    from src.classifier import Thresholds
+
+    thresholds = Thresholds.calibrated()
+    active = get_v_weighting()
+    if thresholds.v_weighting not in ("*", active):
+        warnings.warn(
+            f"thresholds.json is calibrated for v_weighting="
+            f"{thresholds.v_weighting!r} but scoring is running under "
+            f"{active!r}; using provisional bootstrap thresholds for this pass. "
+            f"Run --calibrate next, then --library again so predicted_label "
+            f"reflects the recalibrated cut points.")
+        return Thresholds.bootstrap()
+    return thresholds
+
+
 def build_library_scores(data_dir="data", thresholds=None, return_skip_report=False):
     """Build the library_scores DataFrame: real-engine recompute for every
     one of the 77 mol_list_method.csv roster molecules. Returns a DataFrame
@@ -463,6 +495,8 @@ def build_library_scores(data_dir="data", thresholds=None, return_skip_report=Fa
     Raises FileNotFoundError if any roster row's .log/.gjf pair is missing
     from disk (see _build_library_scores / check_roster_disk_consistency).
     """
+    if thresholds is None:
+        thresholds = _thresholds_for_current_weighting()
     return _build_library_scores(data_dir, thresholds, return_skip_report)
 
 

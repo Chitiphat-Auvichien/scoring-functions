@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 
 from src.classifier import Thresholds, is_clean_external
+from src.scoring import get_v_weighting
 from src.library_ingest import (
     build_library_scores, resolve_log_basename, _EXTERNAL_SLOTS,
     multi_centre_molecules, out_of_calibration_scope_molecules,
@@ -148,7 +149,10 @@ def sweep_tau_tr(lib_df, tau_S, tau_B, data_dir="data", tau_grid=DEFAULT_TAU_GRI
     records = []
     prev_labels = None
     for tau_TR in tau_grid:
-        th = Thresholds(tau_TR=tau_TR, tau_S=tau_S, tau_B=tau_B)
+        # Match whatever weighting the pool's scorers were built with, so a
+        # `--v-weighting none --calibrate` run doesn't trip its own guard.
+        th = Thresholds(tau_TR=tau_TR, tau_S=tau_S, tau_B=tau_B,
+                        v_weighting=get_v_weighting())
         labels = {}
         correct = 0
         total = 0
@@ -219,9 +223,14 @@ def calibrate(lib_df, data_dir="data", tau_grid=DEFAULT_TAU_GRID, preferred_tau_
     tau_TR, plateau = freeze_tau_tr(sweep_df, preferred_tau_tr)
 
     n_pool = len(_geometry_pool_molecules(lib_df, data_dir))
-    thresholds = Thresholds(tau_TR=tau_TR, tau_S=tau_S, tau_B=tau_B)
+    weighting = get_v_weighting()
+    thresholds = Thresholds(tau_TR=tau_TR, tau_S=tau_S, tau_B=tau_B,
+                            v_weighting=weighting)
     result = {
         "tau_TR": tau_TR, "tau_S": tau_S, "tau_B": tau_B,
+        # Which eq:vscore definition these cut points were read off. Scoring
+        # runs under a different weighting are refused, not silently relabelled.
+        "v_weighting": weighting,
         "plateau_tau_TR_range": list(plateau),
         "plateau_criterion": (
             "Longest contiguous run of the tau_TR grid (step 0.005, 0.05-0.999) "

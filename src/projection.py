@@ -82,7 +82,10 @@ def build_reference_basis(scorer, final_normal, thresholds=None):
       "weights" : the mass_weights_from_scorer(scorer) vector (reused so the
                   EMIT side mass-weights identically).
     """
-    thresholds = thresholds or Thresholds()
+    # v_weighting="*": this only buckets reference modes by vib_label(), it
+    # never goes through classify_all_modes' guard, and the provisional
+    # tau_S/tau_B here are deliberately definition-agnostic.
+    thresholds = thresholds or Thresholds(v_weighting="*")
     weights = mass_weights_from_scorer(scorer)
     Q = _mass_weighted_unit_columns(final_normal, weights)
 

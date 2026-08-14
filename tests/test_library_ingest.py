@@ -417,11 +417,14 @@ def test_out_of_calibration_scope_molecules_is_c6h6_plus_the_9_test_molecules():
 
 
 def test_schema_columns_includes_mu_k_irrep_and_d_ca():
-    """reduced_mass/force_constant/irrep (2026-07-08 parser rework) and d_CA
-    (2026-07-08 data_score.csv retirement) are appended to the end of the
-    locked schema -- purely additive, existing columns untouched."""
-    assert SCHEMA_COLUMNS[-4:] == ["reduced_mass", "force_constant", "irrep", "d_CA"]
-    assert SCHEMA_COLUMNS[:-4] == [
+    """reduced_mass/force_constant/irrep (2026-07-08 parser rework), d_CA
+    (2026-07-08 data_score.csv retirement) and v_weighting (2026-08-14
+    reduced-mass V-score variant) are appended to the end of the locked
+    schema -- purely additive, existing columns untouched."""
+    assert SCHEMA_COLUMNS[-5:] == [
+        "reduced_mass", "force_constant", "irrep", "d_CA", "v_weighting",
+    ]
+    assert SCHEMA_COLUMNS[:-5] == [
         "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
         "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
         "predicted_label", "predicted_annotation",

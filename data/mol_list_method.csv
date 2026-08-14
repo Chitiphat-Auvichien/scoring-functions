@@ -78,7 +78,7 @@ test,trigonal pyramidal,C3v,C3O3H6,TRUE,,
 test,bend,C2v,H2O,TRUE,,
 test,bend,C2v,CH3COCH3,TRUE,,
 test,bend,C2v,C6H4F2,TRUE,,
-test,D2h,D2h,XeF2Cl2,TRUE,,
+test,D2h,D2h,XeF2Cl2,FALSE,MP2/3-21g*,convergence issue
 test,D2h,D2h,C2H4,TRUE,,
 test,D2h,D2h,C10H8,TRUE,,
 test,Cs,Cs,HOCl,TRUE,,

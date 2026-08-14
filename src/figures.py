@@ -2484,11 +2484,15 @@ def _collapse_degenerate_freqs(df, value_cols, freq_col="Freq", label_col=None,
     return out.drop(columns=["_gid"])
 
 
-def _quadratic_fit_r2(x, y):
-    """Least-squares quadratic fit y ~ polyval(coeffs, x); return
-    (coeffs, r2), matching the np.polyfit + manual-R^2 pattern used
-    throughout this module (see plot_gaussian_nbasis_scaling)."""
-    coeffs = np.polyfit(x, y, 2)
+def _linear_fit_r2(x, y):
+    """Ordinary least-squares straight-line fit y ~ slope*x + intercept;
+    return ((slope, intercept), r2), matching the np.polyfit + manual-R^2
+    pattern used throughout this module (see plot_gaussian_nbasis_scaling).
+
+    Returned in np.polyfit/np.polyval coefficient order (highest power
+    first), so callers plot it with np.polyval exactly as before.
+    """
+    coeffs = np.polyfit(x, y, 1)
     pred = np.polyval(coeffs, x)
     r2 = 1 - np.sum((y - pred) ** 2) / np.sum((y - y.mean()) ** 2)
     return coeffs, r2
@@ -2504,8 +2508,8 @@ def plot_ped_vs_vscore(
     molecule-level stretch score s[V_S] (``V_Stretch``), one point per
     physical frequency (degenerate modes averaged together via
     _collapse_degenerate_freqs -- see its docstring) of
-    combined_ped_vs_scores.csv, fit with a quadratic (least squares,
-    reported with R^2) summarizing the overall trend. Points colored/
+    combined_ped_vs_scores.csv, fit with a straight line (ordinary least
+    squares, reported with R^2) summarizing the overall trend. Points colored/
     colored by this framework's own S/B/SB classify_all_modes label (the
     csv's own `label` column), reusing CATEGORY_COLOR/CATEGORY_LABEL as-is
     via _LABEL_CODE_TO_CATEGORY. One marker shape (circle) for all points --
@@ -2541,11 +2545,11 @@ def plot_ped_vs_vscore(
 
     x = df["PED_Stretch_pct"].to_numpy(float)
     y = df["V_Stretch"].to_numpy(float)
-    coeffs, r2 = _quadratic_fit_r2(x, y)
+    coeffs, r2 = _linear_fit_r2(x, y)
     xx = np.linspace(x.min(), x.max(), 200)
     ax.plot(xx, np.polyval(coeffs, xx), ls="--", lw=1.2,
             color=COLORS["threshold"], zorder=4,
-            label=f"quadratic fit ($R^2$={r2:.2f})")
+            label=f"linear fit ($R^2$={r2:.2f})")
 
     ax.set_xlabel(r"$\%\nu$")
     ax.set_ylabel(r"$s[\mathrm{V_S}]$")
@@ -2563,7 +2567,7 @@ def plot_ped_vs_vscore(
         "n_frequency_points": len(df),
         "n_raw_modes_before_degenerate_averaging": n_raw_modes,
         "n_molecules": df["Molecule"].nunique(),
-        "quadratic_coeffs_a_b_c": tuple(float(c) for c in coeffs),
+        "linear_fit_slope_intercept": tuple(float(c) for c in coeffs),
         "r2": float(r2),
     }
 
@@ -2579,7 +2583,7 @@ def plot_ped_vs_bondscore_by_type(
     species-pair type T present in combined_ped_vs_scores.csv's own
     BondScore_<T> columns (currently B-H, B-N, C-C, C-Cl, C-H, C-N, C-O,
     Cl-P, H-N -- see ped/merge_ped_scores.py's ``_canonical_bond_type``).
-    Each panel gets its own quadratic fit + R^2 (same pattern as
+    Each panel gets its own straight-line OLS fit + R^2 (same pattern as
     plot_ped_vs_vscore), for spotting which bond types/molecules diverge
     from the molecule-level trend. Exploratory, not a manuscript figure:
     one plain marker color, no S/B/SB faceting. One point per physical
@@ -2619,8 +2623,10 @@ def plot_ped_vs_bondscore_by_type(
         ax.scatter(x, y, s=14, marker="o", facecolors="black",
                    edgecolors="black", alpha=0.75, zorder=3)
 
+        # >=3, not >=2: two points define a line exactly, so R^2 would be a
+        # meaningless 1.0.
         if len(sub) >= 3:
-            coeffs, r2 = _quadratic_fit_r2(x, y)
+            coeffs, r2 = _linear_fit_r2(x, y)
             xx = np.linspace(x.min(), x.max(), 100)
             ax.plot(xx, np.polyval(coeffs, xx), ls="--", lw=1.1,
                     color=COLORS["threshold"], zorder=4)

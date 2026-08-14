@@ -117,6 +117,13 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   `0.0 → 1.0`** (the 1532.85 cm⁻¹ E₁u pair rises `0.082/0.091 → 0.279/0.314`), stretch `7/10 → 6/10`,
   bend `16/18 → 13/18`, EMIT stretch calls `7 → 1`. **The JCC .tex argument at `JCC_man_CA.tex:535` now
   says the opposite of the result and needs rewriting, not renumbering.**
+- **`fig:ped_vs_vscore` / `fig:ped_vs_bondscore` switched from a quadratic to a straight-line OLS fit
+  (2026-08-14, author's call).** The two changes reinforce each other: on the *unweighted* data the
+  quadratic was earning its keep (linear `R²=0.9479` vs quadratic `0.9650`, i.e. the `s[V_S]`–`%ν`
+  relation was visibly curved), whereas under μ-weighting the relation is essentially straight
+  (linear `0.9637` vs quadratic `0.9648` — the curvature term buys `+0.001`). **`TODO-DATA`: the
+  abstract's and §Transferability's `R²=0.97` came from the quadratic-on-unweighted combination and
+  is now `0.96`** (n=118 frequency points, 9 test molecules; slope 0.00911, intercept 0.04411).
 - Provenance: `thresholds.json` and `library_scores.csv` carry a `v_weighting` stamp; `classify_all_modes`
   refuses a scorer/threshold mismatch (`Thresholds.bootstrap()`'s `"*"` is the escape used by the first
   `--library` pass after a switch). The pre-2026-08-14 outputs are in `data/{results,figures}/archive_unweighted/`;

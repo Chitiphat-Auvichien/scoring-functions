@@ -1,7 +1,7 @@
 {
   "v_weighting": "mu",
-  "git_commit": "564e2fdb93b604378ffdca82c912903cebfb37b8",
-  "timestamp": "2026-08-14T15:05:36",
+  "git_commit": "565aa1c3d20f94ffc603fa2986ab37b5a89a93d9",
+  "timestamp": "2026-08-14T15:18:42",
   "stages_run": [
     "sync_manuscript"
   ],
@@ -27,35 +27,21 @@
   ],
   "outputs": [
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene_confusion.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene_confusion.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene_emit_counts.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene_emit_counts.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene_normal.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene_normal.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene_precision_recall.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_benzene_precision_recall.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_bondscores.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_bondscores.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_boxplots.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_boxplots.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_confusion.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_confusion.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_confusion_retention_migration.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_confusion_retention_migration.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_cputime.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_cputime.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_gaussian_nbasis.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_gaussian_nbasis.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_irrep_coupling.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_irrep_coupling.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_modemixing.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_modemixing.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_ped_vs_vscore.pdf",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_ped_vs_vscore.png",
     "..\\..\\JCC\\JCC_man_scoring\\images\\fig_rigorous_tier_check.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_sensitivity.pdf",
-    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_sensitivity.png"
+    "..\\..\\JCC\\JCC_man_scoring\\images\\fig_sensitivity.pdf"
   ]
 }

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from src.parser import GaussianParser, EMITParser, IntermediateIO
-from src.scoring import ModeScorer
+from src.scoring import ModeScorer, V_WEIGHTINGS, DEFAULT_V_WEIGHTING, set_v_weighting
 from src.classifier import classify_all_modes, classify_to_rows, is_linear
 from src.projection import build_reference_basis, project_emit
 from src.utils import find_file
@@ -111,7 +111,7 @@ def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
     return raw, dirs
 
 
-def build_scorer_and_final(raw, mode_type):
+def build_scorer_and_final(raw, mode_type, v_weighting=None):
     """Align to principal axes and build the candidate mode pool ('final'),
     shared by run_scoring_pipeline() and the classifier so both score the
     identical mode list.
@@ -121,6 +121,12 @@ def build_scorer_and_final(raw, mode_type):
       - 'emit'  : EMIT modes already live in principal axes, so MIT rotates
         only the molecule (rotate_modes=False); no ideal references are
         added -- all 3N raw EMIT eigenvectors are the candidate pool.
+
+    v_weighting selects the eq:vscore bond weighting ('mu' or 'none'); None
+    means the process-active default set by --v-weighting. This function is the
+    only place the app constructs a ModeScorer, so every caller that routes
+    through it (library_ingest, calibrate, merge_ped_scores, compare_rerun)
+    inherits the variant automatically.
 
     Raises ValueError if no bond connectivity is available (fail loud rather
     than silently corrupt the V-score). Returns (scorer, final).
@@ -137,7 +143,8 @@ def build_scorer_and_final(raw, mode_type):
             "No bond connectivity available; provide a .com/.gjf file in data/gjf/ "
             "or add bonds to the intermediate file before scoring.")
     rotate = (mode_type == "normal")
-    scorer = ModeScorer(raw["atoms"], raw["coords"], raw["bonds"])
+    scorer = ModeScorer(raw["atoms"], raw["coords"], raw["bonds"],
+                        v_weighting=v_weighting)
     rotated = scorer.MIT(raw["modes"], rotate_modes=rotate)
     if mode_type == "normal":
         for i, m in enumerate(rotated):
@@ -338,6 +345,16 @@ def main():
                              help="Run non-interactively with this mode type (skips the prompt). "
                                   "Writes data/results/<mol>_{normal,EMIT}.csv (scores + Mu/K/Irrep "
                                   "+ Steps 2-4 classification, all in one file).")
+    user_group.add_argument("--v-weighting", choices=list(V_WEIGHTINGS),
+                             default=DEFAULT_V_WEIGHTING, dest="v_weighting",
+                             help="Bond weighting in the V-score (eq:vscore). 'mu' (default) "
+                                  "weights each bond by its reduced mass mu_AB = m_A*m_B/(m_A+m_B), "
+                                  "so a bond counts for as much as the kinetic energy its "
+                                  "stretching motion carries. 'none' is the original unweighted "
+                                  "definition. The two agree exactly for homoleptic AB_n molecules "
+                                  "(mu cancels); they differ only where bond types are mixed. "
+                                  "Recorded in data/results/thresholds.json -- scoring and "
+                                  "thresholds must be produced under the same setting.")
 
     dev_group = ap.add_argument_group(
         "Developer / maintainer workflow",
@@ -375,6 +392,10 @@ def main():
                             help="Regenerate all manuscript figures from data/results/*.csv -> "
                                  "data/figures/*.{pdf,png}. Global (ignores -m).")
     args = ap.parse_args()
+
+    # Before anything scores: every downstream pipeline reads this default
+    # rather than taking the variant as an argument.
+    set_v_weighting(args.v_weighting)
 
     if _run_flag_pipelines(args):
         return

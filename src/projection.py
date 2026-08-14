@@ -1,8 +1,11 @@
 """EMIT -> normal-mode projection (eq:emitproj): Theta_tilde = Q^T Theta.
 
-Scores elsewhere (scoring.py) use unweighted Cartesian displacements; this
-module is the one place mass-weighting enters, because a genuine orthonormal
-reference basis requires it. Both Gaussian's normal-mode vectors and raw EMIT
+Scores elsewhere (scoring.py) act on unweighted Cartesian displacements; this
+module is the one place mass-weighted *coordinates* enter, because a genuine
+orthonormal reference basis requires them. (Distinct from the V-score's own
+per-bond reduced-mass weight under the 'mu' variant -- that scales whole-bond
+contributions, it does not rescale the displacement vectors themselves; see
+ModeScorer._bond_weights.) Both Gaussian's normal-mode vectors and raw EMIT
 eigenvectors are unit-length under the plain Cartesian inner product but only
 mutually orthogonal under the mass-weighted inner product <u,v> = sum_A m_A
 (u_A . v_A) (Eckart-Sayvetz). Verified on benzene's 30 real normal modes: the

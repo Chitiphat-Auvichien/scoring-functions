@@ -8,6 +8,43 @@ EPS_NORM = 1e-9    # vector-normalization guard (unit(0):=0)
 EPS_DENOM = 1e-6   # V-score denominator guard (Sigma|db|^2 near zero -> score 0)
 RANGE_TOL = 1e-6   # tolerance for the range-invariant score asserts
 
+# --- V-score bond-weighting variants (eq:vscore/eq:bondscore) ---
+# 'none' is the original definition (weight every bond by |Delta b|^2 alone);
+# 'mu' additionally weights each bond by its reduced mass mu_AB, so a bond's
+# contribution tracks the kinetic energy of its relative stretching motion
+# (1/2 mu |db/dt|^2) rather than raw displacement. mu appears in BOTH the
+# numerator and the denominator, so s[V_S] stays a weighted mean of per-bond
+# |cos| and both invariants survive: s[V_S] in [0,1] and Sum|s_AB| == s[V_S].
+V_WEIGHTINGS = ("mu", "none")
+DEFAULT_V_WEIGHTING = "mu"
+_ACTIVE_V_WEIGHTING = DEFAULT_V_WEIGHTING
+
+
+def resolve_v_weighting(name=None):
+    """Validate a weighting name; None means 'use the process-active default'."""
+    resolved = _ACTIVE_V_WEIGHTING if name is None else name
+    if resolved not in V_WEIGHTINGS:
+        raise ValueError(
+            f"Unknown V-score weighting {resolved!r}; expected one of {V_WEIGHTINGS}")
+    return resolved
+
+
+def set_v_weighting(name):
+    """Set the process-wide default weighting. Returns the previous value so
+    callers (and tests) can restore it. main.py calls this once, right after
+    parse_args(), so every downstream module -- library_ingest, calibrate,
+    merge_ped_scores, compare_rerun -- picks the variant up without needing the
+    option threaded through its own signature."""
+    global _ACTIVE_V_WEIGHTING
+    previous = _ACTIVE_V_WEIGHTING
+    _ACTIVE_V_WEIGHTING = resolve_v_weighting(name)
+    return previous
+
+
+def get_v_weighting():
+    """The process-active default, without constructing a ModeScorer."""
+    return _ACTIVE_V_WEIGHTING
+
 
 def size_vec(v):
     return math.sqrt(np.dot(v, v))
@@ -16,8 +53,12 @@ def size_vec(v):
 # --- Main Scorer Class ---
 
 class ModeScorer:
-    def __init__(self, atom_symbols, coords, bonds):
-        """Initialize from parser output (atom symbols, coords, 0-based bond index pairs)."""
+    def __init__(self, atom_symbols, coords, bonds, v_weighting=None):
+        """Initialize from parser output (atom symbols, coords, 0-based bond index pairs).
+
+        v_weighting selects the eq:vscore bond weighting ('mu' or 'none');
+        None means the process-active default (see set_v_weighting).
+        """
         self.n = len(atom_symbols)
         self.symbols = list(atom_symbols)
 
@@ -41,8 +82,37 @@ class ModeScorer:
         # Initial bond calculation
         self.update_bond_vectors()
 
+        # eq:vscore bond weights -- needs bList and masses, both set above.
+        self.v_weighting = resolve_v_weighting(v_weighting)
+        self.bond_weights = self._bond_weights()
+
         # Move to Center of Mass
         self.COM()
+
+    def _bond_weights(self):
+        """Per-bond weight w_AB entering eq:vscore's numerator and denominator.
+
+        'none' -> all 1.0, i.e. the original definition where a bond's weight is
+        |Delta b_AB|^2 alone.
+        'mu'   -> the reduced mass mu_AB = m_A*m_B/(m_A+m_B), rescaled by its
+        maximum so w in (0, 1].
+
+        The rescale is a mathematical no-op (the same constant divides both the
+        numerator and the denominator of eq:vscore) but it earns its keep twice:
+        it makes every bond of a homoleptic AB_n molecule weigh exactly 1.0, so
+        such molecules score identically under both variants, and it keeps the
+        summed denominator on the same scale as the unweighted one, so the
+        EPS_DENOM zero-motion guard keeps its calibrated meaning.
+        """
+        if self.v_weighting == "none":
+            return np.ones(self.nBond)
+        mu = np.array([
+            self.masses[i] * self.masses[j] / (self.masses[i] + self.masses[j])
+            for (i, j) in self.bList
+        ], dtype=float)
+        if mu.size == 0:
+            return mu
+        return mu / mu.max()
 
     def update_bond_vectors(self):
         """Recalculate bond vectors based on current atom positions."""
@@ -233,20 +303,25 @@ class ModeScorer:
 
     def _bond_contributions(self):
         """Per-bond pieces of the V-score (eq:vscore numerator/denominator),
-        plus the diagnostic signed relative bond-length change. Returns four
-        parallel lists over self.bList:
-          terms        : |Δb_AB|^2 * |unit(Δb_AB).b_hat_AB|  (numerator term,
-                         magnitude -- feeds s[V_S] via Vscore(), unchanged)
-          signed_terms : |Δb_AB|^2 * (unit(Δb_AB).b_hat_AB)  (signed version
-                         of the same term, no outer abs() -- feeds the signed
-                         per-bond s_AB in score_bonds(); positive = stretching,
-                         negative = compressing)
-          sqdisps      : |Δb_AB|^2                            (denominator term)
+        plus the diagnostic signed relative bond-length change. Every term
+        carries the per-bond weight w_AB from _bond_weights() (1 under the
+        'none' variant, the rescaled reduced mass mu_AB under 'mu'). Returns
+        four parallel lists over self.bList:
+          terms        : w_AB*|Δb_AB|^2 * |unit(Δb_AB).b_hat_AB|  (numerator
+                         term, magnitude -- feeds s[V_S] via Vscore())
+          signed_terms : w_AB*|Δb_AB|^2 * (unit(Δb_AB).b_hat_AB)  (signed
+                         version of the same term, no outer abs() -- feeds the
+                         signed per-bond s_AB in score_bonds(); positive =
+                         stretching, negative = compressing)
+          sqdisps      : w_AB*|Δb_AB|^2                        (denominator term)
           rel_db       : (|b_AB+Δd_AB| - |b_AB|) / |b_AB|. NOT part of
-                         eq:vscore/eq:bondscore -- a diagnostic only
+                         eq:vscore/eq:bondscore -- a purely geometric
+                         diagnostic, so it stays UNWEIGHTED
                          (fig:bondscores' x-axis).
-        Vscore() and score_bonds() both build on this. s_AB is signed but
-        s[V_S] is not: Σ|s_AB| == s[V_S] exactly (not Σ s_AB).
+        Vscore() and score_bonds() both build on this, so the weight can never
+        get out of step between them. s_AB is signed but s[V_S] is not:
+        Σ|s_AB| == s[V_S] exactly (not Σ s_AB) -- w_AB divides out of that
+        identity because it scales numerator and denominator alike.
         """
         terms = []
         signed_terms = []
@@ -263,9 +338,10 @@ class ModeScorer:
 
             dot_val = np.dot(delDisp, bVec_curr)
 
-            terms.append(abs(dot_val) * delDispLength / bLength)
-            signed_terms.append(dot_val * delDispLength / bLength)
-            sqdisps.append(delDispLength**2)
+            w = self.bond_weights[b]
+            terms.append(w * abs(dot_val) * delDispLength / bLength)
+            signed_terms.append(w * dot_val * delDispLength / bLength)
+            sqdisps.append(w * delDispLength**2)
 
             if bLength > EPS_NORM:
                 rel_db.append((size_vec(bVec_curr + delDisp) - bLength) / bLength)
@@ -274,7 +350,14 @@ class ModeScorer:
         return terms, signed_terms, sqdisps, rel_db
 
     def Vscore(self):
-        """Calculates the Vibrational Score s[V_S] (eq:vscore)."""
+        """Calculates the Vibrational Score s[V_S] (eq:vscore):
+
+            s[V_S] = Σ_b w_b*|Δb_b|^2*|unit(Δb_b).b_hat_b| / Σ_b w_b*|Δb_b|^2
+
+        i.e. a weighted mean of the per-bond directional cosines, hence always
+        in [0,1] whatever the (non-negative) weights. w_b is 1 under the 'none'
+        variant and the reduced mass mu_AB under 'mu' -- see _bond_weights().
+        """
         terms, _signed_terms, sqdisps, _ = self._bond_contributions()
         modeScr = sum(terms)
         denom = sum(sqdisps)
@@ -285,7 +368,10 @@ class ModeScorer:
 
     def score_bonds(self):
         """Per-bond stretch contribution s_AB (eq:bondscore), signed:
-        s_AB = |Δb_AB|^2 * (unit(Δb_AB).b_hat_AB) / Σ_bonds |Δb|^2
+        s_AB = w_AB*|Δb_AB|^2 * (unit(Δb_AB).b_hat_AB) / Σ_bonds w_b*|Δb_b|^2
+
+        where w is the eq:vscore bond weight (1, or the reduced mass mu_AB
+        under the 'mu' variant -- see _bond_weights()).
 
         Positive s_AB means the bond is stretching, negative means it is
         compressing; s[V_S] (Vscore()) itself remains non-negative and is

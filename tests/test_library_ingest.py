@@ -590,25 +590,32 @@ def test_resync_reference_metadata_real_roster_has_no_mismatches_or_missing_logs
     of that migration), so it sees all 77 rows here.
 
     **2026-08-14 (roster expansion):** the 8 brand-new 'test' molecules
-    (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) have no
-    `characterised_modes.csv` rows yet -- per the locked project decision,
-    ground-truth labels for this transferability set are hand-curated by the
-    author, not auto-generated, so this is intentional and reported under
-    `skipped_no_rows`, not an error. H2O (rerun at mp2/3-21g*, same session)
-    stays a clean resync -- its stale freq/k/mu were corrected in place this
-    session (see the module's own regression test for the before/after
-    values); `resynced` count is unaffected by the 8 new molecules (they
-    have nothing to resync)."""
+    (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) had no
+    `characterised_modes.csv` rows yet at that point -- per the locked
+    project decision, ground-truth labels for this transferability set are
+    hand-curated by the author, not auto-generated, so that session reported
+    them under `skipped_no_rows`, not an error.
+
+    **2026-08-14 (Than's MP2/3-21G rerun session):** Than reran all 9 'test'
+    molecules at the correct MP2/3-21G basis (XeF2Cl2 stays 3-21G*, its
+    3-21G optimization didn't converge) and the 8 new molecules got skeleton
+    `characterised_modes.csv` rows (mechanical columns only -- shape/molecule/
+    mode/freq/mu/k/irrep; type/sym/description/ref left for the author) via
+    `regenerate_characterised_modes()`. All 85 roster molecules now have rows,
+    so `skipped_no_rows` is empty and every molecule participates in the
+    resync (though the 8 new ones report zero changes, having just been
+    populated from the same engine parse this function reads). H2O also
+    changed this session -- Than's H2O_C2v is a fresh Gaussian 16 run,
+    deliberately taken in place of the previously-reverted G09 numbers (an
+    explicit author decision, not a staleness fix); resync reports it clean
+    since its freq/k/mu already match the just-copied log."""
     from src.library_ingest import resync_reference_metadata
 
     report = resync_reference_metadata(DATA_DIR, write=False)
     assert report["skipped_mode_count_mismatch"] == []
     assert report["skipped_no_log"] == []
-    assert report["skipped_no_rows"] == [
-        "CH3COCH3", "C6H4F2", "XeF2Cl2", "C2H4", "C10H8", "HOCl", "HCOOH",
-        "C7H8",
-    ]
-    assert len(report["resynced"]) == 77
+    assert report["skipped_no_rows"] == []
+    assert len(report["resynced"]) == 85
 
 
 def test_resync_reference_metadata_is_a_true_dry_run_when_write_false():
@@ -664,7 +671,15 @@ def test_resync_reference_metadata_synthetic_fixture():
     back to mp2/3-21g (undoing the mp2/3-21g* rerun above), so this
     fixture's mode 2/3 "already exact" values revert too
     (3504.6214/3663.325 -> 3501.5073/3660.7973), and mode 1's corrected
-    value reverts from 1722.4734 back to 1722.4570."""
+    value reverts from 1722.4734 back to 1722.4570.
+
+    **2026-08-14 (Than's MP2/3-21G rerun session):** `data/logs/H2O.log` was
+    replaced with Than's H2O_C2v Gaussian 16 recalculation (an explicit
+    author decision to take the fresh rerun over the previously-reverted
+    G09 numbers -- see IMPLEMENTATION_PLAN.md). This fixture's mode 2/3
+    "already exact" values move again (3501.5073/3660.7973 ->
+    3504.6214/3663.325, k 7.4906/8.5478 -> 7.5042/8.5592), and mode 1's
+    corrected value moves from 1722.4570 to 1722.4734."""
     import shutil
     from src.library_ingest import resync_reference_metadata
 
@@ -695,10 +710,10 @@ def test_resync_reference_metadata_synthetic_fixture():
             # 2/3 already exact -- proves per-mode-only-when-changed reporting.
             {"molecule": "STALEMOL", "mode": 1, "freq": 1700.0, "μ": 1.0,
              "k": 1.0, "irrep": "A₁"},
-            {"molecule": "STALEMOL", "mode": 2, "freq": 3501.5073, "μ": 1.0,
-             "k": 7.4906, "irrep": "A₁"},
-            {"molecule": "STALEMOL", "mode": 3, "freq": 3660.7973, "μ": 1.0,
-             "k": 8.5478, "irrep": "B₂"},
+            {"molecule": "STALEMOL", "mode": 2, "freq": 3504.6214, "μ": 1.0,
+             "k": 7.5042, "irrep": "A₁"},
+            {"molecule": "STALEMOL", "mode": 3, "freq": 3663.325, "μ": 1.0,
+             "k": 8.5592, "irrep": "B₂"},
             # MISMATCHMOL: 4 rows claimed, engine (same water log) has only 3.
             {"molecule": "MISMATCHMOL", "mode": 1, "freq": 1700.0, "μ": 1.0,
              "k": 1.0, "irrep": "A₁"},
@@ -725,13 +740,13 @@ def test_resync_reference_metadata_synthetic_fixture():
         assert len(freq_changes) == 1
         assert freq_changes[0]["mode"] == 1
         assert freq_changes[0]["old"] == "1700.0"
-        assert freq_changes[0]["new"] == "1722.457"
+        assert freq_changes[0]["new"] == "1722.4734"
 
         cm_after = pd.read_csv(os.path.join(tmp_dir, "characterised_modes.csv"), dtype=str)
         stale_after = cm_after[cm_after["molecule"] == "STALEMOL"].set_index("mode")
-        assert stale_after.loc["1", "freq"] == "1722.457"
-        assert stale_after.loc["2", "freq"] == "3501.5073"
-        assert stale_after.loc["3", "freq"] == "3660.7973"
+        assert stale_after.loc["1", "freq"] == "1722.4734"
+        assert stale_after.loc["2", "freq"] == "3504.6214"
+        assert stale_after.loc["3", "freq"] == "3663.325"
         # irrep is deliberately NEVER touched, even for the corrected mode.
         assert stale_after.loc["1", "irrep"] == "A₁"
 
@@ -769,34 +784,30 @@ def test_regenerate_characterised_modes_dry_run_against_real_tree():
     by the roster) already covered them, so the count moves from 68 to 77
     but idempotency is unaffected.
 
-    **2026-08-14 (roster expansion): idempotency is DELIBERATELY BROKEN this
-    session.** 8 new 'test' molecules (CH3COCH3, C6H4F2, XeF2Cl2, C2H4,
-    C10H8, HOCl, HCOOH, C7H8) have `.log`/`.gjf` pairs on disk but no
-    `characterised_modes.csv` rows yet -- per the locked project decision,
-    ground-truth labels for this transferability set are hand-curated by the
-    author, not auto-generated, so this dry run is expected to report them
-    under `added_molecules` (what a write=True run WOULD add) rather than 0.
-    `n_disk_basenames` reflects the full 85-molecule disk scan;
-    `n_old_molecules` is still 77 (the currently-committed
-    characterised_modes.csv, unaffected by this dry run)."""
+    **2026-08-14 (roster expansion, earlier same day): idempotency was
+    DELIBERATELY BROKEN in that session's snapshot** -- 8 new 'test'
+    molecules had `.log`/`.gjf` pairs on disk but no `characterised_modes.csv`
+    rows yet, so a dry run then reported them under `added_molecules`.
+
+    **2026-08-14 (Than's MP2/3-21G rerun session, later same day):** those 8
+    molecules got skeleton rows written via a real `write=True` call this
+    session (mechanical columns only, per the locked hand-curation decision
+    for type/sym/description/ref). The tree is idempotent again: all 85
+    on-disk basenames now have matching rows, so this dry run reports
+    nothing added or dropped, and every row -- including the 8 new ones --
+    is "preserved" (they were just written by the same code path this
+    function itself would use, so there is nothing left to change)."""
     report = regenerate_characterised_modes(DATA_DIR, write=False)
     assert report["n_disk_basenames"] == 85
-    assert report["n_old_molecules"] == 77
+    assert report["n_old_molecules"] == 85
     assert report["n_new_molecules"] == 85
     assert report["dropped_molecules"] == []
-    assert report["added_molecules"] == [
-        "C10H8", "C2H4", "C6H4F2", "C7H8", "CH3COCH3", "HCOOH", "HOCl",
-        "XeF2Cl2",
-    ]
+    assert report["added_molecules"] == []
     assert report["parse_failures"] == []
-    assert report["n_rows_written"] > 0
-    # The 77 already-curated molecules' rows are preserved (idempotent for
-    # them); the 8 brand-new molecules' rows are freshly created (nothing to
-    # preserve), so preserved < written this session -- not full idempotency,
-    # by design (see docstring above).
-    assert report["n_rows_with_preserved_manual_labels"] == 655
     assert report["n_rows_written"] == 829
-    assert report["n_rows_written"] - report["n_rows_with_preserved_manual_labels"] == 174
+    # Fully idempotent now -- every row preserved, nothing freshly created.
+    assert report["n_rows_with_preserved_manual_labels"] == 829
+    assert report["n_rows_written"] - report["n_rows_with_preserved_manual_labels"] == 0
 
 
 def test_regenerate_characterised_modes_is_a_true_dry_run_when_write_false():

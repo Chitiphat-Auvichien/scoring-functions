@@ -94,11 +94,18 @@ def test_water_tab_water():
     # so Vib3's Tx/Rz pair flips back to the sign it had before the 2026-08-10
     # G16 promotion (see that commit's note, previously: Tx=-0.1963,
     # Rz=-0.2959 (G09) -> Tx=+0.1963, Rz=+0.2959 (G16); now reverted to the
-    # G09 value). An arbitrary principal-axis/eigensolver sign convention
-    # (CLAUDE.md: "sign-of-frame is arbitrary; classification uses |score|"),
-    # not a logic bug -- frequencies and magnitudes are unchanged to 4 dp.
-    assert abs(t["Vib3"]["Tx"] - (-0.1963)) < TOL
-    assert abs(t["Vib3"]["Rz"] - (-0.2959)) < TOL
+    # G09 value).
+    #
+    # 2026-08-14 (Than's MP2/3-21G rerun session): H2O.log replaced again,
+    # this time with Than's H2O_C2v Gaussian 16 recalculation (an explicit
+    # author decision -- see IMPLEMENTATION_PLAN.md -- not a staleness fix).
+    # Vib3's Tx/Rz pair flips positive again, matching the earlier G16
+    # promotion's sign. An arbitrary principal-axis/eigensolver sign
+    # convention (CLAUDE.md: "sign-of-frame is arbitrary; classification uses
+    # |score|"), not a logic bug -- frequencies and magnitudes are unchanged
+    # to 4 dp.
+    assert abs(t["Vib3"]["Tx"] - 0.1961) < TOL
+    assert abs(t["Vib3"]["Rz"] - 0.2958) < TOL
 
 
 def test_co2_linear():

@@ -1,7 +1,7 @@
 %mem=8GB
 %nprocshared=8
 %chk=Cycloheptatriene.chk
-# opt freq=hpmodes mp2/3-21g* geom=connectivity symmetry=loose
+# opt freq=hpmodes mp2/3-21g geom=connectivity symmetry=loose
 
 1,3,5-Cycloheptatriene C7H8 - size6to10_Cs
 

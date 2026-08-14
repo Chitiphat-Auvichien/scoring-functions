@@ -20,9 +20,9 @@
 - **Phases 0–3: DONE.** Core engine, unified classifier, EMIT projection, library ingest, τ-calibration,
   all manuscript figures.
 - **Phase 4 (Gramicidin scalability): DEFERRED** to a companion paper — intentional, not a gap.
-- **Phase 5 (orchestration/reproducibility/docs): ACTIVE — current frontier.** Open: `reproduce.py`
-  orchestrator (not built), SI Cartesian-geometry export, graphical-TOC image, Gaussian revision/year
-  `TODO-DATA`.
+- **Phase 5 (orchestration/reproducibility/docs): ACTIVE — current frontier.** `reproduce.py`
+  orchestrator **built 2026-08-14**. Open: SI Cartesian-geometry export, graphical-TOC image,
+  Gaussian revision/year `TODO-DATA`.
 - **Phase 6 (strengthen for review): partly open.** 1 of 3 recommended items done (result excluded from
   manuscript by author decision, kept as internal diagnostic); 2 open recommended items are the other
   near-term frontier: mixed-SB bucket validation library-wide, out-of-sample/leave-one-molecule-out
@@ -97,10 +97,30 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   the motion is rotation, down-weighting non-tangential/stretch-like motion) — NOT the ω-form (÷`|ω|`,
   which was tried and reverted as wrong). tab:water: Tx→Rz `0.049`; ν_as→Rz `−0.295`. EMIT 9 `|s[Ry]|=0.215`
   > EMIT 2 `|s[Ry]|=0.143` (inversion, intentional).
-- `s[V_S] = (1/Σ|Δb|²) Σ |Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}|`, `Δb_AB=d_B−d_A`, **`b̂^i`=INITIAL (equilibrium)
-  bond direction**; range `[0,1]`. Per-bond `s_AB = |Δb_AB|²·(unit(Δb_AB)·b̂_AB^i)/Σ_bonds|Δb|²` —
-  **SIGNED since 2026-07-30** (+stretch/−compress); `s[V_S]` itself unchanged/non-negative (invariant now
-  `Σ|s_AB| == s[V_S]`, not `Σs_AB`). `fig:bondscores` plots `|s_AB|` to stay pixel-identical.
+- `s[V_S] = (1/Σ w_b|Δb|²) Σ w_AB|Δb_AB|²·|unit(Δb_AB)·b̂_AB^{i}|`, `Δb_AB=d_B−d_A`, **`b̂^i`=INITIAL
+  (equilibrium) bond direction**; range `[0,1]`. Per-bond
+  `s_AB = w_AB|Δb_AB|²·(unit(Δb_AB)·b̂_AB^i)/Σ_bonds w_b|Δb_b|²` — **SIGNED since 2026-07-30**
+  (+stretch/−compress); `s[V_S]` itself non-negative (invariant `Σ|s_AB| == s[V_S]`, not `Σs_AB`).
+  `fig:bondscores` plots `|s_AB|`.
+- **`w_AB` = the bond weight, NEW 2026-08-14, selectable via `--v-weighting {mu,none}`, default `mu`.**
+  `none` = 1 (the original definition). `mu` = the reduced mass `μ_AB = m_A m_B/(m_A+m_B)`, rescaled by
+  its max, so a bond counts for as much as the kinetic energy its relative stretching motion carries
+  (`½μ|ḃ|²`). `w` appears in numerator AND denominator, so `s[V_S]` stays a weighted mean of per-bond
+  `|cos|` — `[0,1]` and `Σ|s_AB|==s[V_S]` both survive by construction. **Key property: μ cancels
+  identically when all bonds share one μ, so homoleptic AB_n molecules score BIT-FOR-BIT the same under
+  both** (asserted with `==` in `tests/test_scores.py`; `tab:water` is therefore untouched, bond scores
+  still `0.4983`/`±0.4992`). Only the 9 heteroleptic library molecules move. Consequences:
+  `τ_S 0.9036818966195127 → 0.9012868462693647` (set by XeOH4, the one heteroleptic ideal molecule);
+  **`τ_B` UNCHANGED** (set by homoleptic IH3); `τ_TR` and its plateau unchanged; library stretch recall
+  `0.6009852 → 0.6059113` (the single homoleptic mover, AsCl3 mode 4, crossed the *lowered* `τ_S` without
+  its own score changing); bend row unchanged. Benzene: 6 modes move, all into MIXED — **SB recall
+  `0.0 → 1.0`** (the 1532.85 cm⁻¹ E₁u pair rises `0.082/0.091 → 0.279/0.314`), stretch `7/10 → 6/10`,
+  bend `16/18 → 13/18`, EMIT stretch calls `7 → 1`. **The JCC .tex argument at `JCC_man_CA.tex:535` now
+  says the opposite of the result and needs rewriting, not renumbering.**
+- Provenance: `thresholds.json` and `library_scores.csv` carry a `v_weighting` stamp; `classify_all_modes`
+  refuses a scorer/threshold mismatch (`Thresholds.bootstrap()`'s `"*"` is the escape used by the first
+  `--library` pass after a switch). The pre-2026-08-14 outputs are in `data/{results,figures}/archive_unweighted/`;
+  `scripts/compare_weighting.py` diffs the two.
 - **Algorithm 1**: Step1 score → Step2 global one-to-one Hungarian (`linear_sum_assignment(...,
   maximize=True)` over `n_T+n_R` external slots vs. all modes, `Σ|score|`) → Step3 **two-gate purity**:
   clean iff `|score|≥τ_TR` AND `s[V_S]≤τ_B`, else `MIXED_EXTERNAL_WITH_VIBRATION` (flag + dominant slot +
@@ -207,8 +227,17 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
       (`--classify` removed 2026-08-07 — classification is always-on).
 - [x] `README.md` rewritten: JCC is the sole/first paper (JCE being withdrawn before JCC submission,
       not a "Paper I/Paper II" pair) — zero JCE references remain.
-- [ ] **`reproduce.py`** (NEW, top open item): regenerate every `data/results/*.csv` + `data/figures/*`
-      from inputs, headless, using `run_pipeline` + wiring in `src/figures.py`. **Not yet built.**
+- [x] **`reproduce.py`** — **DONE 2026-08-14.** Regenerates every `data/results/*.csv` +
+      `data/figures/*` from inputs, headless, calling the existing entry points in-process.
+      Stages, in the order the couplings force: `library → calibrate → library2 → molecules →
+      emit → projection → ped → benzene_validation → benchmark → figures` (+ opt-in
+      `sync_manuscript`). Flags `--v-weighting/--data-dir/--only/--skip/--molecules/--dry-run`;
+      writes `data/results/_run_manifest.json` (weighting, commit, stages, outputs). Two
+      non-obvious orderings it encodes: `--calibrate` sits BETWEEN two library passes
+      (`predicted_label` is threshold-dependent, the τ derivation is not), and the CPU-time
+      benchmark must precede the figures (four read it, and it times *our* classifier).
+      `src/benzene_validation.py` is a named stage because it has no `main.py` flag and two
+      figures read only its CSVs — skipping it leaves them silently stale.
 - [ ] **SI Cartesian-geometry export** (optimized coords for water/benzene/CO₂/gramicidin from logs, +
       library if retrievable) — B7/B14 reproducibility requirement.
 - [ ] **Graphical-TOC image** (B4, submission-required): 50×50 mm, per the structure-doc concept.
@@ -260,7 +289,11 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
       sets get consistent labels as an emergent property of plain Hungarian assignment; confusion-matrix
       precision/recall ≥ floor; calibrated τ on the plateau.
 - [x] Figures match Excel `box plots`/`CM` sheets (+ spot-checks) — **DONE 2026-07-02** (see Phase 3).
-- [ ] `py reproduce.py` regenerates all CSVs + figures with no manual steps; `pytest` green.
+- [x] `py reproduce.py` regenerates all CSVs + figures with no manual steps — **DONE 2026-08-14**.
+      `pytest` = 139 passed / 2 failed, the 2 being pre-existing `test_veda_fmt_regression.py`
+      failures unrelated to scoring (a stale "no fchk present" assertion now that `data/fchk/C6H6.fchk`
+      exists, and a 4.3e-5 Hessian-reconstruction drift vs `ped/reference/C6H6.fmt`). **Fix those two
+      before claiming a fully green suite.**
   (Gramicidin verification target removed 2026-07-01 — deferred to companion paper, Phase 4.)
 
 ## Open items to confirm during execution

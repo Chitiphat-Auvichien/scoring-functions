@@ -18,7 +18,10 @@ Concretely, the code covers:
   * **Translational scores (Tx, Ty, Tz):** does the whole molecule move along the X/Y/Z axis?
   * **Rotational scores (Rx, Ry, Rz):** does the whole molecule rotate about the X/Y/Z axis?
   * **Vibrational score (`V_Stretch`):** is the internal motion bond **stretching** (high score) or
-    **bending** (low score)?
+    **bending** (low score)? Each bond is weighted by its reduced mass `μ_AB = m_A·m_B/(m_A+m_B)`, so a
+    bond counts for as much as the kinetic energy its stretching motion actually carries. Since `μ`
+    divides out when every bond is the same (an AB_n molecule like H₂O or CH₄), this only changes
+    molecules with mixed bond types. `--v-weighting none` restores the original unweighted definition.
 * **Steps 2-4 — classification.** A Hungarian (`scipy.optimize.linear_sum_assignment`) global
   assignment of modes to the `n_T + n_R` external (translation/rotation) slots, a two-gate purity test,
   and a stretch/bend/mixed split for every remaining internal mode. Each mode ends up labeled as one
@@ -83,6 +86,20 @@ The program will ask you to choose a mode:
 * **Type** `2`: To calculate scores for **EMIT Modes** (advanced user option).
 
 You can skip the interactive prompt with `--mode {normal,emit}`, e.g. `python main.py -m benzene --mode normal`.
+
+### Reproducing everything
+
+`python reproduce.py` rebuilds every `data/results/*.csv` and `data/figures/*` from the inputs in one
+ordered pass (`--dry-run` lists the stages; `--only`/`--skip` select them). It writes
+`data/results/_run_manifest.json` recording which scoring definition, commit and stages produced the
+current outputs.
+
+To rebuild under the original unweighted V-score instead, use `python reproduce.py --v-weighting none`.
+Note that scoring and thresholds must come from the same definition: `thresholds.json` records which one
+it was calibrated for, and the program refuses to classify with a mismatched pair rather than silently
+mislabelling modes. The pre-2026-08-14 unweighted outputs are kept under
+`data/results/archive_unweighted/` and `data/figures/archive_unweighted/`;
+`python scripts/compare_weighting.py` diffs the two.
 
 ### Step 4: Verify Bonds
 The program generates a text file in `data/intermediate/` containing the molecule's geometry and the mode vectors.

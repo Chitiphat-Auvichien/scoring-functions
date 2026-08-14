@@ -14,7 +14,7 @@
 > `git log -p -- IMPLEMENTATION_PLAN.md`. Every decision, formula, and numeric target that was still live
 > is preserved below in **Locked decisions** / **Authoritative spec** / the Phase checklists.
 >
-> Last updated: 2026-08-10 (G16 promoted to canonical — see Recent history).
+> Last updated: 2026-08-14 (test-category roster expanded 9 → 18 molecules — see Recent history).
 
 ## Status snapshot (current stage)
 - **Phases 0–3: DONE.** Core engine, unified classifier, EMIT projection, library ingest, τ-calibration,
@@ -27,7 +27,24 @@
   manuscript by author decision, kept as internal diagnostic); 2 open recommended items are the other
   near-term frontier: mixed-SB bucket validation library-wide, out-of-sample/leave-one-molecule-out
   evaluation.
-- Most recent session (2026-08-11): `mol_list_method.csv` format migration (`basename` column dropped,
+- Most recent session (2026-08-14): `test`-category transferability roster expanded 9 → 18 molecules
+  (H2O moved `non-ideal` → `test`, rerun at mp2/3-21g*; 8 new molecules added: CH3COCH3, C6H4F2,
+  XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8). Full roster 77 → 85. `reproduce.py --molecules <union>` run
+  end-to-end; `resync_reference_metadata(write=True)` corrected H2O's stale
+  `characterised_modes.csv` freq/k/μ in place (irrep/ref_label untouched, as designed) — this also
+  cleared the "H2O internal rows NOT label-joined" warning the basis-set rerun had introduced.
+  τ_TR/τ_S/τ_B **unchanged bit-for-bit** (H2O was never `ideal`, and it's now fully out of calibration
+  scope). H2O's own worked-example numbers moved by ≤0.0003 (Tx→Rz 0.0411→0.0414, well within the
+  golden test's `5e-4` tolerance) — a real but small basis-set shift, not a code regression. Pooled
+  stretch/bend confusion-matrix recall shifted slightly (stretch tp 123→121, n_ref 203→201; bend tp
+  193→192, n_ref 209→208) purely from H2O's 3 always-correctly-classified non-ideal modes leaving the
+  scope-filtered population — not a threshold or logic change. 8 new molecules have no
+  `characterised_modes.csv` rows yet (hand-curation deferred, per standing decision) and no VEDA
+  PED output yet — both are open follow-ups, not blockers to this session's pipeline run. `pytest`
+  139/141 green (2 pre-existing failures only — fchk/log staleness in `test_veda_fmt_regression.py`);
+  9 golden-value tests repinned for the new roster counts (see `tests/test_calibrate.py`,
+  `tests/test_flag_validation.py`, `tests/test_library_ingest.py`).
+- Prior session (2026-08-11): `mol_list_method.csv` format migration (`basename` column dropped,
   9-molecule `test` category added) adapted through `src/library_ingest.py`/`src/calibrate.py`/
   `src/figures.py`. `pytest` 136/138 green (2 pre-existing failures only — fchk/log staleness in
   `test_veda_fmt_regression.py`; the roster/disk-count-check failures this note used to also cover are
@@ -327,6 +344,27 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 > One line per session, newest first. Full narration for any entry predating 2026-08-10 is in git history:
 > `git log -p -- IMPLEMENTATION_PLAN.md`.
 
+- **2026-08-14 (roster expansion)** — `test`-category transferability set 9 → 18: H2O retagged
+  `non-ideal` → `test` (rerun at mp2/3-21g*, new `%mem`/`%nprocshared` header) and 8 new molecules added
+  (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) with their own `.log`/`.gjf`/`.fchk` under
+  `data/{logs,gjf,fchk}/`. `reproduce.py --molecules <union of discovered + new>` regenerated every
+  library/threshold/per-molecule/figure output (no code changes needed — the inclusion-filter design
+  from 2026-08-11 handled the new category automatically, as intended).
+  `resync_reference_metadata(data_dir='data', write=True)` corrected H2O's stale
+  `characterised_modes.csv` freq/k/μ (irrep/ref_label untouched), clearing the `H2O internal rows NOT
+  label-joined` warning the rerun had triggered. τ_TR/τ_S/τ_B unchanged bit-for-bit (H2O was never
+  `ideal`, and moving it out of `non-ideal` just removes it from calibration scope, same as C6H6 and the
+  other test molecules already were). Confusion-matrix stretch/bend pooled recall shifted slightly
+  (tp 123→121 stretch, 193→192 bend) purely from H2O's 3 modes leaving the scope-filtered population —
+  not a threshold change. 9 golden-value tests repinned for the new 85-molecule/19-name-exclusion/
+  506-external-row counts (`tests/test_calibrate.py`, `tests/test_flag_validation.py`,
+  `tests/test_library_ingest.py`); one incidental finding while repinning: the historical 7-name
+  multi-centre exclusion fixture (`_HISTORICAL_SINGLE_CENTRE_EXCLUDE_7`) contains `'C2H4'`, which is now
+  coincidentally also the new transferability molecule's real formula, so `old_dropped` in
+  `test_single_centre_only_exclude_matches_scope_decision` legitimately grew from `{C6H6}` to
+  `{C6H6, C2H4}` — a name collision, not a logic bug. `pytest` 139/141 (2 pre-existing
+  `test_veda_fmt_regression.py` failures only). Still open: hand-curated `characterised_modes.csv` rows
+  and VEDA4 PED output for the 8 new molecules (both deliberately deferred, not attempted this session).
 - **2026-08-11** — `data/mol_list_method.csv` format migration: the redundant `basename` column dropped
   (roster's `molecule` column now doubles as the on-disk basename) and a 9-molecule held-out
   `mol_type=='test'` transferability set added (CH4, C4H4, C10H16, PCl5, C3H6, B3N3H6, CHCl3, CH3CN,

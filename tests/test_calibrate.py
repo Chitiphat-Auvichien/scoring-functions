@@ -87,9 +87,10 @@ _HISTORICAL_SINGLE_CENTRE_EXCLUDE_7 = frozenset({
 
 # The 9-molecule held-out transferability-test set added to
 # mol_list_method.csv 2026-08-11 (mol_type=='test').
-_TEST_CATEGORY_9 = frozenset({
+_TEST_CATEGORY_18 = frozenset({
     "CH4", "C4H4", "C10H16", "PCl5", "C3H6", "B3N3H6", "CHCl3", "CH3CN",
-    "C3O3H6",
+    "C3O3H6", "H2O", "CH3COCH3", "C6H4F2", "XeF2Cl2", "C2H4", "C10H8",
+    "HOCl", "HCOOH", "C7H8",
 })
 
 
@@ -99,26 +100,37 @@ def test_single_centre_only_exclude_matches_scope_decision():
     of mol_type in {'ideal', 'non-ideal'}) rather than the prior
     multi-centre-only exclusion -- see src/calibrate.py's own comment above
     SINGLE_CENTRE_ONLY_EXCLUDE for the full rationale. mol_list_method.csv's
-    new 'test' category (9 held-out transferability molecules) must drop out
-    of calibration automatically, exactly like C6H6 (multi-centre) already
-    did. H2O is deliberately NOT excluded (it is single-centre itself,
-    mol_type=='non-ideal', and stays in the population as a familiar
-    illustrative molecule)."""
-    expected = {"C6H6"} | _TEST_CATEGORY_9
-    assert SINGLE_CENTRE_ONLY_EXCLUDE == expected
-    assert len(SINGLE_CENTRE_ONLY_EXCLUDE) == 10
-    assert "H2O" not in SINGLE_CENTRE_ONLY_EXCLUDE
+    'test' category must drop out of calibration automatically, exactly
+    like C6H6 (multi-centre) already did.
 
-    # library_scores.csv was regenerated 2026-08-11 to include the 9
-    # 'test'-category molecules, so all 10 excluded names (C6H6 + the 9
-    # test molecules) are now present to be dropped; the historical 7-name
-    # fallback set only ever had C6H6 actually present in the real roster.
+    **2026-08-14 (roster expansion):** the 'test' category grew from 9 to 18
+    -- H2O moved from 'non-ideal' into 'test' (rerun at mp2/3-21g* instead of
+    mp2/3-21g, same session), and 8 brand-new 'test' molecules were added
+    (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8). H2O is now
+    (unlike before) excluded from calibration scope, since it moved out of
+    'non-ideal' -- it stays in the roster as a familiar worked example
+    (`data/results/H2O_normal.csv`) but no longer feeds the confusion-matrix
+    stretch/bend recall split."""
+    expected = {"C6H6"} | _TEST_CATEGORY_18
+    assert SINGLE_CENTRE_ONLY_EXCLUDE == expected
+    assert len(SINGLE_CENTRE_ONLY_EXCLUDE) == 19
+    assert "H2O" in SINGLE_CENTRE_ONLY_EXCLUDE
+
+    # library_scores.csv was regenerated 2026-08-14 to include the 8 new
+    # 'test'-category molecules (H2O was already present, just retagged), so
+    # all 19 excluded names (C6H6 + the 18 test molecules) are now present to
+    # be dropped. The historical 7-name fallback set previously only ever had
+    # C6H6 actually present in the real roster -- but one of its other 6
+    # names, 'C2H4', is now ALSO a real, present molecule (a coincidental
+    # name collision: the new transferability-set ethylene shares a formula
+    # with the historical legacy multi-centre placeholder name, not the same
+    # underlying decision) -- so old_dropped legitimately grew to 2 names.
     lib_df = pd.read_csv(LIB_CSV)
     old_dropped = set(lib_df.loc[lib_df["molecule"].isin(_HISTORICAL_SINGLE_CENTRE_EXCLUDE_7),
                                   "molecule"].unique())
     new_dropped = set(lib_df.loc[lib_df["molecule"].isin(SINGLE_CENTRE_ONLY_EXCLUDE),
                                   "molecule"].unique())
-    assert old_dropped == {"C6H6"}
+    assert old_dropped == {"C6H6", "C2H4"}
     assert new_dropped == expected
 
 
@@ -129,10 +141,11 @@ def test_filter_single_centre_library_drops_exactly_the_excluded_molecules():
     removes exactly whichever of the excluded molecules are actually present
     and nothing else.
 
-    **2026-08-11 update:** SINGLE_CENTRE_ONLY_EXCLUDE now has 10 names
-    (C6H6 + the 9 'test'-category molecules); library_scores.csv was
-    regenerated the same day to include all 77 roster molecules, so all 10
-    are present and dropped (67 remain: the ideal/non-ideal calibration
+    **2026-08-14 update:** SINGLE_CENTRE_ONLY_EXCLUDE now has 19 names
+    (C6H6 + the 18 'test'-category molecules, up from 9 -- H2O moved in from
+    'non-ideal' and 8 new molecules were added); library_scores.csv was
+    regenerated the same day to include all 85 roster molecules, so all 19
+    are present and dropped (66 remain: the ideal/non-ideal calibration
     scope)."""
     lib_df = pd.read_csv(LIB_CSV)
     before_molecules = set(lib_df["molecule"].unique())
@@ -382,21 +395,28 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     # boundary underneath it -- tau_S fell 0.9036818966195127 ->
     # 0.9012868462693647 (XeOH4, the only heteroleptic ideal molecule, sets
     # tau_S) and AsCl3 mode 4 was sitting in the gap. SB -> S.
+    #
+    # 2026-08-14 (same day, roster expansion): 123 -> 121, 193 -> 192. H2O
+    # moved from 'non-ideal' into 'test' (out of calibration scope), taking
+    # its 2 correctly-classified non-ideal stretch modes (Vib2/Vib3) and 1
+    # correctly-classified non-ideal bend mode (Vib1) out of both tp and
+    # n_ref/n_pred. tau_S/tau_B themselves are unaffected (both are derived
+    # from the ideal population only, and H2O was never 'ideal').
     stretch = res["per_category"]["stretch"]
-    assert stretch["tp"] == 123
-    assert stretch["n_pred"] == 123
-    assert stretch["n_ref"] == 203
-    assert abs(stretch["recall"] - 0.6059113300492611) < 1e-6
-    assert abs(stretch["mixed_fraction"] - 0.39408866995073893) < 1e-6
+    assert stretch["tp"] == 121
+    assert stretch["n_pred"] == 121
+    assert stretch["n_ref"] == 201
+    assert abs(stretch["recall"] - 0.6019900497512438) < 1e-6
+    assert abs(stretch["mixed_fraction"] - 0.39800995024875624) < 1e-6
 
-    # Bend is UNCHANGED by the weighting: tau_B is set by IH3, which is
-    # homoleptic, so the bending boundary did not move at all.
+    # Bend: 193 -> 192 (H2O's one non-ideal bend mode leaving scope). tau_B
+    # is still set by IH3 (homoleptic), so the bending boundary did not move.
     bend = res["per_category"]["bend"]
-    assert bend["tp"] == 193
-    assert bend["n_pred"] == 193
-    assert bend["n_ref"] == 209
-    assert abs(bend["recall"] - 0.9234449760765551) < 1e-6
-    assert abs(bend["mixed_fraction"] - 0.07655502392344497) < 1e-6
+    assert bend["tp"] == 192
+    assert bend["n_pred"] == 192
+    assert bend["n_ref"] == 208
+    assert abs(bend["recall"] - 0.9230769230769231) < 1e-6
+    assert abs(bend["mixed_fraction"] - 0.07692307692307693) < 1e-6
 
     # The floor is NOT met overall, because stretch recall sits well under
     # 0.95 (bend also now falls short) -- reported honestly, not forced to pass.
@@ -473,13 +493,17 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     assert res["per_category"]["bend"]["n_ref_ideal"] == 48
 
     # Non-ideal tier -- grew by CO2's 4 modes this session (see docstring above).
-    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.9006211180124224) < 1e-6
     # 2026-08-14 reduced-mass weighting: 0.5060975609756098 -> AsCl3 mode 4
     # (non-ideal/stretch) joins the numerator when tau_S falls. See the sibling
     # test's comment -- its own score is bit-for-bit unchanged.
-    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.5121951219512195) < 1e-6
-    assert res["per_category"]["bend"]["n_ref_nonideal"] == 161
-    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 164
+    # 2026-08-14 (same day, roster expansion): H2O moved 'non-ideal' -> 'test'
+    # (out of calibration scope), removing its 2 correctly-classified
+    # non-ideal stretch modes (84/164 -> 82/162) and 1 correctly-classified
+    # non-ideal bend mode (145/161 -> 144/160) from this tier.
+    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.9) < 1e-6
+    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.5061728395061729) < 1e-6
+    assert res["per_category"]["bend"]["n_ref_nonideal"] == 160
+    assert res["per_category"]["stretch"]["n_ref_nonideal"] == 162
 
     # Translation/rotation: every row is an external (T/R) reference, so the
     # ideal tier reproduces the pooled recall exactly and there is no
@@ -498,9 +522,12 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     # 2026-08-14 reduced-mass weighting: -> 0.6059113300492611 (AsCl3 mode 4
     # crosses the lowered tau_S; bend recall again UNCHANGED, tau_B is set by
     # homoleptic IH3 and did not move);
-    # bend recall UNCHANGED (the FBr3 pair cancels net).
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.6059113300492611) < 1e-6
-    assert abs(res["per_category"]["bend"]["recall"] - 0.9234449760765551) < 1e-6
+    # 2026-08-14 (same day, roster expansion): -> 0.6019900497512438 (stretch),
+    # -> 0.9230769230769231 (bend) -- H2O leaving calibration scope, see above.
+    # bend recall change is entirely explained by H2O's exit (the FBr3 pair
+    # still cancels net within what remains).
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.6019900497512438) < 1e-6
+    assert abs(res["per_category"]["bend"]["recall"] - 0.9230769230769231) < 1e-6
 
 
 if __name__ == "__main__":

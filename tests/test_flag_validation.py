@@ -111,8 +111,8 @@ def test_ground_truth_label_thresholds():
 
 
 def test_library_external_references_never_false_positive():
-    """The 77 geometry-backed library molecules' REAL normal-mode T/R
-    references (458 rows total) are exact-by-construction Eckart-Sayvetz
+    """The 85 geometry-backed library molecules' REAL normal-mode T/R
+    references (506 rows total) are exact-by-construction Eckart-Sayvetz
     references (ground truth always CLEAN); this checks -- rather than
     assumes -- that the classifier never flags a single one of them
     MIXED_EXTERNAL_WITH_VIBRATION (FP=0), the much easier degenerate case
@@ -126,14 +126,18 @@ def test_library_external_references_never_false_positive():
     removal + CO2 re-tag) held until 2026-08-11, when 9 'test'-category
     transferability molecules were added (none linear, so +9*6=54 external
     rows) and library_scores.csv was regenerated to include them: 68 -> 77
-    molecules, 404 -> 458 external rows."""
+    molecules, 404 -> 458 external rows. **2026-08-14:** 8 more 'test'-category
+    molecules added (none linear, so +8*6=48 external rows; H2O also moved
+    'non-ideal' -> 'test' but keeps contributing its own 6 external rows
+    either way -- this test spans every roster molecule regardless of
+    category): 77 -> 85 molecules, 458 -> 506 external rows."""
     ext, stats = library_external_flag_confusion()
-    assert stats["n"] == 458
-    assert stats["n_molecules"] == 77
+    assert stats["n"] == 506
+    assert stats["n_molecules"] == 85
     assert stats["FP"] == 0
     assert stats["TP"] == 0
     assert stats["FN"] == 0
-    assert stats["TN"] == 458
+    assert stats["TN"] == 506
 
 
 if __name__ == "__main__":

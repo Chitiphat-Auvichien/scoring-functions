@@ -70,27 +70,31 @@ def _load():
 # ---------------------------------------------------------------------------
 
 def test_load_mol_roster_reads_all_77_molecules():
-    """77 rows: 10 'ideal' + 57 'non-ideal' + 1 'multi-centre' (C6H6) + 9
-    'test' (a held-out transferability-test set: CH4, C4H4, C10H16, PCl5,
-    C3H6, B3N3H6, CHCl3, CH3CN, C3O3H6). 2026-08-11: the redundant
+    """85 rows: 10 'ideal' + 56 'non-ideal' + 1 'multi-centre' (C6H6) + 18
+    'test' (a held-out transferability-test set). 2026-08-11: the redundant
     `basename` column was dropped from mol_list_method.csv entirely --
     `molecule` now doubles as the on-disk basename (every on-disk file was
     already renamed to match `molecule` in an earlier commit); CO2 was
     re-tagged 'non-ideal' (was briefly 'ideal') to match its linear
     siblings, consistent with the already-checked-in library_scores.csv.
     (Test name kept in the same style for history/grep-ability; the
-    docstring is the source of truth for the current count.)"""
+    docstring is the source of truth for the current count.)
+
+    **2026-08-14 (roster expansion):** the 'test' category grew 9 -> 18 --
+    H2O moved 'non-ideal' -> 'test' (rerun at mp2/3-21g*, same session; 57 ->
+    56 non-ideal) and 8 new molecules were added (CH3COCH3, C6H4F2, XeF2Cl2,
+    C2H4, C10H8, HOCl, HCOOH, C7H8; 9 -> 17, +H2O -> 18). 77 -> 85 total."""
     roster = load_mol_roster(DATA_DIR)
     assert "molecule" in roster.columns
     assert "basename" not in roster.columns
-    assert len(roster) == 77
+    assert len(roster) == 85
     assert roster["molecule"].is_unique
     assert roster["molecule"].notna().all()
     counts = roster["mol_type"].value_counts()
     assert counts["ideal"] == 10
-    assert counts["non-ideal"] == 57
+    assert counts["non-ideal"] == 56
     assert counts["multi-centre"] == 1
-    assert counts["test"] == 9
+    assert counts["test"] == 18
 
 
 def test_load_mol_roster_raises_on_missing_required_column():
@@ -405,15 +409,22 @@ def test_out_of_calibration_scope_molecules_is_c6h6_plus_the_9_test_molecules():
     """out_of_calibration_scope_molecules() (drives
     src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE) is the complement of the
     ideal/non-ideal inclusion filter: mol_type not in {'ideal', 'non-ideal'}
-    -- currently C6H6 (multi-centre) plus the 9 held-out 'test'
-    transferability molecules, 10 names total."""
+    -- currently C6H6 (multi-centre) plus the 18 held-out 'test'
+    transferability molecules, 19 names total.
+
+    **2026-08-14 (roster expansion):** grew from 10 to 19 names -- H2O moved
+    'non-ideal' -> 'test' and 8 new 'test' molecules were added (CH3COCH3,
+    C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8). (Test name kept in the
+    same style for history/grep-ability; the docstring is the source of
+    truth for the current set.)"""
     result = out_of_calibration_scope_molecules(DATA_DIR)
     expected = {
         "C6H6", "CH4", "C4H4", "C10H16", "PCl5", "C3H6", "B3N3H6",
-        "CHCl3", "CH3CN", "C3O3H6",
+        "CHCl3", "CH3CN", "C3O3H6", "H2O", "CH3COCH3", "C6H4F2", "XeF2Cl2",
+        "C2H4", "C10H8", "HOCl", "HCOOH", "C7H8",
     }
     assert result == frozenset(expected)
-    assert len(result) == 10
+    assert len(result) == 19
 
 
 def test_schema_columns_includes_mu_k_irrep_and_d_ca():
@@ -576,13 +587,27 @@ def test_resync_reference_metadata_real_roster_has_no_mismatches_or_missing_logs
     characterised_modes.csv rows, so this stays a clean 0-mismatch resync).
     resync_reference_metadata() iterates the roster directly (not the
     checked-in library_scores.csv golden, which was NOT regenerated as part
-    of that migration), so it sees all 77 rows here."""
+    of that migration), so it sees all 77 rows here.
+
+    **2026-08-14 (roster expansion):** the 8 brand-new 'test' molecules
+    (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) have no
+    `characterised_modes.csv` rows yet -- per the locked project decision,
+    ground-truth labels for this transferability set are hand-curated by the
+    author, not auto-generated, so this is intentional and reported under
+    `skipped_no_rows`, not an error. H2O (rerun at mp2/3-21g*, same session)
+    stays a clean resync -- its stale freq/k/mu were corrected in place this
+    session (see the module's own regression test for the before/after
+    values); `resynced` count is unaffected by the 8 new molecules (they
+    have nothing to resync)."""
     from src.library_ingest import resync_reference_metadata
 
     report = resync_reference_metadata(DATA_DIR, write=False)
     assert report["skipped_mode_count_mismatch"] == []
     assert report["skipped_no_log"] == []
-    assert report["skipped_no_rows"] == []
+    assert report["skipped_no_rows"] == [
+        "CH3COCH3", "C6H4F2", "XeF2Cl2", "C2H4", "C10H8", "HOCl", "HCOOH",
+        "C7H8",
+    ]
     assert len(report["resynced"]) == 77
 
 
@@ -627,7 +652,13 @@ def test_resync_reference_metadata_synthetic_fixture():
     **2026-08-11:** the `basename` column was dropped (molecule name ==
     on-disk basename now), so this fixture's water log/gjf pair is copied
     under each synthetic molecule's own name (STALEMOL.log/.com,
-    MISMATCHMOL.log/.com) instead of being shared via a basename column."""
+    MISMATCHMOL.log/.com) instead of being shared via a basename column.
+
+    **2026-08-14:** `data/logs/H2O.log` was rerun at mp2/3-21g* (was
+    mp2/3-21g), shifting its engine frequencies by a few cm^-1 -- this
+    fixture's "already exact" mode 2/3 freq values are updated to match
+    (3501.5073/3660.7973 -> 3504.6214/3663.325), so mode 1 stays the only
+    one that actually changes."""
     import shutil
     from src.library_ingest import resync_reference_metadata
 
@@ -658,10 +689,10 @@ def test_resync_reference_metadata_synthetic_fixture():
             # 2/3 already exact -- proves per-mode-only-when-changed reporting.
             {"molecule": "STALEMOL", "mode": 1, "freq": 1700.0, "μ": 1.0,
              "k": 1.0, "irrep": "A₁"},
-            {"molecule": "STALEMOL", "mode": 2, "freq": 3501.5073, "μ": 1.0,
-             "k": 7.4906, "irrep": "A₁"},
-            {"molecule": "STALEMOL", "mode": 3, "freq": 3660.7973, "μ": 1.0,
-             "k": 8.5478, "irrep": "B₂"},
+            {"molecule": "STALEMOL", "mode": 2, "freq": 3504.6214, "μ": 1.0,
+             "k": 7.5042, "irrep": "A₁"},
+            {"molecule": "STALEMOL", "mode": 3, "freq": 3663.325, "μ": 1.0,
+             "k": 8.5592, "irrep": "B₂"},
             # MISMATCHMOL: 4 rows claimed, engine (same water log) has only 3.
             {"molecule": "MISMATCHMOL", "mode": 1, "freq": 1700.0, "μ": 1.0,
              "k": 1.0, "irrep": "A₁"},
@@ -688,13 +719,13 @@ def test_resync_reference_metadata_synthetic_fixture():
         assert len(freq_changes) == 1
         assert freq_changes[0]["mode"] == 1
         assert freq_changes[0]["old"] == "1700.0"
-        assert freq_changes[0]["new"] == "1722.457"
+        assert freq_changes[0]["new"] == "1722.4734"
 
         cm_after = pd.read_csv(os.path.join(tmp_dir, "characterised_modes.csv"), dtype=str)
         stale_after = cm_after[cm_after["molecule"] == "STALEMOL"].set_index("mode")
-        assert stale_after.loc["1", "freq"] == "1722.457"
-        assert stale_after.loc["2", "freq"] == "3501.5073"
-        assert stale_after.loc["3", "freq"] == "3660.7973"
+        assert stale_after.loc["1", "freq"] == "1722.4734"
+        assert stale_after.loc["2", "freq"] == "3504.6214"
+        assert stale_after.loc["3", "freq"] == "3663.325"
         # irrep is deliberately NEVER touched, even for the corrected mode.
         assert stale_after.loc["1", "irrep"] == "A₁"
 
@@ -730,18 +761,36 @@ def test_regenerate_characterised_modes_dry_run_against_real_tree():
     their .log/.gjf pairs plus characterised_modes.csv rows were already on
     disk before this session -- this disk-scan-based function (unrestricted
     by the roster) already covered them, so the count moves from 68 to 77
-    but idempotency is unaffected."""
+    but idempotency is unaffected.
+
+    **2026-08-14 (roster expansion): idempotency is DELIBERATELY BROKEN this
+    session.** 8 new 'test' molecules (CH3COCH3, C6H4F2, XeF2Cl2, C2H4,
+    C10H8, HOCl, HCOOH, C7H8) have `.log`/`.gjf` pairs on disk but no
+    `characterised_modes.csv` rows yet -- per the locked project decision,
+    ground-truth labels for this transferability set are hand-curated by the
+    author, not auto-generated, so this dry run is expected to report them
+    under `added_molecules` (what a write=True run WOULD add) rather than 0.
+    `n_disk_basenames` reflects the full 85-molecule disk scan;
+    `n_old_molecules` is still 77 (the currently-committed
+    characterised_modes.csv, unaffected by this dry run)."""
     report = regenerate_characterised_modes(DATA_DIR, write=False)
-    assert report["n_disk_basenames"] == 77
+    assert report["n_disk_basenames"] == 85
     assert report["n_old_molecules"] == 77
-    assert report["n_new_molecules"] == 77
+    assert report["n_new_molecules"] == 85
     assert report["dropped_molecules"] == []
-    assert report["added_molecules"] == []
+    assert report["added_molecules"] == [
+        "C10H8", "C2H4", "C6H4F2", "C7H8", "CH3COCH3", "HCOOH", "HOCl",
+        "XeF2Cl2",
+    ]
     assert report["parse_failures"] == []
     assert report["n_rows_written"] > 0
-    # Every row already existed at its (molecule, mode) key (idempotent
-    # regeneration), so every row's manual columns are "preserved".
-    assert report["n_rows_with_preserved_manual_labels"] == report["n_rows_written"]
+    # The 77 already-curated molecules' rows are preserved (idempotent for
+    # them); the 8 brand-new molecules' rows are freshly created (nothing to
+    # preserve), so preserved < written this session -- not full idempotency,
+    # by design (see docstring above).
+    assert report["n_rows_with_preserved_manual_labels"] == 655
+    assert report["n_rows_written"] == 829
+    assert report["n_rows_written"] - report["n_rows_with_preserved_manual_labels"] == 174
 
 
 def test_regenerate_characterised_modes_is_a_true_dry_run_when_write_false():

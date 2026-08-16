@@ -132,9 +132,12 @@ def test_co2_linear_no_spurious_onaxis_mode():
 
 
 def test_classify_to_rows_shape():
-    """classify_to_rows() produces the documented CSV columns for both mol/mode_type combos."""
-    expected_cols = {"Mode", "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_Stretch",
-                     "Mu", "K", "Irrep", "label", "annotation", "s_AB"}
+    """classify_to_rows() produces the documented CSV columns for both mol/mode_type combos,
+    with one 's_AB[iLabel-jLabel]' column per bond (not a joined string) -- and every row
+    (every mode) carries the same bond columns, since a molecule's bond list doesn't
+    depend on which mode is being scored."""
+    base_cols = {"Mode", "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_Stretch",
+                 "Mu", "K", "Irrep", "label", "annotation"}
     for mol, mode_type, freq_col in [("H2O", "normal", "Freq"),
                                       ("C6H6", "emit", "Eigenvalue")]:
         raw, _ = load_inputs(mol, mode_type, os.path.join(ROOT, "data"))
@@ -142,8 +145,11 @@ def test_classify_to_rows_shape():
         scored = classify_all_modes(scorer, final)
         rows = classify_to_rows(scored)
         assert rows, "no rows produced"
-        cols = set(rows[0].keys())
-        assert expected_cols | {freq_col} == cols, cols
+        bond_cols = {f"s_AB[{b['i_label']}-{b['j_label']}]" for b in scored[0]["bonds"]}
+        assert bond_cols, "no bond columns produced"
+        expected_cols = base_cols | {freq_col} | bond_cols
+        for row in rows:
+            assert set(row.keys()) == expected_cols, set(row.keys())
 
 
 def test_rejects_thresholds_calibrated_for_the_other_weighting():

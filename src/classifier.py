@@ -31,7 +31,7 @@ Step 3  two-gate purity test on each assigned (slot, mode) pair: clean iff
         annotated with vib_label(s[V_S]).
 Step 4  every mode NOT assigned an external slot in Step 2: vib_label(s[V_S])
         -> STRETCHING ("S") / BENDING ("B") / MIXED_STRETCH_BEND ("SB").
-        Per-bond s_AB (signed) attached for STRETCHING / MIXED_STRETCH_BEND.
+        Per-bond s_AB (signed) attached for every mode, regardless of label.
 
 n_T = 3; n_R = 2 if linear else 3 (linear: smallest principal moment ~= 0).
 """
@@ -44,7 +44,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
-from src.scoring import format_bond_map, DEFAULT_V_WEIGHTING
+from src.scoring import DEFAULT_V_WEIGHTING
 
 # Phase-3 calibration output (src/calibrate.py); Thresholds() below is the
 # explicit hardcoded fallback used if this file doesn't exist yet.
@@ -325,15 +325,18 @@ def classify_all_modes(scorer, final, thresholds=None):
 def classify_to_rows(scored):
     """Flatten classify_all_modes() output into CSV-row dicts -- this is the
     single, complete per-mode result row (scores + Mu/K/Irrep + classification);
-    there is no separate scores-only row shape. s_AB is a semicolon-joined
-    'Elem#-Elem#:value' list, e.g. "C1-C2:0.0342". Mu/K/Irrep are None for
-    EMIT modes and the synthetic ideal T/R references (only real Gaussian
-    normal modes carry them)."""
+    there is no separate scores-only row shape. Each bond gets its own
+    's_AB[Elem#-Elem#]' column (e.g. "s_AB[C1-C2]") rather than one
+    semicolon-joined string, so the CSV is a plain rectangular table --
+    every row lists the same molecule's bonds in the same order (see
+    ModeScorer.bList), so the column set is identical across rows and easy
+    to sort/filter/plot in Excel. Mu/K/Irrep are None for EMIT modes and the
+    synthetic ideal T/R references (only real Gaussian normal modes carry
+    them)."""
     rows = []
     for m in scored:
         is_emit = m["is_emit"]
-        bonds_str = format_bond_map(m["bonds"], "s_AB")
-        rows.append({
+        row = {
             "Mode": m["name"],
             ("Eigenvalue" if is_emit else "Freq"): m["frequency"],
             "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
@@ -342,6 +345,8 @@ def classify_to_rows(scored):
             "Mu": m["reduced_mass"], "K": m["force_constant"], "Irrep": m["irrep"],
             "label": m["classification"],
             "annotation": m["annotation"],
-            "s_AB": bonds_str,
-        })
+        }
+        for b in m["bonds"]:
+            row[f"s_AB[{b['i_label']}-{b['j_label']}]"] = b["s_AB"]
+        rows.append(row)
     return rows

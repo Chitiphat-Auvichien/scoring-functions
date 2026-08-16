@@ -242,12 +242,10 @@ def classify_all_modes(scorer, final, thresholds=None):
     final is its candidate mode pool. thresholds defaults to
     Thresholds.calibrated(). Returns a list of dicts, one per mode in `final`
     (same order): {name, frequency, is_emit, T, R, V, classification,
-    annotation, bonds, bonds_all}. 'bonds' (see ModeScorer.score_bonds()) is
-    populated only for STRETCHING/MIXED_STRETCH_BEND, per spec; 'bonds_all'
-    carries the same per-bond s_AB list unfiltered, for every mode regardless
-    of classification (consumed by ped/merge_ped_scores.py's per-bond-type
-    breakdown; classify_to_rows() ignores it, so the on-disk classified.csv
-    schema is unchanged). 'classification' is the bare Step-2 slot name for a
+    annotation, bonds, bonds_all}. 'bonds' (see ModeScorer.score_bonds()) carries
+    the per-bond s_AB list for every mode regardless of classification; 'bonds_all'
+    is the same list under the name ped/merge_ped_scores.py's per-bond-type
+    breakdown reads. 'classification' is the bare Step-2 slot name for a
     clean external, that slot name with a trailing "*" for mixed
     external+vibration, or "S"/"B"/"SB" for a Step-4 internal mode.
     'annotation' is "vibration=<vib_label>" for mixed-external modes, "" otherwise.
@@ -314,13 +312,12 @@ def classify_all_modes(scorer, final, thresholds=None):
         if scored[mi]["classification"] is None:
             scored[mi]["classification"] = vib_label(scored[mi]["V"], thresholds)
 
-    # Attach per-bond s_AB to 'bonds' only for STRETCHING / MIXED_STRETCH_BEND,
-    # per spec -- but keep the full unfiltered per-bond list on 'bonds_all'
-    # for every mode (used by ped/merge_ped_scores.py's per-bond-type
-    # breakdown, which needs s_AB regardless of a mode's S/B/SB label).
+    # 'bonds' carries the per-bond s_AB list for every mode regardless of
+    # classification; 'bonds_all' is kept as an alias (same list) for
+    # ped/merge_ped_scores.py, which reads it by that name.
     for m in scored:
         m["bonds_all"] = m.pop("_bonds_all")
-        m["bonds"] = m["bonds_all"] if m["classification"] in (STRETCHING, MIXED_STRETCH_BEND) else []
+        m["bonds"] = m["bonds_all"]
 
     return scored
 

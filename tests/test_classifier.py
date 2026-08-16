@@ -73,7 +73,7 @@ def test_water_normal_vibrations():
     (s_AB is signed; V sums magnitudes)."""
     t = _classify("H2O", "normal")
     assert t["Vib 1"]["classification"] == BENDING
-    assert t["Vib 1"]["bonds"] == []  # bonds only attached for STRETCHING/MIXED_STRETCH_BEND
+    assert len(t["Vib 1"]["bonds"]) == 2  # bonds are attached for every mode, not just S/SB
 
     for name in ("Vib 2", "Vib 3"):
         assert t[name]["classification"] == STRETCHING

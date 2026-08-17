@@ -42,10 +42,13 @@
       <label class="f"><input type="checkbox" id="f-B" checked><b class="lab B">B</b></label>
       <label class="f"><input type="checkbox" id="f-SB" checked><b class="lab SB">SB</b></label>
       <span class="sep"></span>
+      {# floor/ceil, never round: round() can move a bound PAST the extreme mode
+         it is supposed to include -- HCOOH's lowest is 610.92, which rounds to
+         611, and the filter then hides it. #}
       <label class="rng">ν ≥ <input type="number" id="f-lo" step="1"
-             value="{{ p.freq_range[0]|round(0)|int }}"></label>
+             value="{{ p.freq_range[0]|round(0, 'floor')|int }}"></label>
       <label class="rng">ν ≤ <input type="number" id="f-hi" step="1"
-             value="{{ p.freq_range[1]|round(0)|int }}"></label>
+             value="{{ p.freq_range[1]|round(0, 'ceil')|int }}"></label>
       <span class="sep"></span>
       <label class="f"><input type="checkbox" id="f-ref" checked> T/R reference modes</label>
       <span class="sep"></span>

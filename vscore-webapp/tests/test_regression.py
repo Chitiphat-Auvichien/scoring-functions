@@ -22,7 +22,23 @@ from app.core.parsers import (ParseError, parse_connectivity,  # noqa: E402
                               parse_gaussian_log, parse_vsc, write_vsc)
 from app.core.pipeline import analyse  # noqa: E402
 
-REF = ROOT.parent / "scoring-functions" / "data"
+def _find_reference_data():
+    """Locate the reference data whichever way the app is laid out.
+
+    The webapp lives INSIDE scoring-functions/ (so the data is ../data), but it
+    was developed as a sibling directory (../scoring-functions/data). Hardcoding
+    one of those made pytestmark's skipif silently skip the whole suite when the
+    app moved -- 42 skipped, reported as success. Try both, and say which was
+    found so a miss is visible.
+    """
+    for cand in (ROOT.parent / "data",
+                 ROOT.parent / "scoring-functions" / "data"):
+        if (cand / "logs").is_dir() and (cand / "results").is_dir():
+            return cand
+    return ROOT.parent / "data"          # nonexistent -> skipif reports it
+
+
+REF = _find_reference_data()
 SCORE_COLS = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"]
 
 pytestmark = pytest.mark.skipif(
@@ -333,3 +349,15 @@ def test_write_vsc_omits_absent_metadata(header):
         assert a["vibrations"][0]["scores"][k] == pytest.approx(
             b["vibrations"][0]["scores"][k], abs=1e-9)
 
+
+
+def test_reference_data_was_actually_found():
+    """Fail loudly if the reference data is missing, rather than skipping.
+
+    pytestmark's skipif silently skipped all 42 tests when the webapp moved into
+    scoring-functions/ and REF resolved to a path that does not exist. A skipped
+    suite reads as a passing one, so assert the location explicitly.
+    """
+    assert REF.exists(), f"reference data not found; REF resolved to {REF}"
+    assert (REF / "logs").is_dir() and (REF / "results").is_dir()
+    assert molecules(), "reference data found but no molecule had both .log and .com"

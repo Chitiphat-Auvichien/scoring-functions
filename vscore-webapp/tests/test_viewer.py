@@ -30,7 +30,23 @@ from app.core.parsers import parse_connectivity, parse_gaussian_log  # noqa: E40
 from app.core.pipeline import analyse  # noqa: E402
 from app.main import _embed  # noqa: E402
 
-REF = ROOT.parent / "scoring-functions" / "data"
+def _find_reference_data():
+    """Locate the reference data whichever way the app is laid out.
+
+    The webapp lives INSIDE scoring-functions/ (so the data is ../data), but it
+    was developed as a sibling directory (../scoring-functions/data). Hardcoding
+    one of those made pytestmark's skipif silently skip the whole suite when the
+    app moved -- 42 skipped, reported as success. Try both, and say which was
+    found so a miss is visible.
+    """
+    for cand in (ROOT.parent / "data",
+                 ROOT.parent / "scoring-functions" / "data"):
+        if (cand / "logs").is_dir() and (cand / "results").is_dir():
+            return cand
+    return ROOT.parent / "data"          # nonexistent -> skipif reports it
+
+
+REF = _find_reference_data()
 
 pytestmark = [
     pytest.mark.skipif(not JSC.exists(), reason="jsc (JavaScriptCore) not available"),
@@ -204,3 +220,38 @@ def test_dom_stub_defaults_match_the_template():
         assert checked_in_stub == checked_in_tpl, (
             f"{control}: template checked={checked_in_tpl} but "
             f"dom_stub.js sets {checked_in_stub}")
+
+
+def test_frequency_bounds_never_exclude_the_extreme_modes(tmp_path):
+    """The default range must include every mode, at both ends.
+
+    The bounds were rendered with Jinja's round(), which can move a bound PAST
+    the mode it should include: HCOOH's lowest frequency is 610.9187, rounds to
+    611, and the `frequency < lo` test then hid it ("20 of 21 shown"). The same
+    happens at the top when the highest frequency rounds down. floor/ceil fix
+    both ends.
+    """
+    import math
+    for stem in ("HCOOH", "C2H4", "C6H6", "C10H8", "HOCl"):
+        payload, got = _run_js(stem, tmp_path, """
+            var P = JSON.parse(PAYLOAD_TXT);
+            var lo = document.getElementById('f-lo'), hi = document.getElementById('f-hi');
+            lo.value = String(Math.floor(P.freq_range[0]));
+            hi.value = String(Math.ceil(P.freq_range[1]));
+            lo._listeners.input.call(lo);
+            var n = 0;
+            document.querySelectorAll('#tbl tbody tr').forEach(function () { n++; });
+            print(JSON.stringify({rows: n}));
+        """)
+        want = payload["n_modes"] + len(payload["references"])
+        assert json.loads(got)["rows"] == want, \
+            f"{stem}: {json.loads(got)['rows']} of {want} rows shown"
+
+
+def test_template_uses_floor_and_ceil_for_the_bounds():
+    """Guard the fix at its source, not just its effect."""
+    tpl = (ROOT / "app/templates/result.html").read_text()
+    assert "round(0, 'floor')" in tpl, "f-lo must floor, not round"
+    assert "round(0, 'ceil')" in tpl, "f-hi must ceil, not round"
+    assert "freq_range[0]|round(0)|int" not in tpl
+    assert "freq_range[1]|round(0)|int" not in tpl

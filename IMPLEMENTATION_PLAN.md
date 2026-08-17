@@ -27,8 +27,31 @@
 - **Phase 6 (strengthen for review): partly open.** 1 of 3 recommended items done (result excluded from
   manuscript by author decision, kept as internal diagnostic); 2 open recommended items are the other
   near-term frontier: mixed-SB bucket validation library-wide, out-of-sample/leave-one-molecule-out
-  evaluation.
-- Most recent session (2026-08-14, later same day): H2O.gjf/.log reverted mp2/3-21g* → mp2/3-21g
+  evaluation. **2026-08-17:** the 18-molecule transferability confusion matrix (T/R/B/SB/S,
+  `plot_transferability_confusion`) is now built — partial progress on the out-of-sample item (see its
+  checklist entry below); still not a full leave-one-molecule-out re-calibration loop.
+- Most recent session (2026-08-17): user finished hand-curating `data/characterised_modes.csv`'s `type`
+  column (B/S/SB) for the 8 test molecules that previously lacked it (CH3COCH3, C6H4F2, XeF2Cl2, C2H4,
+  C10H8, HOCl, HCOOH, C7H8) — all 18 `test`-tier molecules now have 0 blank `type` cells, unblocking the
+  transferability confusion matrix noted as blocked in the 2026-08-14 sessions below. `python main.py
+  --library` rerun to pick up the new ground truth into `library_scores.csv` (0 NaN `ref_label` remaining
+  on the 18 test molecules' 390 internal rows; no `--calibrate` rerun needed since this tier is outside
+  calibration scope). Added `test_tier_molecules()` (`src/library_ingest.py`, mirrors
+  `multi_centre_molecules()`) and `plot_transferability_confusion()` (`src/figures.py`, PROPOSED
+  `fig:transferabilityconfusion`, wired into `regenerate_all()`) — a pooled joint T/R/B/SB/S confusion
+  matrix over all 18 test molecules (n=498), with T/R kept as separate categories (unlike
+  `fig:benzeneconfusion`'s collapsed "T/R"). Required adding bare `"T"`/`"R"`/`"B"`/`"S"` entries to
+  `REF_LABEL_TO_CATEGORY`/`CATEGORY_LABEL`/`CATEGORY_COLOR` (purely additive, self-mapped to their own
+  category rather than routed through the existing `"translation"`/`"rotation"` categories, whose
+  `CATEGORY_LABEL` text — "clean translation" — would have been wrong for this table). Verified every
+  other figure function still regenerates cleanly (individually invoked, not just via `regenerate_all()`)
+  — the one pre-existing `KeyError: 'C2_Tx'` in `plot_benzene_stress_test` is unrelated stale-EMIT-
+  projection state in `data/results/C6H6_EMIT.csv` (needs `--emit-projection` rerun), not caused by this
+  session's changes; left alone as out of scope. Results: T/R exact (54/54, by construction); B recall
+  0.744 (169/227), S recall 0.599 (91/152), SB precision only 0.079 (10/126 — most SB predictions are
+  really B or S against literature ground truth), directly corroborating the still-open "validate the
+  mixed-SB bucket library-wide" Phase 6 item.
+- Prior session (2026-08-14, later same day): H2O.gjf/.log reverted mp2/3-21g* → mp2/3-21g
   (undoing the prior session's rerun — an exact byte revert to the pre-G16-promotion G09 input/output),
   and VEDA4 `.ved`+`.vdf` PED output added for all 9 previously-missing `test`-category molecules (H2O
   + the 8 that had none: CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8). `reproduce.py` (no
@@ -52,8 +75,9 @@
   `fig_cputime*`/`fig_gaussian_nbasis*` changed too but only from run-to-run timing-benchmark noise, not
   from either input change; all other figures byte-identical modulo PDF `CreationDate`/`ModDate`/`ID`
   metadata. The 8 new molecules still lack `characterised_modes.csv` ground-truth rows (only freq/k/μ
-  get resynced, not irrep/ref_label) — the 18-molecule transferability confusion-matrix figure remains
-  blocked on hand-curation, not on PED data, confirmed unchanged. `pytest` 139/141 green (2 pre-existing
+  get resynced, not irrep/ref_label) — the 18-molecule transferability confusion-matrix figure remained
+  blocked on hand-curation, not on PED data, confirmed unchanged at the time (resolved 2026-08-17, see
+  most recent session note above). `pytest` 139/141 green (2 pre-existing
   `test_veda_fmt_regression.py` failures only, unrelated to either input change); 2 golden-value tests
   repinned for H2O's reverted numbers (`tests/test_scores.py::test_water_tab_water` — Vib3 Tx/Rz sign
   flipped back to the pre-G16-promotion convention, `-0.1963`/`-0.2959`; `tests/test_library_ingest.py::
@@ -334,7 +358,16 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
       the fraction report to the whole library (pooled `mixed_fraction` exists in
       `confusion_matrix_stats()` but not written up as this item's deliverable).
 - [ ] **Out-of-sample / leave-one-molecule-out evaluation** of the τ-calibrated classifier — answers
-      "reference-free vs. secretly-fit-τ" objection that the sensitivity plateau alone doesn't. Fully open.
+      "reference-free vs. secretly-fit-τ" objection that the sensitivity plateau alone doesn't.
+      **Partially discharged 2026-08-17**: `plot_transferability_confusion()` (`src/figures.py`,
+      PROPOSED `fig:transferabilityconfusion`) builds the pooled joint T/R/B/SB/S confusion matrix for
+      the 18-molecule `test` tier — genuinely out-of-sample since this tier is excluded from τ_S/τ_B
+      calibration by construction, against independent hand-curated `characterised_modes.csv` ground
+      truth (n=498: T/R 54/54 exact by construction; B recall 0.744 [169/227], S recall 0.599 [91/152],
+      SB precision only 0.079 [10/126] — the mixed-SB bucket over-fires against literature ground truth
+      here, corroborating the item above). **Still open:** this is one confusion matrix over the held-out
+      tier, not a true leave-one-molecule-out re-calibration loop (τ is still fit once on the
+      ideal/non-ideal population and applied unchanged) — the CV-style objection isn't fully answered yet.
 
 ### Optional (nice-to-have, not fatal if deferred)
 - [ ] N-per-cell + confidence intervals on the confusion matrix (thin bend counts invite a significance

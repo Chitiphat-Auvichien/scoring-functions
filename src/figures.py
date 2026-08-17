@@ -27,7 +27,13 @@ awkwardly next to this section's deliberate "mixed by eye is a convention"
 hedging), ``plot_rigorous_tier_check`` (the removed ideal-tier confusion
 panels from fig:confusion -- precision/recall=1.000 there is circular by
 construction, kept only as a self-consistency check, not an accuracy claim),
-``plot_irrep_coupling`` (irrep-degeneracy mixing-mechanism figure: mode
+``plot_transferability_confusion`` (fig:transferabilityconfusion, PROPOSED --
+the 18-molecule held-out "test" tier's own joint T/R/B/SB/S confusion matrix,
+genuinely non-circular since this tier is excluded from tau_S/tau_B
+calibration and its internal ground truth is independently hand-curated in
+``characterised_modes.csv``; T and R are kept SEPARATE, unlike
+fig:benzeneconfusion's collapsed "T/R"), ``plot_irrep_coupling``
+(irrep-degeneracy mixing-mechanism figure: mode
 score vs. central-atom displacement amplitude, faceted by same-irrep
 coupling partner; reads ``irrep``/``shape``/``type`` from
 ``characterised_modes.csv``, ideal/non-ideal from ``mol_list_method.csv``'s
@@ -131,6 +137,17 @@ REF_LABEL_TO_CATEGORY = {
     # Collapsed entry (fig:benzeneconfusion only): all 6 axes folded into
     # one "T/R" row/column, since per-axis detail is already shown elsewhere.
     "T/R": "T/R",
+    # Bare T/R (kept SEPARATE, unlike "T/R" above) + bare B/S entries:
+    # fig:transferabilityconfusion's 5-way T/R/B/SB/S table
+    # (plot_transferability_confusion). "SB" needs no entry of its own --
+    # it already routes to "mixed" above, which round-trips through
+    # CATEGORY_LABEL back to "SB". "B"/"S" route to the existing
+    # "bend"/"stretch" categories (correct short labels + colors already).
+    # "T"/"R" are self-mapped to their OWN category (like "Tx".."Rz" are),
+    # NOT to "translation"/"rotation" -- that category's CATEGORY_LABEL text
+    # is "clean translation"/"clean rotation", wrong for this bare-letter
+    # table (needs its own CATEGORY_COLOR/REF_CATEGORY_COLOR entries below).
+    "T": "T", "R": "R", "B": "bend", "S": "stretch",
 }
 PRED_BUCKET_TO_CATEGORY = dict(REF_LABEL_TO_CATEGORY)
 PRED_BUCKET_TO_CATEGORY.update({
@@ -168,6 +185,9 @@ CATEGORY_COLOR = {
     "Tx": COLORS["external"], "Ty": COLORS["external"], "Tz": COLORS["external"],
     "Rx": COLORS["external"], "Ry": COLORS["external"], "Rz": COLORS["external"],
     "T/R": COLORS["external"],
+    # Bare T/R self-mapped category (fig:transferabilityconfusion) -- same
+    # external gray as every other T/R-flavored entry above.
+    "T": COLORS["external"], "R": COLORS["external"],
 }
 
 # Reference/ground-truth (literature) counterpart of CATEGORY_COLOR:
@@ -207,6 +227,9 @@ CATEGORY_LABEL = {
     "Tx": "Tx", "Ty": "Ty", "Tz": "Tz",
     "Rx": "Rx", "Ry": "Ry", "Rz": "Rz",
     "T/R": "T/R",
+    # Bare T/R/B/S tick text for fig:transferabilityconfusion (see the
+    # matching REF_LABEL_TO_CATEGORY entries above).
+    "T": "T", "R": "R", "B": "B", "S": "S",
 }
 
 # Named font-size overrides: the ONLY permitted exceptions to _style()'s
@@ -988,6 +1011,120 @@ def plot_rigorous_tier_check(
         "recall": {r["category"]: r["recall"] for r in rows},
         "acceptance_floor": stats_r["acceptance_floor"],
         "floor_met": stats_r["floor_met"],
+    }
+    return summary
+
+
+# --------------------------------------------------------------------------
+# fig:transferabilityconfusion -- the 18-molecule held-out "test" tier's own
+# joint T/R/B/SB/S confusion matrix (Phase 6's out-of-sample-evaluation
+# instrument). Genuinely non-circular: this tier is excluded from tau_S/tau_B
+# calibration by construction (SINGLE_CENTRE_ONLY_EXCLUDE), and its internal
+# ground truth is hand-curated in data/characterised_modes.csv, independent
+# of the classifier. Unlike fig:confusion/fig:benzeneconfusion, T and R are
+# kept as SEPARATE categories (not collapsed to one "T/R" bucket) per the
+# 5-way T/R/B/SB/S spec asked for here -- reuses _confusion_heatmap via the
+# bare "T"/"R"/"B"/"S" REF_LABEL_TO_CATEGORY/CATEGORY_LABEL entries added
+# above, but builds its own crosstab rather than going through
+# _joint_confusion_table (whose collapse_external=True merges T+R together,
+# and whose _axis_aware_pred_category discards axis identity for any
+# mixed-external prediction -- both wrong for this table).
+# --------------------------------------------------------------------------
+
+def plot_transferability_confusion(
+    library_csv="data/results/library_scores.csv",
+    out_dir="data/figures",
+    label="fig_transferability_confusion",
+    matrix_csv_path="data/results/transferability_confusion_matrix.csv",
+    summary_csv_path="data/results/transferability_confusion_summary.csv",
+):
+    """Build fig:transferabilityconfusion: a single 5x5 joint confusion
+    matrix (T, R, B, SB, S) pooling all 18 ``mol_type=='test'`` molecules'
+    modes -- external (Tx..Rz) rows exact by Eckart-Sayvetz construction,
+    internal (B/S/SB) rows from the hand-curated ``ref_label`` column
+    ``src/library_ingest.py::attach_labels()`` joins in from
+    ``data/characterised_modes.csv``.
+
+    T/R ground truth: first character of the external row's ``mode_index``
+    ("Tx"->"T", "Rz"->"R"). T/R prediction: ``classifier.external_axis()``
+    (strips a mixed-external "*" suffix before taking the first character,
+    so an impure "Tx*" still counts as predicted "T" -- confirmed empirically
+    absent for this tier's current data, 0/498 rows starred, but handled for
+    correctness). B/SB/S on both sides go through the ordinary
+    ``ref_label``/``classification_bucket()`` vocabulary. Any internal row
+    still missing ``ref_label`` (stale ``library_scores.csv``, i.e. ``python
+    main.py --library`` hasn't been rerun since the last
+    ``characterised_modes.csv`` edit) is dropped and counted in
+    ``n_dropped_missing_ground_truth`` rather than silently ignored.
+    """
+    _style()
+    from src.classifier import classification_bucket, external_axis
+    from src.library_ingest import test_tier_molecules
+
+    lib_df = pd.read_csv(library_csv)
+    test_mols = test_tier_molecules()
+    df = lib_df[lib_df["molecule"].isin(test_mols)].copy()
+
+    ext_mask = df["kind"] == "external"
+    ref_internal_map = {"bend": "B", "stretch": "S", "SB": "SB"}
+    ref_cat = pd.Series(index=df.index, dtype=object)
+    ref_cat[ext_mask] = df.loc[ext_mask, "mode_index"].astype(str).str[0]
+    ref_cat[~ext_mask] = df.loc[~ext_mask, "ref_label"].map(ref_internal_map)
+
+    pred_internal_map = {"stretch": "S", "bend": "B", "mixed": "SB"}
+
+    def _pred_category(predicted_label):
+        axis = external_axis(predicted_label)
+        if axis is not None:
+            return axis[0]
+        return pred_internal_map.get(classification_bucket(predicted_label))
+
+    pred_cat = df["predicted_label"].map(_pred_category)
+
+    keep = ref_cat.notna()
+    n_dropped = int((~keep).sum())
+    n_folded_mixed_external = int(
+        df["predicted_label"].astype(str).str.endswith("*").sum())
+
+    ref_order = ["T", "R", "B", "SB", "S"]
+    tbl = pd.crosstab(
+        pd.Series(ref_cat[keep], name="ref"),
+        pd.Series(pred_cat[keep], name="pred"),
+    )
+    tbl = tbl.reindex(index=ref_order, columns=ref_order, fill_value=0)
+    n_total = int(tbl.values.sum())
+
+    fig, ax = plt.subplots(figsize=(4.6, 4.2))
+    _confusion_heatmap(ax, fig, tbl, ref_order)
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    os.makedirs(os.path.dirname(matrix_csv_path), exist_ok=True)
+    tbl.to_csv(matrix_csv_path)
+    rows = _per_category_from_table(tbl, ref_order)
+    pd.DataFrame(rows).to_csv(summary_csv_path, index=False)
+
+    per_molecule_n = df.groupby("molecule").size().to_dict()
+
+    summary = {
+        "pdf": pdf_path, "png": png_path,
+        "matrix_csv": matrix_csv_path, "summary_csv": summary_csv_path,
+        "n_total": n_total,
+        "n_molecules": len(test_mols),
+        "per_molecule_n": per_molecule_n,
+        "n_dropped_missing_ground_truth": n_dropped,
+        "n_folded_mixed_external": n_folded_mixed_external,
+        "confusion_table": tbl.to_dict(),
+        "precision": {r["category"]: r["precision"] for r in rows},
+        "recall": {r["category"]: r["recall"] for r in rows},
+        "framing": ("Genuinely non-circular: the 18-molecule test tier is "
+                     "excluded from tau_S/tau_B calibration by construction "
+                     "(SINGLE_CENTRE_ONLY_EXCLUDE), so this is the classifier "
+                     "applied out-of-sample against independent hand-curated "
+                     "ground truth (data/characterised_modes.csv), not a "
+                     "restatement of the calibration population like "
+                     "plot_rigorous_tier_check."),
     }
     return summary
 
@@ -2398,6 +2535,7 @@ def regenerate_all(verbose=True):
         ("fig:confusion", plot_confusion_matrix),
         ("SI confusion retention/migration (no fig: label yet)", plot_confusion_retention_migration),
         ("SI rigorous-tier consistency check (no fig: label yet)", plot_rigorous_tier_check),
+        ("fig:transferabilityconfusion (proposed, not yet in .tex)", plot_transferability_confusion),
         ("fig:benzeneconfusion", plot_benzene_internal_confusion),
         ("SI benzene precision/recall (no fig: label yet)", plot_benzene_confusion_precision_recall),
         ("fig:benzeneemitcounts", plot_benzene_emit_counts),

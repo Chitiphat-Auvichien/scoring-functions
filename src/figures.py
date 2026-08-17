@@ -1037,6 +1037,7 @@ def plot_transferability_confusion(
     label="fig_transferability_confusion",
     matrix_csv_path="data/results/transferability_confusion_matrix.csv",
     summary_csv_path="data/results/transferability_confusion_summary.csv",
+    misclassified_csv_path="data/results/transferability_confusion_misclassified.csv",
 ):
     """Build fig:transferabilityconfusion: a single 5x5 joint confusion
     matrix (T, R, B, SB, S) pooling all 18 ``mol_type=='test'`` molecules'
@@ -1056,9 +1057,17 @@ def plot_transferability_confusion(
     main.py --library`` hasn't been rerun since the last
     ``characterised_modes.csv`` edit) is dropped and counted in
     ``n_dropped_missing_ground_truth`` rather than silently ignored.
+
+    Also writes ``misclassified_csv_path``: one row per off-diagonal mode
+    (``ref_category != predicted_category``), molecule/mode/freq/irrep plus
+    the literature ``description``/``ref`` columns joined in directly from
+    ``data/characterised_modes.csv`` (not carried by ``library_scores.csv``
+    itself) -- lets a reader open one file and see exactly which modes to
+    look at, not just the aggregate counts in ``matrix_csv_path``.
     """
     _style()
     from src.classifier import classification_bucket, external_axis
+    from src.csv_label_ingest import load_label_csvs
     from src.library_ingest import test_tier_molecules
 
     lib_df = pd.read_csv(library_csv)
@@ -1105,12 +1114,36 @@ def plot_transferability_confusion(
     rows = _per_category_from_table(tbl, ref_order)
     pd.DataFrame(rows).to_csv(summary_csv_path, index=False)
 
+    # Per-mode detail for every off-diagonal (misclassified) mode, joined
+    # against characterised_modes.csv's own literature description/ref
+    # columns -- library_scores.csv only carries ref_key, not description.
+    cm = load_label_csvs()["characterised_modes"][
+        ["molecule", "mode", "description", "ref"]].copy()
+    cm["mode"] = pd.to_numeric(cm["mode"], errors="coerce")
+    mis_mask = keep & (ref_cat != pred_cat)
+    mis = df.loc[mis_mask, ["molecule", "mode_index", "kind", "freq",
+                             "irrep", "V_Stretch", "predicted_label"]].copy()
+    mis["ref_category"] = ref_cat[mis_mask]
+    mis["predicted_category"] = pred_cat[mis_mask]
+    mis["mode_index_numeric"] = pd.to_numeric(mis["mode_index"], errors="coerce")
+    mis = mis.merge(
+        cm, how="left", left_on=["molecule", "mode_index_numeric"],
+        right_on=["molecule", "mode"],
+    ).drop(columns=["mode_index_numeric", "mode"])
+    mis = mis.sort_values(
+        ["ref_category", "predicted_category", "molecule", "mode_index"]
+    ).reset_index(drop=True)
+    mis.to_csv(misclassified_csv_path, index=False)
+    n_misclassified = len(mis)
+
     per_molecule_n = df.groupby("molecule").size().to_dict()
 
     summary = {
         "pdf": pdf_path, "png": png_path,
         "matrix_csv": matrix_csv_path, "summary_csv": summary_csv_path,
+        "misclassified_csv": misclassified_csv_path,
         "n_total": n_total,
+        "n_misclassified": n_misclassified,
         "n_molecules": len(test_mols),
         "per_molecule_n": per_molecule_n,
         "n_dropped_missing_ground_truth": n_dropped,

@@ -1,0 +1,9 @@
+# Local development: everything the deployed function needs, plus the server to
+# run it, the test runner, and the tooling for make_excel.py.
+# pandas/openpyxl are deliberately NOT in requirements.txt -- the deployed app
+# writes CSV with the stdlib and never needs them.
+-r requirements.txt
+uvicorn[standard]==0.34.0
+pytest==8.3.4
+pandas==2.2.3
+openpyxl==3.1.5

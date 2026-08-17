@@ -1,0 +1,20 @@
+{
+  "tau_TR": 0.95,
+  "tau_S": 0.9012868462693647,
+  "tau_B": 0.17326891344050538,
+  "v_weighting": "mu",
+  "plateau_tau_TR_range": [
+    0.34,
+    0.995
+  ],
+  "plateau_criterion": "Longest contiguous run of the tau_TR grid (step 0.005, 0.05-0.999) with zero label changes vs. the previous grid point AND accuracy at its run maximum, evaluated over {85 geometry-backed library molecules' real normal-mode T/R references [ground truth: always clean, exact completeness] + benzene's 36 EMIT modes [no independent ground truth; label-change signal only]}.",
+  "stretch_bend_derivation": {
+    "ideal_stretch_n": 39,
+    "ideal_stretch_min": 0.9012868462693647,
+    "ideal_stretch_mean": 0.9895606455148412,
+    "ideal_bend_n": 48,
+    "ideal_bend_max": 0.17326891344050538,
+    "ideal_bend_mean": 0.03616810335710249,
+    "gap_width": 0.7280179328288594
+  }
+}

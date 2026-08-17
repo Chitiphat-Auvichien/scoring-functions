@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}score modes{% endblock %}
+{% block body %}
+<div class="pane">
+
+  {% if error %}
+  <div class="err">
+    <strong>Could not score that.</strong>
+    <p>{{ error }}</p>
+  </div>
+  {% endif %}
+
+  <h1>Score the normal modes of a molecule.</h1>
+  <p class="lede">
+    Seven scores per mode — <code>Tx Ty Tz</code> translation, <code>Rx Ry Rz</code>
+    rotation, <code>V_S</code> stretch character — then a label:
+    <b class="lab S">S</b> stretching, <b class="lab B">B</b> bending,
+    <b class="lab SB">SB</b> mixed.
+  </p>
+
+  <form method="post" action="/score" enctype="multipart/form-data" id="form">
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab on" data-mode="log" role="tab">Gaussian .log + .com</button>
+      <button type="button" class="tab" data-mode="vsc" role="tab">Single .vsc file</button>
+    </div>
+    <input type="hidden" name="mode" id="mode" value="log">
+
+    <section class="panel on" id="p-log">
+      <div class="grid2">
+        <label class="drop">
+          <span class="k">Gaussian output</span>
+          <input type="file" name="logfile" accept=".log,.out,.txt">
+          <span class="hint">geometry + displacement vectors</span>
+        </label>
+        <label class="drop">
+          <span class="k">Input deck</span>
+          <input type="file" name="comfile" accept=".com,.gjf,.inp,.txt">
+          <span class="hint">connectivity — needs <code>geom=connectivity</code></span>
+        </label>
+      </div>
+      <p class="note">
+        Both files are required. A Gaussian <code>.log</code> contains no bond list —
+        connectivity lives in the input deck — and <code>V_S</code> is a sum over bonds.
+        Rather than guess the bonds, this app asks for them.
+      </p>
+    </section>
+
+    <section class="panel" id="p-vsc">
+      <label class="drop wide">
+        <span class="k">.vsc file</span>
+        <input type="file" name="vscfile" accept=".vsc,.txt">
+        <span class="hint">geometry + connectivity + modes, all in one</span>
+      </label>
+      <p class="note">
+        One self-contained file, typically a few kB against a multi-megabyte log.
+        Score any <code>.log</code>&nbsp;+&nbsp;<code>.com</code> pair once and download the
+        <code>.vsc</code> from the results page — or convert in bulk with
+        <code>make_vsc.py</code>. <a href="/format">Format spec →</a>
+      </p>
+    </section>
+
+    <button type="submit" class="go">Score modes</button>
+  </form>
+
+  <details class="what">
+    <summary>What the scorer actually reads</summary>
+    <div class="cols">
+      <div>
+        <h4>Required</h4>
+        <table class="mini">
+          <tr><td>element per atom</td><td>→ atomic mass</td><td class="y">all 7</td></tr>
+          <tr><td>coordinates</td><td>→ COM, principal axes</td><td class="y">all 7</td></tr>
+          <tr><td>displacements</td><td>→ the mode</td><td class="y">all 7</td></tr>
+          <tr><td>bond list</td><td>→ per-bond terms</td><td class="y">V_S only</td></tr>
+        </table>
+      </div>
+      <div>
+        <h4>Never read</h4>
+        <p class="muted">
+          Frequency (a row label — zeroing it changes nothing), reduced mass, force
+          constant, irrep, IR/Raman intensities, charge, multiplicity, basis set —
+          and the Cartesian Hessian, which is the largest block in a VEDA
+          <code>.fmt</code> and is not used at all.
+        </p>
+      </div>
+    </div>
+  </details>
+</div>
+
+<script>
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.addEventListener("click", function () {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("on"));
+      document.querySelectorAll(".panel").forEach(x => x.classList.remove("on"));
+      t.classList.add("on");
+      document.getElementById("p-" + t.dataset.mode).classList.add("on");
+      document.getElementById("mode").value = t.dataset.mode;
+    });
+  });
+  // Show the chosen filename in the drop zone.
+  document.querySelectorAll(".drop input[type=file]").forEach(function (inp) {
+    inp.addEventListener("change", function () {
+      var h = inp.parentElement.querySelector(".hint");
+      if (inp.files.length) { h.textContent = inp.files[0].name; h.classList.add("has"); }
+    });
+  });
+</script>
+{% endblock %}

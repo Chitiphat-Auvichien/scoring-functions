@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}vscore{% endblock %} · vscore</title>
+  <meta name="description" content="Score vibrational normal modes against seven reference motions and classify them as stretching, bending or mixed.">
+  <link rel="stylesheet" href="/static/app.css">
+  <script>
+    (function () {
+      try { var t = localStorage.getItem("vs-theme");
+            if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+<header class="bar">
+  <a class="wordmark" href="/">vscore<span class="v">7</span></a>
+  <span class="sub">vibrational mode scoring</span>
+  <nav>
+    <a href="/">score</a>
+    <a href="/format">.vsc format</a>
+    <a href="/about">method</a>
+    <a href="/docs">api</a>
+    <button type="button" id="theme" aria-label="Toggle theme" title="Toggle theme">◐</button>
+  </nav>
+</header>
+
+<main>{% block body %}{% endblock %}</main>
+
+<footer>
+  <span>{{ site_note }}</span>
+  <span class="ver">v{{ version }}</span>
+</footer>
+
+<script>
+  (function () {
+    var b = document.getElementById("theme");
+    if (!b) return;
+    b.addEventListener("click", function () {
+      var r = document.documentElement, c = r.getAttribute("data-theme");
+      if (!c) c = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      var n = c === "dark" ? "light" : "dark";
+      r.setAttribute("data-theme", n);
+      try { localStorage.setItem("vs-theme", n); } catch (e) {}
+    });
+  })();
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

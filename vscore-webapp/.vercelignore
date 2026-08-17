@@ -1,0 +1,10 @@
+.venv/
+venv/
+.git/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+tests/
+examples/
+make_vsc.py
+requirements-dev.txt

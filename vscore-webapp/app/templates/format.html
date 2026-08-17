@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}.vsc format{% endblock %}
+{% block body %}
+<div class="prose">
+  <h1>The <code>.vsc</code> format, v1.0</h1>
+  <p>
+    One self-contained file carrying everything the scorer needs and nothing it
+    doesn't. A few kB where a Gaussian log is megabytes, because the parts that
+    dominate a log — SCF iterations, the Hessian, integrals — are never read.
+  </p>
+
+  <h2>Full example</h2>
+<pre>#VSCORE 1.0
+#TITLE   HOCl  MP2/3-21G
+#SOURCE  HOCl.log + HOCl.com
+
+[GEOMETRY] Angstrom
+    1  O        0.038069       1.197522       0.000000
+    2  H       -0.951724       1.378354       0.000000
+    3  Cl       0.038069      -0.644619       0.000000
+
+[CONNECTIVITY]
+    1  2  3
+    2
+    3
+
+[MODES] 3
+  mode 1   freq=667.6406   mu=17.7040   k=4.9258   irrep=A'
+    1      0.00088      0.85015     -0.00000
+    2     -0.16190      0.30478     -0.00000
+    3      0.00426     -0.39765      0.00000
+  mode 2   freq=1256.0043  irrep=A'
+    ...</pre>
+
+  <h2>Rules</h2>
+  <ul>
+    <li><b>Header.</b> <code>#VSCORE 1.0</code> first. <code>#TITLE</code> and
+        <code>#SOURCE</code> optional. Any <code>#</code> line is a comment; trailing
+        <code>#</code> comments and blank lines are ignored everywhere.</li>
+    <li><b><code>[GEOMETRY]</code></b> — one atom per line, <code>index element x y z</code>.
+        The leading index is optional. The element may be a symbol
+        (<code>Cl</code>, case-insensitive) or an atomic number (<code>17</code>).
+        Coordinates in Ångström.</li>
+    <li><b><code>[CONNECTIVITY]</code></b> — the Gaussian <code>.com</code> idiom:
+        <code>centre partner [order] partner [order] …</code>, one line per atom.
+        Bond orders are accepted and ignored — they play no part in the V-score.
+        Bonds are symmetric and de-duplicated, so listing each once is enough.
+        <b>Required.</b></li>
+    <li><b><code>[MODES] N</code></b> — <code>N</code> optional; if given it must match.
+        Each mode opens with <code>mode &lt;n&gt;</code> plus optional
+        <code>freq=</code>, <code>mu=</code>, <code>k=</code>, <code>irrep=</code>,
+        followed by one <code>dx dy dz</code> row per atom (optional leading index).</li>
+  </ul>
+
+  <h2>All mode metadata is optional</h2>
+  <p>
+    <code>freq=</code>, <code>mu=</code>, <code>k=</code> and <code>irrep=</code> are
+    every one of them optional, in any combination. The scorer reads <em>none</em> of
+    them &mdash; they are row metadata that rides along to the output table and the CSV.
+    A bare <code>mode 1</code> followed by its displacement rows scores identically to
+    a fully annotated one.
+  </p>
+<pre>[MODES] 3
+  mode 1   freq=667.6406   mu=17.7040   k=4.9258   irrep=A'   &larr; all four
+  mode 2   freq=1256.0043                                     &larr; just the frequency
+  mode 3                                                      &larr; nothing at all</pre>
+  <p>
+    An omitted <code>freq</code> stays <em>absent</em> rather than becoming
+    <code>0.0</code>, so the table shows a dash instead of an invented
+    0.00&nbsp;cm&#8315;&#185;, and the writer emits only the fields your file actually
+    had. Case does not matter (<code>FREQ=</code> works). Unknown
+    <code>key=value</code> pairs are ignored.
+  </p>
+  <p>
+    Only the four blocks below are load-bearing: the element symbols, the coordinates,
+    the connectivity, and the displacement rows.
+  </p>
+
+  <h2>Why connectivity is mandatory</h2>
+  <p>
+    <code>s[V<sub>S</sub>]</code> is a weighted sum over bonds. With an empty bond
+    list it evaluates to exactly <code>0.000</code> for every mode — and since
+    <code>0.000 ≤ τ<sub>B</sub></code>, every mode would then be labelled
+    <b class="lab B">B</b>. That failure produces a complete, plausible, entirely
+    wrong table with no error anywhere. So a file without
+    <code>[CONNECTIVITY]</code> is rejected rather than scored, and bonds are never
+    inferred from interatomic distances.
+  </p>
+
+  <h2>Precision</h2>
+  <p>
+    Write displacements at full precision — Gaussian <code>freq=hpmodes</code>, five
+    decimal places. Standard two-decimal output survives the labels
+    (<code>V_S</code> moves by ≤0.03, against a stretch/bend gap of 0.73) but shifts
+    individual <b>T-scores by up to 0.31</b> on a [−1, 1] scale, because
+    <code>Tscore()</code> unit-normalises each atom's displacement before summing,
+    so an atom printed as <code>0.00 0.00 0.00</code> is either masked to zero or
+    promoted to a full unit vector on rounding noise. The app detects low-precision
+    input and warns.
+  </p>
+
+  <h2>Producing one</h2>
+  <ul>
+    <li>Score any <code>.log</code> + <code>.com</code> pair and click
+        <b>.vsc</b> on the results page.</li>
+    <li>In bulk: <code>python make_vsc.py mol.log mol.com -o mol.vsc</code>, or
+        <code>python make_vsc.py --batch logs/ gjf/ -o out/</code>.</li>
+  </ul>
+  <p>
+    The geometry written is the <b>original</b> frame the data arrived in, not the
+    principal-axis frame the scores are computed in. That matters: the alignment
+    step is <em>not</em> idempotent — its sign-fix heuristic negates the rotation
+    when the heaviest atom's projected coordinates sum negative, so re-aligning an
+    already-aligned geometry can flip axes and invert the T and R scores. Storing
+    the original frame makes the round trip exact, verified across all 69
+    reference molecules.
+  </p>
+</div>
+{% endblock %}

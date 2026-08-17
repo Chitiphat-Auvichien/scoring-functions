@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}{{ p.title }}{% endblock %}
+{% block body %}
+
+<div class="head">
+  <h1>{{ p.title }}</h1>
+  <div class="facts">
+    <span><b>{{ p.n_atoms }}</b> atoms</span>
+    <span><b>{{ p.n_modes }}</b> modes</span>
+    <span><b>{{ p.bonds|length }}</b> bonds</span>
+    <span>{{ "linear" if p.linear else "non-linear" }}</span>
+    <span title="V-score bond weighting">w = <b>{{ p.thresholds.v_weighting }}</b></span>
+    <span title="stretching / bending cut points on s[V_S]">
+      τ<sub>S</sub> {{ "%.3f"|format(p.thresholds.tau_S) }} ·
+      τ<sub>B</sub> {{ "%.3f"|format(p.thresholds.tau_B) }}</span>
+    <span title="displacement decimal places">{{ p.precision_dp }} dp</span>
+  </div>
+  <div class="dl">
+    <button type="button" data-dl="csv">scores.csv</button>
+    <button type="button" data-dl="csvall">+ references</button>
+    <button type="button" data-dl="vsc">{{ p.title }}.vsc</button>
+    <a href="/">new file</a>
+  </div>
+</div>
+
+{% for w in p.warnings %}
+<div class="warn"><strong>Check this.</strong> {{ w }}</div>
+{% endfor %}
+
+<div class="bonds-strip">
+  <span class="bk">connectivity used</span>
+  {% for b in p.bond_labels %}<code>{{ b }}</code>{% endfor %}
+  <span class="bk right">from {{ p.source or "your upload" }} — not inferred</span>
+</div>
+
+<div class="split">
+
+  <!-- ------------------------------------------------ table ------- -->
+  <section class="tablewrap">
+    <div class="filters">
+      <label class="f"><input type="checkbox" id="f-S" checked><b class="lab S">S</b></label>
+      <label class="f"><input type="checkbox" id="f-B" checked><b class="lab B">B</b></label>
+      <label class="f"><input type="checkbox" id="f-SB" checked><b class="lab SB">SB</b></label>
+      <span class="sep"></span>
+      <label class="rng">ν ≥ <input type="number" id="f-lo" step="1"
+             value="{{ p.freq_range[0]|round(0)|int }}"></label>
+      <label class="rng">ν ≤ <input type="number" id="f-hi" step="1"
+             value="{{ p.freq_range[1]|round(0)|int }}"></label>
+      <span class="sep"></span>
+      <label class="f"><input type="checkbox" id="f-ref" checked> T/R reference modes</label>
+      <span class="sep"></span>
+      <button type="button" id="all">all</button>
+      <button type="button" id="none">none</button>
+      <span class="count" id="count"></span>
+    </div>
+
+    <div class="scroll">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th class="c"><input type="checkbox" id="chk-all" checked title="select all shown"></th>
+            <th>mode</th>
+            <th class="n">ν / cm⁻¹</th>
+            {% for k in score_keys %}<th class="n">{{ k }}</th>{% endfor %}
+            <th>label</th>
+            <th>irrep</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="legend">
+      The six <b>Tx&hellip;Rz</b> rows are the constructed ideal translation and
+      rotation modes &mdash; by the algorithm they are the only modes that carry
+      external character, so they highlight their dominant score. For a real
+      vibration the highlight is always <b>V_S</b>, the score its
+      <b class="lab S">S</b>/<b class="lab B">B</b>/<b class="lab SB">SB</b> label
+      comes from; its T/R values are shown greyed as diagnostics. Click any row to
+      animate it.
+    </p>
+  </section>
+
+  <!-- ------------------------------------------------ viewer ------ -->
+  <aside class="viewer">
+    <div class="vhead">
+      <span id="vtitle">select a mode</span>
+      <span id="vlabel"></span>
+    </div>
+    <div id="mol"></div>
+    <div class="vctl">
+      <label>amplitude <input type="range" id="amp" min="0.2" max="3" step="0.1" value="1"></label>
+      <label>frames <input type="range" id="frm" min="4" max="20" step="1" value="10"></label>
+      <label class="f"><input type="checkbox" id="arrows" checked> arrows</label>
+      <label class="f"><input type="checkbox" id="play" checked> animate</label>
+    </div>
+    <div class="bondtab">
+      <div class="bk">per-bond s<sub>AB</sub> for this mode</div>
+      <div id="bondlist" class="blist"><span class="muted">—</span></div>
+    </div>
+  </aside>
+</div>
+
+<script id="payload" type="application/json">{{ payload_json | safe }}</script>
+<script id="downloads" type="application/json">{{ downloads_json | safe }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/3Dmol-min.js"></script>
+<script src="/static/app.js"></script>
+{% endblock %}

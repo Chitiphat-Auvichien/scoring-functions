@@ -70,6 +70,13 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None):
     linear = is_linear(scorer)
 
     if is_emit:
+        # Self-assign "EMIT i" the same way the normal-mode branch below
+        # self-assigns "Vib i" -- don't rely on a 'label' surviving parsing,
+        # since write_vsc()/parse_vsc() don't round-trip it and every mode
+        # would otherwise fall back to classify_all_modes()'s generic
+        # "Mode i" default after a .vsc round trip.
+        for i, m in enumerate(rotated):
+            m["label"] = f"EMIT {i + 1}"
         final = rotated
         scored = classify_all_modes(scorer, final, thresholds)
         rows = [_row(m, vec["vector"], i,

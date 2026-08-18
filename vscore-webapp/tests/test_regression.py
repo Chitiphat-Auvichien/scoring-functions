@@ -375,11 +375,22 @@ def test_emit_vsc_matches_reference():
     assert len(ref) == 36
 
     for expected, got in zip(ref, payload["vibrations"]):
+        assert expected["Mode"] == got["name"], \
+            "row name must survive the .vsc round trip, not fall back to 'Mode i'"
         for col in SCORE_COLS:
             assert abs(float(expected[col]) - got["scores"][col]) < 5e-4, \
                 f"{got['name']} {col}"
         assert abs(float(expected["V_Stretch"]) - got["scores"]["V_S"]) < 5e-4
         assert expected["label"] == got["label"], f"{got['name']}"
+
+    # A real EMIT eigenvector must be able to win a slot outright (not just
+    # "*"-mixed) and be highlighted on that slot rather than V_S -- this is
+    # the entire point of the EMIT branch, so assert at least one exists.
+    clean_externals = [r for r in payload["vibrations"] if r["is_reference"]]
+    assert clean_externals, "expected at least one EMIT mode to cleanly win a T/R slot"
+    for r in clean_externals:
+        assert r["highlight"] == r["label"], f"{r['name']}: {r['highlight']} != {r['label']}"
+        assert r["highlight"] != "V_S"
 
 
 @pytest.mark.skipif(not _emit_vsc_path().exists(), reason="C6H6_EMIT.vsc not present")

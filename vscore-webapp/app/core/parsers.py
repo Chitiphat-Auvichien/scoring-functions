@@ -434,7 +434,7 @@ def _parse_vsc_modes(lines, natoms, declared):
                 f"[MODES] mode {cur['n']} has {len(rows)} displacement rows but the "
                 f"geometry has {natoms} atoms.")
         modes.append({"frequency": cur["freq"], "vector": np.array(rows),
-                      "is_emit": False, "reduced_mass": cur["mu"],
+                      "is_emit": cur["is_emit"], "reduced_mass": cur["mu"],
                       "force_constant": cur["k"], "irrep": cur["irrep"]})
 
     for line in lines:
@@ -443,13 +443,19 @@ def _parse_vsc_modes(lines, natoms, declared):
             flush()
             rows = []
             meta = _parse_kv(head.group(2))
-            # Every one of freq/mu/k/irrep is optional -- the scorer reads none
-            # of them, they are row metadata only. Absent freq stays None rather
-            # than defaulting to 0.0, so the UI shows a dash instead of an
-            # invented 0.00 cm-1.
+            # Every one of freq/eigen/mu/k/irrep is optional -- the scorer reads
+            # none of them, they are row metadata only. Absent freq stays None
+            # rather than defaulting to 0.0, so the UI shows a dash instead of an
+            # invented 0.00 cm-1. 'eigen' marks an EMIT mode (already living in
+            # the principal-axis frame, so MIT() must not re-rotate its vector --
+            # see pipeline.analyse()); it is mutually exclusive with 'freq' in
+            # every file this writer produces, but if both are present eigen wins
+            # since it is the more specific tag.
+            eigen = meta.get("eigen")
             cur = {"n": int(head.group(1)),
-                   "freq": meta.get("freq"), "mu": meta.get("mu"),
-                   "k": meta.get("k"), "irrep": meta.get("irrep")}
+                   "freq": eigen if eigen is not None else meta.get("freq"),
+                   "mu": meta.get("mu"), "k": meta.get("k"),
+                   "irrep": meta.get("irrep"), "is_emit": eigen is not None}
             continue
         if cur is None:
             raise ParseError(
@@ -487,7 +493,7 @@ def _parse_kv(s):
             continue
         key, val = tok.split("=", 1)
         key = key.lower()
-        if key in ("freq", "mu", "k"):
+        if key in ("freq", "eigen", "mu", "k"):
             try:
                 out[key] = float(val)
             except ValueError:
@@ -537,7 +543,8 @@ def write_vsc(atoms, coords, bonds, modes, title="", source=""):
         # would fabricate one on the way out.
         meta = []
         if m.get("frequency") is not None:
-            meta.append(f"freq={m['frequency']:.4f}")
+            key = "eigen" if m.get("is_emit") else "freq"
+            meta.append(f"{key}={m['frequency']:.4f}")
         if m.get("reduced_mass") is not None:
             meta.append(f"mu={m['reduced_mass']:.4f}")
         if m.get("force_constant") is not None:

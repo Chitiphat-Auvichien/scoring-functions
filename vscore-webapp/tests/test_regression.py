@@ -13,6 +13,7 @@ import csv
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -349,6 +350,89 @@ def test_write_vsc_omits_absent_metadata(header):
         assert a["vibrations"][0]["scores"][k] == pytest.approx(
             b["vibrations"][0]["scores"][k], abs=1e-9)
 
+
+
+# ----------------------------------------------------------------------
+# EMIT modes: a .vsc with eigen= (not freq=) headers must be rotated
+# with rotate_modes=False and score identically to the published
+# data/results/C6H6_EMIT.csv (main.py's headless EMIT pipeline).
+# ----------------------------------------------------------------------
+def _emit_vsc_path():
+    return REF / "EMIT" / "C6H6_EMIT.vsc"
+
+
+@pytest.mark.skipif(not _emit_vsc_path().exists(), reason="C6H6_EMIT.vsc not present")
+def test_emit_vsc_matches_reference():
+    v = parse_vsc(_emit_vsc_path().read_text())
+    assert all(m["is_emit"] for m in v["modes"]), "eigen= must mark every mode is_emit"
+
+    payload = analyse(v["atoms"], v["coords"], v["bonds"], v["modes"], title="C6H6 EMIT")
+    assert payload["references"] == [], "EMIT has no synthetic ideal T/R rows"
+    assert len(payload["vibrations"]) == 36
+
+    with open(REF / "results" / "C6H6_EMIT.csv") as f:
+        ref = list(csv.DictReader(f))
+    assert len(ref) == 36
+
+    for expected, got in zip(ref, payload["vibrations"]):
+        for col in SCORE_COLS:
+            assert abs(float(expected[col]) - got["scores"][col]) < 5e-4, \
+                f"{got['name']} {col}"
+        assert abs(float(expected["V_Stretch"]) - got["scores"]["V_S"]) < 5e-4
+        assert expected["label"] == got["label"], f"{got['name']}"
+
+
+@pytest.mark.skipif(not _emit_vsc_path().exists(), reason="C6H6_EMIT.vsc not present")
+def test_emit_rotate_modes_false_matters():
+    """Scoring EMIT modes with rotate_modes=True (the normal-mode default)
+    must NOT reproduce the reference -- this is the exact silent-corruption
+    failure mode eigen= exists to prevent."""
+    from app.core.scoring import ModeScorer
+
+    v = parse_vsc(_emit_vsc_path().read_text())
+    scorer = ModeScorer(v["atoms"], v["coords"], v["bonds"])
+    wrongly_rotated = scorer.MIT([dict(m) for m in v["modes"]], rotate_modes=True)
+
+    with open(REF / "results" / "C6H6_EMIT.csv") as f:
+        expected = list(csv.DictReader(f))
+
+    # At least some mode's T/R scores must diverge once double-rotated --
+    # a handful of highly symmetric EMIT modes happen to keep near-zero T/R
+    # components under either rotation, so check across all 36, not just one.
+    max_diff = 0.0
+    for exp, wmode in zip(expected, wrongly_rotated):
+        got = scorer.calculate_scores(wmode["vector"])
+        for axis in "xyz":
+            max_diff = max(max_diff, abs(got["T"][axis] - float(exp[f"T{axis}"])))
+            max_diff = max(max_diff, abs(got["R"][axis] - float(exp[f"R{axis}"])))
+    assert max_diff > 1e-2, "double-rotating EMIT modes should visibly corrupt T/R scores"
+
+
+@pytest.mark.skipif(not _emit_vsc_path().exists(), reason="C6H6_EMIT.vsc not present")
+def test_emit_csv_uses_eigenvalue_column():
+    from app.core.pipeline import to_csv_rows
+
+    v = parse_vsc(_emit_vsc_path().read_text())
+    payload = analyse(v["atoms"], v["coords"], v["bonds"], v["modes"], title="C6H6 EMIT")
+    rows = to_csv_rows(payload)
+    assert all("Eigenvalue" in r and "Freq" not in r for r in rows)
+
+
+def test_write_vsc_eigen_roundtrips():
+    """write_vsc() must tag EMIT modes with eigen=, and parse_vsc() must read
+    it back as is_emit=True with the value preserved as 'frequency'."""
+    modes = [{"frequency": -23.7514, "vector": np.zeros((3, 3)), "is_emit": True,
+              "reduced_mass": None, "force_constant": None, "irrep": None}]
+    atoms, coords = ["O", "H", "Cl"], np.zeros((3, 3))
+    bonds = [(0, 1), (0, 2)]
+    text = write_vsc(atoms, coords, bonds, modes)
+    line = next(l.strip() for l in text.splitlines() if l.strip().startswith("mode"))
+    assert "eigen=-23.7514" in line
+    assert "freq=" not in line
+
+    v = parse_vsc(text)
+    assert v["modes"][0]["is_emit"] is True
+    assert v["modes"][0]["frequency"] == pytest.approx(-23.7514)
 
 
 def test_reference_data_was_actually_found():

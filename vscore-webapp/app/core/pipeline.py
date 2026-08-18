@@ -29,12 +29,27 @@ LABEL_TEXT = {
 }
 
 
+_EXTERNAL_SLOTS = {"Tx", "Ty", "Tz", "Rx", "Ry", "Rz"}
+
+
 def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None):
     """Score and classify one molecule. Returns a JSON-safe payload.
 
     ``coords``/``modes`` are taken in whatever frame they arrived in; the
     scorer rotates BOTH into the principal-axis frame together (MIT), which is
     the frame the T/R scores are defined in and the frame the viewer shows.
+
+    Mirrors ``main.build_scorer_and_final``'s two branches:
+      - normal modes: MIT rotates the molecule AND the mode vectors
+        (rotate_modes=True); 3 ideal T + 3 ideal R references are prepended,
+        and (by construction, verified 0/463 counterexamples in the reference
+        set) always win their own slot in Step 2's assignment -- so a mode's
+        POSITION in `final` reliably tells reference from real vibration.
+      - EMIT modes: already live in principal axes, so MIT rotates only the
+        molecule (rotate_modes=False); no ideal references are added, all 3N
+        raw EMIT eigenvectors are the candidate pool, and REAL eigenvectors
+        do win external slots (that's the whole point of the EMIT test) -- so
+        here the CLASSIFICATION, not position, says which modes are external.
     """
     warnings = list(warnings or [])
 
@@ -49,28 +64,40 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None):
     thresholds = Thresholds.calibrated()
     scorer = ModeScorer(atoms, coords, bonds)
 
-    rotated = scorer.MIT([dict(m) for m in modes], rotate_modes=True)
-    for i, m in enumerate(rotated):
-        m["label"] = f"Vib {i + 1}"
+    is_emit = any(m.get("is_emit") for m in modes)
+    rotated = scorer.MIT([dict(m) for m in modes], rotate_modes=not is_emit)
 
     linear = is_linear(scorer)
-    ideal_R = scorer.construct_R()
-    if linear:
-        # MIT always places the linear axis on x, so construct_R()'s "Rx" is an
-        # all-zero placeholder rather than a real external mode. Left in, it
-        # falls through to Step 4 and is mislabelled BENDING (V=0 <= tau_B).
-        ideal_R = [m for m in ideal_R if m["label"] != "Rx"]
 
-    final = scorer.construct_T() + ideal_R + rotated
-    scored = classify_all_modes(scorer, final, thresholds)
+    if is_emit:
+        final = rotated
+        scored = classify_all_modes(scorer, final, thresholds)
+        rows = [_row(m, vec["vector"], i,
+                     is_reference=(m["classification"] in _EXTERNAL_SLOTS))
+                for i, (m, vec) in enumerate(zip(scored, final))]
+        references, vibrations = [], rows
+    else:
+        for i, m in enumerate(rotated):
+            m["label"] = f"Vib {i + 1}"
 
-    n_ref = len(scorer.construct_T()) + len(ideal_R)
-    # classify_all_modes returns one entry per mode in `final`, in the same
-    # order, but drops the displacement vector -- the viewer needs it, so pair
-    # them back up here rather than re-deriving.
-    rows = [_row(m, vec["vector"], i, is_reference=(i < n_ref))
-            for i, (m, vec) in enumerate(zip(scored, final))]
-    references, vibrations = rows[:n_ref], rows[n_ref:]
+        ideal_R = scorer.construct_R()
+        if linear:
+            # MIT always places the linear axis on x, so construct_R()'s "Rx"
+            # is an all-zero placeholder rather than a real external mode.
+            # Left in, it falls through to Step 4 and is mislabelled BENDING
+            # (V=0 <= tau_B).
+            ideal_R = [m for m in ideal_R if m["label"] != "Rx"]
+
+        final = scorer.construct_T() + ideal_R + rotated
+        scored = classify_all_modes(scorer, final, thresholds)
+
+        n_ref = len(scorer.construct_T()) + len(ideal_R)
+        # classify_all_modes returns one entry per mode in `final`, in the
+        # same order, but drops the displacement vector -- the viewer needs
+        # it, so pair them back up here rather than re-deriving.
+        rows = [_row(m, vec["vector"], i, is_reference=(i < n_ref))
+                for i, (m, vec) in enumerate(zip(scored, final))]
+        references, vibrations = rows[:n_ref], rows[n_ref:]
 
     dp = displacement_precision(modes)
     if dp <= 2:
@@ -125,6 +152,8 @@ def _row(m, vector, index, is_reference=False):
     # character, and highlighting an abs-max that lands there (43% of modes)
     # would assert translation the algorithm never assigned. Real modes
     # therefore highlight s[V_S], the score their label actually comes from.
+    # (`is_reference` means "position-based ideal T/R row" for normal modes
+    # but "classification-based clean external" for EMIT -- see analyse().)
     highlight = dominant if is_reference else "V_S"
 
     label = m["classification"]
@@ -132,6 +161,7 @@ def _row(m, vector, index, is_reference=False):
         "index": index,
         "name": m["name"],
         "is_reference": bool(is_reference),
+        "is_emit": bool(m["is_emit"]),
         "highlight": highlight,
         "frequency": _num(m["frequency"]),
         "scores": {k: round(float(v), 4) for k, v in scores.items()},
@@ -182,7 +212,7 @@ def to_csv_rows(payload, include_references=False):
     for r in source:
         row = {
             "Mode": r["name"],
-            "Freq": r["frequency"],
+            ("Eigenvalue" if r["is_emit"] else "Freq"): r["frequency"],
             "Tx": r["scores"]["Tx"], "Ty": r["scores"]["Ty"], "Tz": r["scores"]["Tz"],
             "Rx": r["scores"]["Rx"], "Ry": r["scores"]["Ry"], "Rz": r["scores"]["Rz"],
             "V_Stretch": r["scores"]["V_S"],

@@ -48,9 +48,26 @@
         <b>Required.</b></li>
     <li><b><code>[MODES] N</code></b> — <code>N</code> optional; if given it must match.
         Each mode opens with <code>mode &lt;n&gt;</code> plus optional
-        <code>freq=</code>, <code>mu=</code>, <code>k=</code>, <code>irrep=</code>,
-        followed by one <code>dx dy dz</code> row per atom (optional leading index).</li>
+        <code>freq=</code> (or <code>eigen=</code> for an EMIT mode), <code>mu=</code>,
+        <code>k=</code>, <code>irrep=</code>, followed by one <code>dx dy dz</code> row
+        per atom (optional leading index).</li>
   </ul>
+
+  <h2>EMIT modes</h2>
+  <p>
+    Use <code>eigen=</code> instead of <code>freq=</code> on a mode header to mark it
+    as an EMIT mode rather than a Gaussian normal mode — eigenvalues can be negative,
+    unlike a vibrational frequency, and the two are scored differently. EMIT
+    eigenvectors already live in the principal-axis frame, so the pipeline rotates
+    <em>only the molecule</em> into that frame, not the mode vectors a second time
+    (rotating them again would silently invert the T/R scores). Getting this tag
+    right therefore matters more than any other piece of mode metadata, all of which
+    the scorer otherwise ignores. See <code>examples/C6H6_EMIT.vsc</code>.
+  </p>
+<pre>[MODES] 36
+  mode 1   eigen=-23.7514
+    1      0.00000      0.00000      0.00000
+    ...</pre>
 
   <h2>All mode metadata is optional</h2>
   <p>

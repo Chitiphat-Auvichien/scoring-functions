@@ -91,22 +91,22 @@
             Absent means absent, not zero: the row shows a dash rather than an
             invented 0.00.</td></tr>
     <tr><td><code>eigen=</code></td>
-        <td><b>Marks the mode as EMIT.</b> Carries an EMIT eigenvalue rather than a
-            wavenumber, so the column re-labels itself <em>eigenvalue</em> instead of
-            claiming cm&#8315;&#185;. It also changes how the mode is treated:
-            EMIT eigenvectors already live in the principal-axis frame, so the
-            molecule is rotated into that frame and the vectors are left alone.
-            Rotating them as well applies the transform twice &mdash; on benzene
-            that mislabels 9 of 36 modes. Use it whenever the geometry is in one
-            frame and the eigenvectors in another.
-            Mutually exclusive with <code>freq=</code>; if both appear,
-            <code>eigen=</code> wins as the more specific tag.</td></tr>
+        <td><b>Marks the mode as EMIT.</b> An EMIT eigenvalue, not a wavenumber &mdash;
+            the column re-labels itself <em>eigenvalue</em>. Also switches off mode
+            rotation (see below). Wins if <code>freq=</code> is also present.</td></tr>
     <tr><td><code>mu=</code></td><td>Reduced mass in AMU. Output only.</td></tr>
     <tr><td><code>k=</code></td><td>Force constant in mDyne/&Aring;. Output only.</td></tr>
     <tr><td><code>irrep=</code></td>
         <td>Irreducible representation, free text (<code>A'</code>,
             <code>B2U</code>&hellip;). Output only.</td></tr>
   </table>
+  <p>
+    <b>Why <code>eigen=</code> changes behaviour.</b> EMIT eigenvectors already live in
+    the principal-axis frame, while the geometry beside them usually does not. So the
+    molecule is rotated into that frame and the vectors are left alone. Rotating both
+    applies the transform twice &mdash; on benzene that mislabels 9 of 36 modes. Tag
+    every mode in an EMIT file; the flag is read for the set as a whole.
+  </p>
 <pre>  mode 1   freq=667.6406   mu=17.7040   k=4.9258   irrep=A'   &larr; all of them
   mode 2   freq=1256.0043                                      &larr; one of them
   mode 3   eigen=-23.7514                                      &larr; an EMIT mode
@@ -148,13 +148,9 @@
   </p>
   <table>
     <tr><td><b>3N&minus;6</b><br><span class="muted">vibrations only</span></td>
-        <td>The usual case, and what a Gaussian frequency job gives you &mdash; T/R
-            are projected out at a stationary point. The six ideal references are
-            constructed and prepended so they fill the external slots. Without
-            them the assignment fills those slots from your vibrations instead:
-            on H<sub>2</sub>O that labelled a 0.997 O&ndash;H stretch
-            <code>Tx*</code>. Fewer than 3N&minus;6 modes is fine &mdash; score a
-            single mode if you like. 3N&minus;5 for a linear molecule.</td></tr>
+        <td>The usual case, and what a Gaussian frequency job gives you. The six ideal
+            references are constructed so they fill the external slots; without them
+            the assignment claims your vibrations instead. 3N&minus;5 if linear.</td></tr>
     <tr><td><b>3N</b><br><span class="muted">T/R included</span></td>
         <td>Nothing is constructed. The algorithm identifies the six T/R modes
             among the ones you supplied, using the same external-slot assignment

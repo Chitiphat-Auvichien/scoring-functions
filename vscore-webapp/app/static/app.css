@@ -226,23 +226,23 @@ main { padding:20px 16px 0; }
 .filters .count { margin-left:auto; color:var(--ink-3); font-family:var(--mono); font-size:11.5px; }
 
 .scroll { overflow-x:auto; max-height:70vh; overflow-y:auto; }
-table { border-collapse:collapse; width:100%; font-size:12.5px; }
-thead th {
+#tbl { border-collapse:collapse; width:100%; font-size:12.5px; }
+#tbl thead th {
   position:sticky; top:0; z-index:2;
   background:var(--surface-2); color:var(--ink-3);
   font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.05em;
   padding:7px 9px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap;
 }
-thead th.n { text-align:right; }
-tbody td { padding:5px 9px; border-bottom:1px solid var(--line); white-space:nowrap; }
-tbody td.n { text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; }
-tbody td.c, thead th.c { width:28px; text-align:center; }
-tbody td.mode { font-family:var(--mono); color:var(--ink); }
-tbody tr { cursor:pointer; }
-tbody tr:hover { background:var(--surface-2); }
-tbody tr.sel { background:var(--accent-soft); }
-tbody tr.sel td { border-bottom-color:var(--accent); }
-tbody tr.ref td.mode, tbody tr.ref td.n { color:var(--ink-3); }
+#tbl thead th.n { text-align:right; }
+#tbl tbody td { padding:5px 9px; border-bottom:1px solid var(--line); white-space:nowrap; }
+#tbl tbody td.n { text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; }
+#tbl tbody td.c, #tbl thead th.c { width:28px; text-align:center; }
+#tbl tbody td.mode { font-family:var(--mono); color:var(--ink); }
+#tbl tbody tr { cursor:pointer; }
+#tbl tbody tr:hover { background:var(--surface-2); }
+#tbl tbody tr.sel { background:var(--accent-soft); }
+#tbl tbody tr.sel td { border-bottom-color:var(--accent); }
+#tbl tbody tr.ref td.mode, #tbl tbody tr.ref td.n { color:var(--ink-3); }
 
 /* T/R scores on a real vibration: shown, but visibly not the mode's assigned
    character. Only the six constructed reference modes carry T/R character. */
@@ -253,11 +253,7 @@ td.hot {
   font-weight:700; box-shadow:inset 0 0 0 1px var(--hot-line);
   border-radius:3px;
 }
-tbody tr.sel /* T/R scores on a real vibration: shown, but visibly not the mode's assigned
-   character. Only the six constructed reference modes carry T/R character. */
-td.dim { color: var(--ink-3); }
-
-td.hot { box-shadow:inset 0 0 0 1px var(--hot-line); }
+#tbl tbody tr.sel td.hot { box-shadow:inset 0 0 0 1px var(--hot-line); }
 
 .lab {
   display:inline-block; font-family:var(--mono); font-size:11px; font-weight:700;
@@ -311,5 +307,14 @@ td.hot { box-shadow:inset 0 0 0 1px var(--hot-line); }
   padding:14px; overflow-x:auto; font-family:var(--mono); font-size:12px;
   color:var(--ink); line-height:1.55;
 }
-.prose table { margin:12px 0; }
-.prose td, .prose th { padding:6px 10px; border-bottom:1px solid var(--line); }
+.prose table {
+  margin:12px 0; width:100%; table-layout:fixed; border-collapse:collapse;
+}
+/* First column holds a short key; the second wraps freely. Without
+   table-layout:fixed a long cell stretches the table past the page. */
+.prose td:first-child { width:34%; vertical-align:top; }
+.prose td, .prose th {
+  padding:6px 10px; border-bottom:1px solid var(--line);
+  overflow-wrap:anywhere; word-break:normal;
+}
+@media (max-width:560px) { .prose td:first-child { width:42%; } }

@@ -410,19 +410,29 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 > One line per session, newest first. Full narration for any entry predating 2026-08-10 is in git history:
 > `git log -p -- IMPLEMENTATION_PLAN.md`.
 
-- **2026-08-18 (Cartesian-overlap comparison pathway)** — `src/projection.py` gained
-  `build_reference_basis_cartesian`/`project_emit_cartesian`, an explicitly non-orthonormal
+- **2026-08-18 (Cartesian-overlap comparison pathway, corrected same day)** — `src/projection.py`
+  gained `build_reference_basis_cartesian`/`project_emit_cartesian`, an explicitly non-orthonormal
   counterpart to the locked mass-weighted `build_reference_basis`/`project_emit` (same T/R/vibrational
   reference set, but Q and Theta unit-normalized in the plain Cartesian inner product instead of
   `sum_A m_A (u_A . v_A)`). Requested to show what skipping mass weighting would have produced;
   NOT a replacement for the mass-weighted result (module docstring already documented, pre-existing,
   that the unweighted Gram matrix has off-diagonals up to 0.80 on benzene's real modes — i.e. this
-  basis is known not to be orthonormal). `run_projection_pipeline` (`main.py`) now also merges
-  `C2cart_Tx..C2cart_Sum` into `<mol>_EMIT.csv` and writes `<mol>_EMIT_full_cartesian.csv`;
-  `C2cart_Sum` is a diagnostic (actual, not asserted, fraction sum) since Parseval doesn't hold here —
-  confirmed on benzene EMIT 34: mass-weighted `C2_*` sums to ~1 as always, `C2cart_Sum` = 1.93.
-  Regenerated `C6H6_EMIT.csv`/`_EMIT_full_cartesian.csv` and `H2O_EMIT.csv`/`_EMIT_full_cartesian.csv`.
-  2 new regression tests in `tests/test_projection.py`; full suite 141/143 (2 pre-existing unrelated
+  basis is known not to be orthonormal).
+  **Correction:** the first cut squared the overlap (`C2cart_*`) to mirror `project_emit`'s
+  `Theta_tilde**2`, but that squaring is only a meaningful "fraction of character" when Q is
+  orthonormal (Parseval) — not the case here. Caught and fixed same day: `project_emit_cartesian`
+  now reports the raw signed overlap `Q.T @ Theta` itself (a cosine similarity between mode shapes),
+  columns renamed `C2cart_*` → `Ocart_*` throughout (`main.py`'s idempotent-merge drop-filter keeps
+  catching the old `C2cart_` prefix too, so a stale pre-correction CSV self-heals on the next
+  `--emit-projection` run). `Ocart_VS`/`VB`/`VMix` are sums of *signed* overlaps and can partially
+  cancel — documented as a coarse diagnostic, not a rigorous decomposition. `Ocart_Sum` has no
+  expected target value (contrast `project_emit`'s Parseval-motivated sum~1 check); confirmed on
+  benzene EMIT 34: mass-weighted `C2_*` still sums to ~1 as always, raw `Ocart_Tx` = 0.876
+  (0.876² ≈ the old, now-removed, `C2cart_Tx` = 0.767), `Ocart_Sum` = 1.89.
+  `run_projection_pipeline` (`main.py`) merges `Ocart_Tx..Ocart_Sum` into `<mol>_EMIT.csv` and writes
+  `<mol>_EMIT_full_cartesian.csv`. Regenerated `C6H6_EMIT.csv`/`_EMIT_full_cartesian.csv` and
+  `H2O_EMIT.csv`/`_EMIT_full_cartesian.csv`. 2 regression tests in `tests/test_projection.py`
+  (repinned to the corrected values); full suite 141/143 (2 pre-existing unrelated
   `test_veda_fmt_regression.py` failures from a concurrent session's C6H6.log rerun, not this change).
 
 - **2026-08-14 (roster expansion)** — `test`-category transferability set 9 → 18: H2O retagged

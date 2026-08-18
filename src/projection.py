@@ -24,14 +24,17 @@ split of a real normal mode's contribution reuses Step-4's classification
 defined in exactly one place (classifier.py), not duplicated here.
 
 Second, explicitly non-orthonormal pathway (build_reference_basis_cartesian /
-project_emit_cartesian, "C2cart_*" columns): the plain-Cartesian overlap this
+project_emit_cartesian, "Ocart_*" columns): the plain-Cartesian overlap this
 module's own docstring above says is NOT mutually orthogonal (off-diagonals up
 to 0.80). Kept only as an explicit point of comparison against the physically
 correct mass-weighted pathway -- e.g. to show a referee/reader what skipping
 the mass weighting would have produced -- not as an alternative to use on its
-own. Its fractions are not expected to sum to ~1; "C2cart_Sum" reports the
-actual (basis-dependent, physically uninterpretable) sum instead of asserting
-it.
+own. Deliberately NOT squared, unlike the C2_* columns above: squaring Q^T
+Theta is only a meaningful "fraction of character" when Q is orthonormal
+(Parseval), which this basis is not, so "Ocart_*" is the raw signed overlap
+<q_ref, theta_emit> itself (a cosine similarity between mode shapes), and
+"Ocart_Sum" reports its sum across all 9 group columns as a diagnostic with
+no expected target value -- not a fraction, and not asserted to sum to 1.
 """
 
 import numpy as np
@@ -224,12 +227,24 @@ def build_reference_basis_cartesian(scorer, final_normal, thresholds=None):
 
 
 def project_emit_cartesian(ref, final_emit):
-    """Cartesian-overlap counterpart of project_emit(): same grouping logic
-    and output shape (rows carry "C2cart_*" instead of "C2_*"), but Theta is
-    unit-normalized in plain Cartesian coordinates and the basis is not
-    orthonormal, so fractions are NOT expected to sum to ~1 -- "C2cart_Sum"
-    reports the actual sum as a diagnostic rather than asserting it (contrast
-    project_emit()'s hard sum_tol check, which relies on near-orthonormality).
+    """Cartesian-overlap counterpart of project_emit() -- deliberately NOT
+    squared. project_emit() squares Q.T @ Theta because Q is (near-)
+    orthonormal there, so the squared coefficients have a Parseval
+    ("fraction of mode character") interpretation. That basis property does
+    not hold here (module docstring: off-diagonals up to 0.80), so squaring
+    would not carry the same meaning -- this pathway instead reports the raw
+    signed overlap <q_ref, theta_emit> itself (each unit-normalized in plain
+    Cartesian coordinates), same as a cosine similarity between the two mode
+    shapes.
+
+    Consequently "Ocart_VS"/"Ocart_VB"/"Ocart_VMix" are plain sums of signed
+    overlaps over the reference modes in that group, not sums of positive
+    fractions -- they CAN partially cancel (a large positive overlap with one
+    stretching mode and a large negative overlap with another can net near
+    zero even though both individually indicate real character), so treat
+    them as a coarse diagnostic, not a rigorous decomposition. "Ocart_Sum" is
+    the sum of all 9 group columns, likewise a diagnostic with no expected
+    target value (contrast project_emit()'s Parseval-motivated sum~1 check).
 
     Parameters
     ----------
@@ -238,14 +253,14 @@ def project_emit_cartesian(ref, final_emit):
 
     Returns
     -------
-    (rows, full_rows) : same shape as project_emit(), with "C2cart_Tx".."C2cart_Rz",
-        "C2cart_VS"/"C2cart_VB"/"C2cart_VMix", and "C2cart_Sum".
+    (rows, full_rows) : same shape as project_emit(), with "Ocart_Tx".."Ocart_Rz",
+        "Ocart_VS"/"Ocart_VB"/"Ocart_VMix", and "Ocart_Sum" -- all raw (signed,
+        unsquared) overlaps, not fractions.
     """
     Q, labels, groups = ref["Q"], ref["labels"], ref["groups"]
     Theta = _cartesian_unit_columns(final_emit)
 
-    Proj = Q.T @ Theta
-    Frac = Proj ** 2
+    Overlap = Q.T @ Theta  # raw signed overlap, NOT squared -- see docstring
 
     idx_of = {lbl: i for i, lbl in enumerate(labels)}
 
@@ -257,22 +272,22 @@ def project_emit_cartesian(ref, final_emit):
 
         row = {"Mode": name, "Eigenvalue": eig}
         for slot in EXTERNAL_LABELS:
-            row[f"C2cart_{slot}"] = float(Frac[idx_of[slot], j]) if slot in idx_of else 0.0
+            row[f"Ocart_{slot}"] = float(Overlap[idx_of[slot], j]) if slot in idx_of else 0.0
 
         totals = {g: 0.0 for g in _VIB_GROUPS}
         for lbl in labels:
             if lbl in EXTERNAL_LABELS:
                 continue
-            totals[groups[lbl]] += Frac[idx_of[lbl], j]
-        row["C2cart_VS"] = totals[STRETCHING]
-        row["C2cart_VB"] = totals[BENDING]
-        row["C2cart_VMix"] = totals[MIXED_STRETCH_BEND]
-        row["C2cart_Sum"] = sum(v for k, v in row.items() if k not in ("Mode", "Eigenvalue"))
+            totals[groups[lbl]] += Overlap[idx_of[lbl], j]
+        row["Ocart_VS"] = totals[STRETCHING]
+        row["Ocart_VB"] = totals[BENDING]
+        row["Ocart_VMix"] = totals[MIXED_STRETCH_BEND]
+        row["Ocart_Sum"] = sum(v for k, v in row.items() if k not in ("Mode", "Eigenvalue"))
         rows.append(row)
 
         full_row = {"Mode": name, "Eigenvalue": eig}
         for lbl in labels:
-            full_row[lbl] = float(Frac[idx_of[lbl], j])
+            full_row[lbl] = float(Overlap[idx_of[lbl], j])
         full_rows.append(full_row)
 
     return rows, full_rows

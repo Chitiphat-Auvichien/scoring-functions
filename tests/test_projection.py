@@ -84,20 +84,27 @@ def test_full_projection_file_has_per_mode_detail():
     assert len(df_full) == len(df) == 36
 
 
-def test_cartesian_overlap_pathway_is_not_orthonormal():
-    """Unlike the mass-weighted pathway, the plain-Cartesian overlap basis is
-    NOT orthonormal (projection.py module docstring: off-diagonal Gram-matrix
-    entries up to 0.80 on benzene's real modes). EMIT 34's C2cart_* fractions
-    sum to well over 1, in contrast to the mass-weighted C2_* fractions'
-    ~1 (Parseval) for that same mode -- pinned regression values from a live
-    run, demonstrating why the mass-weighted pathway is the one to trust."""
+def test_cartesian_overlap_pathway_is_raw_and_not_orthonormal():
+    """The plain-Cartesian overlap pathway is deliberately NOT squared (unlike
+    the mass-weighted C2_* columns, whose squaring is only meaningful because
+    that basis is near-orthonormal -- Parseval). EMIT 34's Ocart_Tx should
+    equal the raw signed overlap, i.e. +sqrt of the old squared value (both
+    Q and Theta are positively aligned on this pure-translation mode); the
+    basis being non-orthonormal (off-diagonals up to 0.80) also means
+    Ocart_Sum is not expected to be anywhere near 1, in contrast to the
+    mass-weighted C2_* fractions' ~1 (Parseval) for that same mode -- pinned
+    regression values from a live run, demonstrating why the mass-weighted
+    pathway is the one to trust."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
-    assert abs(rows["EMIT 34"]["C2cart_Tx"] - 0.767360) < TOL
-    assert abs(rows["EMIT 34"]["C2cart_Sum"] - 1.931420) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_Tx"] - 0.875991) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_Sum"] - 1.893708) < TOL
     mass_weighted_cols = ["C2_Tx", "C2_Ty", "C2_Tz", "C2_Rx", "C2_Ry", "C2_Rz",
                            "C2_VS", "C2_VB", "C2_VMix"]
     assert abs(sum(rows["EMIT 34"][c] for c in mass_weighted_cols) - 1.0) < 0.01
+    # sanity: unsquared overlap re-squared recovers what C2_Tx would have been
+    # under this (non-orthonormal) basis had it been squared like C2_ is.
+    assert abs(rows["EMIT 34"]["Ocart_Tx"] ** 2 - 0.767360) < TOL
 
 
 def test_full_cartesian_projection_has_per_mode_detail():
@@ -114,9 +121,9 @@ def test_full_cartesian_projection_has_per_mode_detail():
     rows, full_rows = project_emit_cartesian(ref, final_e)
 
     assert len(rows) == len(full_rows) == 36
-    expected_row_cols = {"Mode", "Eigenvalue", "C2cart_Tx", "C2cart_Ty", "C2cart_Tz",
-                          "C2cart_Rx", "C2cart_Ry", "C2cart_Rz", "C2cart_VS",
-                          "C2cart_VB", "C2cart_VMix", "C2cart_Sum"}
+    expected_row_cols = {"Mode", "Eigenvalue", "Ocart_Tx", "Ocart_Ty", "Ocart_Tz",
+                          "Ocart_Rx", "Ocart_Ry", "Ocart_Rz", "Ocart_VS",
+                          "Ocart_VB", "Ocart_VMix", "Ocart_Sum"}
     assert expected_row_cols <= set(rows[0].keys())
     expected_ref_cols = {"Mode", "Eigenvalue", "Tx", "Ty", "Tz", "Rx", "Ry", "Rz"}
     assert expected_ref_cols <= set(full_rows[0].keys())

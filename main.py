@@ -191,8 +191,9 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
     Also runs the explicitly non-orthonormal plain-Cartesian-overlap
     comparison pathway (src.projection.build_reference_basis_cartesian /
     project_emit_cartesian -- see that module's docstring for why it exists
-    only as a point of comparison): merges "C2cart_Tx".."C2cart_Sum" into the
-    same <mol>_EMIT.csv, and writes the per-reference-mode detail to a
+    only as a point of comparison, and why it is NOT squared like the C2_*
+    columns above): merges "Ocart_Tx".."Ocart_Sum" (raw signed overlaps) into
+    the same <mol>_EMIT.csv, and writes the per-reference-mode detail to a
     separate <mol>_EMIT_full_cartesian.csv.
 
     Returns (df_emit, df_full, (path_emit, path_full, path_full_cartesian)).
@@ -222,10 +223,14 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
             f"{emit_path} not found -- run `python main.py -m {mol_name} --mode emit` first.")
     df_emit = pd.read_csv(emit_path)
     # Re-running --emit-projection (e.g. after a fresh --mode emit) must not
-    # duplicate C2_*/C2cart_* columns via merge's _x/_y suffixing -- drop any
+    # duplicate C2_*/Ocart_* columns via merge's _x/_y suffixing -- drop any
     # already merged in from a prior run first, so this is idempotent.
+    # ("C2cart_" is dropped too: an earlier revision of this pathway squared
+    # the overlap under that prefix before Ocart_ replaced it -- see
+    # src/projection.py's project_emit_cartesian docstring.)
     df_emit = df_emit.drop(columns=[c for c in df_emit.columns
-                                     if c.startswith("C2_") or c.startswith("C2cart_")])
+                                     if c.startswith("C2_") or c.startswith("C2cart_")
+                                     or c.startswith("Ocart_")])
 
     ref = build_reference_basis(scorer_n, final_n, thresholds)
     rows, full_rows = project_emit(ref, final_e)
@@ -386,8 +391,9 @@ def main():
                                  "exist (run -m <mol> --mode emit first); merges C2_Tx..C2_VMix "
                                  "(mass-weighted overlap) into that file in place and writes "
                                  "<mol>_EMIT_full.csv (per-reference-mode detail). Also runs the "
-                                 "plain-Cartesian-overlap comparison pathway, merging "
-                                 "C2cart_Tx..C2cart_Sum and writing <mol>_EMIT_full_cartesian.csv "
+                                 "plain-Cartesian-overlap comparison pathway (raw signed overlap, "
+                                 "NOT squared), merging Ocart_Tx..Ocart_Sum and writing "
+                                 "<mol>_EMIT_full_cartesian.csv "
                                  "-- see src/projection.py's docstring for why it is kept only as "
                                  "a comparison, not a replacement for the mass-weighted result.")
     dev_group.add_argument("--ped-merge", action="store_true", dest="ped_merge",

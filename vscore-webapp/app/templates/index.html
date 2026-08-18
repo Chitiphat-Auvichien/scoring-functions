@@ -39,9 +39,8 @@
         </label>
       </div>
       <p class="note">
-        Both files are required. A Gaussian <code>.log</code> contains no bond list —
-        connectivity lives in the input deck — and <code>V_S</code> is a sum over bonds.
-        Rather than guess the bonds, this app asks for them.
+        Both are required: a <code>.log</code> holds no bond list, and
+        <code>V_S</code> is a sum over bonds. Connectivity is asked for, never guessed.
       </p>
     </section>
 
@@ -51,11 +50,24 @@
         <input type="file" name="vscfile" accept=".vsc,.txt">
         <span class="hint">geometry + connectivity + modes, all in one</span>
       </label>
+      <div class="modeset">
+        <span class="bk">modes in file</span>
+        <label>
+          <input type="radio" name="mode_set" value="3n-6" checked>
+          <b>3N&minus;6</b>
+          <span>vibrations only &middot; T/R references added</span>
+        </label>
+        <label>
+          <input type="radio" name="mode_set" value="3n">
+          <b>3N</b>
+          <span>includes T/R &middot; found among your modes</span>
+        </label>
+      </div>
+
       <p class="note">
-        One self-contained file, typically a few kB against a multi-megabyte log.
-        Score any <code>.log</code>&nbsp;+&nbsp;<code>.com</code> pair once and download the
-        <code>.vsc</code> from the results page — or convert in bulk with
-        <code>make_vsc.py</code>. <a href="/format">Format spec →</a>
+        One file, a few kB instead of megabytes. Download one from any result page,
+        or convert in bulk with <code>make_vsc.py</code>.
+        <a href="/format">Format spec →</a>
       </p>
     </section>
 

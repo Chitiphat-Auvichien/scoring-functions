@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}vscore{% endblock %} · vscore</title>
   <meta name="description" content="Score vibrational normal modes against seven reference motions and classify them as stretching, bending or mixed.">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ asset_v() }}">
   <script>
     (function () {
       try { var t = localStorage.getItem("vs-theme");

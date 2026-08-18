@@ -76,6 +76,39 @@
     the connectivity, and the displacement rows.
   </p>
 
+  <h2>3N or 3N&minus;6?</h2>
+  <p>
+    A <code>.vsc</code> can hold either the vibrations alone or the complete set
+    including translation and rotation, and the upload form asks which. The choice
+    decides whether the six ideal T/R reference modes are constructed and added to
+    the pool.
+  </p>
+  <table>
+    <tr><td><b>3N&minus;6</b><br><span class="muted">vibrations only</span></td>
+        <td>The usual case, and what a Gaussian frequency job gives you &mdash; T/R
+            are projected out at a stationary point. The six ideal references are
+            constructed and prepended so they fill the external slots. Without
+            them the assignment fills those slots from your vibrations instead:
+            on H<sub>2</sub>O that labelled a 0.997 O&ndash;H stretch
+            <code>Tx*</code>. Fewer than 3N&minus;6 modes is fine &mdash; score a
+            single mode if you like. 3N&minus;5 for a linear molecule.</td></tr>
+    <tr><td><b>3N</b><br><span class="muted">T/R included</span></td>
+        <td>Nothing is constructed. The algorithm identifies the six T/R modes
+            among the ones you supplied, using the same external-slot assignment
+            it always uses. Must be exactly 3N.</td></tr>
+  </table>
+  <p>
+    <b>3N works cleanly when the supplied T/R modes are motions about the principal
+    axes of inertia.</b> If they are rotations about some other axes &mdash; which is
+    what an unprojected Hessian diagonalisation gives &mdash; each becomes a mixture
+    of R<sub>x</sub>/R<sub>y</sub>/R<sub>z</sub> once the molecule is rotated into
+    its principal frame. No single slot score is then high enough to win, so a real
+    vibration can take the slot and a genuine rotation falls through to
+    <b class="lab B">B</b>. The app detects this: any external assignment that fails
+    the purity gate is reported with a starred label and a warning on the results
+    page. <code>examples/HCOOH_3N.vsc</code> is a clean 3N set to compare against.
+  </p>
+
   <h2>Why connectivity is mandatory</h2>
   <p>
     <code>s[V<sub>S</sub>]</code> is a weighted sum over bonds. With an empty bond

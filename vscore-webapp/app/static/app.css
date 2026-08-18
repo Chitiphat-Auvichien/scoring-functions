@@ -118,6 +118,23 @@ main { padding:20px 16px 0; }
 .drop input[type=file] { display:block; width:100%; font-size:12px; color:var(--ink-2); }
 .drop .hint { display:block; margin-top:8px; font-size:12px; color:var(--ink-3); }
 .drop .hint.has { color:var(--accent); font-family:var(--mono); }
+.modeset {
+  display:grid; grid-template-columns:auto 1fr 1fr; align-items:stretch;
+  gap:8px; margin-top:12px;
+}
+.modeset > .bk { align-self:center; }
+.modeset label {
+  display:flex; align-items:baseline; gap:7px; flex-wrap:wrap;
+  padding:9px 12px; cursor:pointer; font-size:12.5px;
+  border:1px solid var(--line); border-radius:6px; background:var(--surface-2);
+}
+.modeset label:hover { border-color:var(--accent); }
+.modeset label:has(input:checked) { border-color:var(--accent); background:var(--accent-soft); }
+.modeset input { margin:0; }
+.modeset b { font-family:var(--mono); font-size:13px; }
+.modeset span { color:var(--ink-3); font-size:11.5px; }
+@media (max-width:720px) { .modeset { grid-template-columns:1fr; } }
+
 .note { font-size:12.5px; color:var(--ink-3); margin:14px 0 0; line-height:1.6; }
 .note code { background:var(--surface-2); padding:1px 4px; border-radius:3px; }
 
@@ -144,6 +161,16 @@ main { padding:20px 16px 0; }
 .err p { margin:6px 0 0; }
 .warn { background:var(--warn-bg); border:1px solid var(--warn-line);
         max-width:1400px; margin:0 auto 12px; }
+/* Informational, not a fault: quieter than .warn, no alarm word. */
+.info {
+  max-width:1400px; margin:0 auto 12px; padding:9px 13px;
+  border-radius:6px; font-size:12.5px; line-height:1.6;
+  background:var(--surface); border:1px solid var(--line); color:var(--ink-2);
+}
+.info::before { content:"i"; display:inline-grid; place-items:center;
+  width:15px; height:15px; margin-right:8px; border-radius:50%;
+  background:var(--accent-soft); color:var(--accent);
+  font-family:var(--mono); font-size:10px; font-weight:700; vertical-align:1px; }
 
 /* ---------------------------------------------------------- result */
 .head {
@@ -239,6 +266,7 @@ td.hot { box-shadow:inset 0 0 0 1px var(--hot-line); }
 .lab.S { background:var(--S-bg); color:var(--S); }
 .lab.B { background:var(--B-bg); color:var(--B); }
 .lab.SB { background:var(--SB-bg); color:var(--SB); }
+.lab + .lab { margin-left:4px; }
 .ann { margin-left:6px; font-size:11px; color:var(--ink-3); font-family:var(--mono); }
 .legend { padding:8px 12px; margin:0; font-size:11.5px; color:var(--ink-3);
           border-top:1px solid var(--line); }

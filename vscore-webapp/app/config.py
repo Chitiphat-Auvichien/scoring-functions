@@ -18,6 +18,22 @@ TEMPLATES_DIR = APP_DIR / "templates"
 
 VERSION = "1.0"
 
+
+def asset_version():
+    """Cache-buster for app.css / app.js, from their modification times.
+
+    Browsers hold on to these aggressively: an edited stylesheet kept rendering
+    the previous layout until a hard refresh, which reads as "the CSS is
+    broken" rather than "the CSS is cached". Appending ?v=<mtime> makes the URL
+    change whenever the file does, so a normal reload picks it up.
+    """
+    stamp = 0
+    for name in ("app.css", "app.js"):
+        f = STATIC_DIR / name
+        if f.exists():
+            stamp = max(stamp, int(f.stat().st_mtime))
+    return str(stamp)
+
 # The seven scores, in display order.
 SCORE_KEYS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_S")
 

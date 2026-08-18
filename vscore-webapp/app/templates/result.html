@@ -14,6 +14,8 @@
       τ<sub>S</sub> {{ "%.3f"|format(p.thresholds.tau_S) }} ·
       τ<sub>B</sub> {{ "%.3f"|format(p.thresholds.tau_B) }}</span>
     <span title="displacement decimal places">{{ p.precision_dp }} dp</span>
+    <span title="The molecule is rotated into its principal axes of inertia before scoring — that is the frame s[Tx]…s[Rz] are defined in, and the frame the viewer draws. This is how far it was turned from the orientation in your file.">
+      frame <b>{{ "%.0f"|format(p.frame_rotation_deg) }}&deg;</b> from input</span>
   </div>
   <div class="dl">
     <button type="button" data-dl="csv">scores.csv</button>
@@ -25,6 +27,9 @@
 
 {% for w in p.warnings %}
 <div class="warn"><strong>Check this.</strong> {{ w }}</div>
+{% endfor %}
+{% for n in p.notes %}
+<div class="info">{{ n }}</div>
 {% endfor %}
 
 <div class="bonds-strip">
@@ -50,7 +55,11 @@
       <label class="rng">ν ≤ <input type="number" id="f-hi" step="1"
              value="{{ p.freq_range[1]|round(0, 'ceil')|int }}"></label>
       <span class="sep"></span>
+      {# 3N supplies its own T/R modes, so nothing is constructed and there is
+         nothing for this toggle to show. #}
+      {% if p.references %}
       <label class="f"><input type="checkbox" id="f-ref" checked> T/R reference modes</label>
+      {% endif %}
       <span class="sep"></span>
       <button type="button" id="all">all</button>
       <button type="button" id="none">none</button>
@@ -73,12 +82,17 @@
       </table>
     </div>
     <p class="legend">
-      The six <b>Tx&hellip;Rz</b> rows are the constructed ideal translation and
-      rotation modes &mdash; by the algorithm they are the only modes that carry
-      external character, so they highlight their dominant score. For a real
-      vibration the highlight is always <b>V_S</b>, the score its
-      <b class="lab S">S</b>/<b class="lab B">B</b>/<b class="lab SB">SB</b> label
-      comes from; its T/R values are shown greyed as diagnostics. Click any row to
+      Axes in the viewer are the principal axes of inertia &mdash;
+      <b style="color:#f59e0b">x</b> <b style="color:#3b82f6">y</b>
+      <b style="color:#10b981">z</b> &mdash; the frame the T and R scores are
+      defined in.
+      {% if p.references %}The six <b>Tx&hellip;Rz</b> rows are the constructed ideal
+      translation and rotation modes; they highlight their own slot.{% else %}
+      Every row is a mode from your file &mdash; nothing was constructed.{% endif %}
+      An <b class="lab S">S</b>/<b class="lab B">B</b>/<b class="lab SB">SB</b> mode
+      highlights <b>V_S</b>; a starred label (<code>Tx*</code>) is part external and
+      part vibration, so both <b>V_S</b> and its largest T/R score are highlighted,
+      and its vibrational character is shown as a second chip. Click any row to
       animate it.
     </p>
   </section>
@@ -93,6 +107,8 @@
     <div class="vctl">
       <label>amplitude <input type="range" id="amp" min="0.2" max="3" step="0.1" value="1"></label>
       <label>frames <input type="range" id="frm" min="4" max="20" step="1" value="10"></label>
+      <label class="f"><input type="checkbox" id="bonds" checked> bonds</label>
+      <label class="f"><input type="checkbox" id="axes" checked> axes</label>
       <label class="f"><input type="checkbox" id="arrows" checked> arrows</label>
       <label class="f"><input type="checkbox" id="play" checked> animate</label>
     </div>
@@ -109,5 +125,5 @@
 
 {% block scripts %}
 <script src="/static/3Dmol-min.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v={{ asset_v() }}"></script>
 {% endblock %}

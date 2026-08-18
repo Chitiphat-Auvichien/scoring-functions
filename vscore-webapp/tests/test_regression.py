@@ -361,3 +361,210 @@ def test_reference_data_was_actually_found():
     assert REF.exists(), f"reference data not found; REF resolved to {REF}"
     assert (REF / "logs").is_dir() and (REF / "results").is_dir()
     assert molecules(), "reference data found but no molecule had both .log and .com"
+
+
+# ----------------------------------------------------------------------
+# .vsc mode_set: 3N (T/R supplied) vs 3N-6 (vibrations only)
+# ----------------------------------------------------------------------
+def _molecule(stem="HCOOH"):
+    for s, log, com, _ in molecules():
+        if s == stem:
+            return parse_gaussian_log(log.read_text(errors="replace")), \
+                   parse_connectivity(com.read_text(errors="replace"),
+                                      len(parse_gaussian_log(
+                                          log.read_text(errors="replace"))["atoms"]))
+    pytest.skip(f"{stem} not in the reference set")
+
+
+def _complete_3n(g, bonds):
+    """The full 3N set: ideal T/R built in the PRINCIPAL frame, then the
+    vibrations, all in that same frame. Constructing T/R about non-principal
+    axes instead makes each one a mixture of Rx/Ry/Rz, which no single external
+    slot can claim -- see test_3n_recovery_degrades_off_principal_axes."""
+    from app.core.scoring import ModeScorer
+    sc = ModeScorer(g["atoms"], g["coords"], bonds)
+    rot = sc.MIT([dict(m) for m in g["modes"]], rotate_modes=True)
+    refs = sc.construct_T() + sc.construct_R()
+    modes = [{"frequency": None, "vector": m["vector"]} for m in refs]
+    modes += [{"frequency": m["frequency"], "vector": m["vector"],
+               "irrep": m.get("irrep")} for m in rot]
+    return sc.coords, modes
+
+
+def test_3n_finds_the_six_TR_modes_without_constructing_any():
+    g, bonds = _molecule()
+    coords, modes = _complete_3n(g, bonds)
+    p = analyse(g["atoms"], coords, bonds, modes, mode_set="3n")
+
+    assert p["references"] == [], "3N must not construct reference modes"
+    assert p["n_modes"] == 3 * len(g["atoms"])
+    ext = [r for r in p["vibrations"] if r["label"][0] in "TR"]
+    assert len(ext) == 6, f"{len(ext)} external slots filled, expected 6"
+    # the six supplied T/R modes are the ones claimed, and cleanly
+    assert [r["name"] for r in ext] == [f"Vib {i}" for i in range(1, 7)]
+    assert all(not r["label"].endswith("*") for r in ext), \
+        "a clean 3N set should not need starred externals"
+    assert {r["label"] for r in ext} == {"Tx", "Ty", "Tz", "Rx", "Ry", "Rz"}
+    assert p["warnings"] == []
+
+
+def test_3n_and_3n6_agree_on_the_real_vibrations():
+    """Both paths must classify the 3N-6 physical modes identically."""
+    g, bonds = _molecule()
+    a = analyse(g["atoms"], g["coords"], bonds, g["modes"], mode_set="3n-6")
+    coords, modes = _complete_3n(g, bonds)
+    c = analyse(g["atoms"], coords, bonds, modes, mode_set="3n")
+    vib = [r for r in c["vibrations"] if r["label"][0] not in "TR"]
+
+    assert len(vib) == len(a["vibrations"])
+    for x, y in zip(a["vibrations"], vib):
+        assert x["label"] == y["label"]
+        assert x["frequency"] == pytest.approx(y["frequency"], abs=1e-3)
+        # magnitudes only: re-aligning an already-principal geometry can flip
+        # axis signs (MIT is not idempotent), which is a frame convention and
+        # does not affect the labels -- the assignment uses |score|.
+        for k in x["scores"]:
+            assert abs(x["scores"][k]) == pytest.approx(abs(y["scores"][k]), abs=2e-3)
+
+
+def test_3n_recovery_degrades_off_principal_axes():
+    """Documents the limitation the 3N warning exists for.
+
+    T/R constructed about non-principal axes become mixtures of Rx/Ry/Rz once
+    MIT rotates into the principal frame. No single slot score is then high
+    enough to win, so a real vibration can take the slot and a genuine rotation
+    falls through to Step 4.
+    """
+    from app.core.scoring import ModeScorer
+    g, bonds = _molecule()
+    sc = ModeScorer(g["atoms"], g["coords"], bonds)      # COM only, NOT aligned
+    refs = sc.construct_T() + sc.construct_R()
+    modes = [{"frequency": None, "vector": m["vector"]} for m in refs]
+    modes += [{"frequency": m["frequency"], "vector": m["vector"]} for m in g["modes"]]
+
+    p = analyse(g["atoms"], g["coords"], bonds, modes, mode_set="3n")
+    ext = [r["name"] for r in p["vibrations"] if r["label"][0] in "TR"]
+    assert ext != [f"Vib {i}" for i in range(1, 7)], (
+        "off-axis T/R now recovers perfectly; the 3N warning text and this "
+        "test's rationale should be revisited")
+    assert any("mixed external" in n for n in p["notes"]), \
+        "the user must be told the recovery was not clean"
+    assert not any("mixed external" in w for w in p["warnings"]), \
+        "a starred label is information, not a fault -- it belongs in notes"
+
+
+@pytest.mark.parametrize("stem,mode_set,expect_hint", [
+    ("HCOOH", "3n", "3N-6"),      # 9 modes supplied, 3N wanted
+    ("H2O", "3n", "3N-6"),
+])
+def test_wrong_mode_set_is_refused_with_a_hint(stem, mode_set, expect_hint):
+    g, bonds = _molecule(stem)
+    with pytest.raises(ParseError) as exc:
+        analyse(g["atoms"], g["coords"], bonds, g["modes"], mode_set=mode_set)
+    assert expect_hint in str(exc.value)
+    assert "pick that option instead" in str(exc.value)
+
+
+def test_3n6_on_a_complete_set_is_refused():
+    g, bonds = _molecule()
+    coords, modes = _complete_3n(g, bonds)
+    with pytest.raises(ParseError, match="3N \\(every mode, T/R included\\)"):
+        analyse(g["atoms"], coords, bonds, modes, mode_set="3n-6")
+
+
+def test_linear_molecule_uses_3n_minus_5():
+    g, bonds = _molecule("CO2")
+    p = analyse(g["atoms"], g["coords"], bonds, g["modes"], mode_set="3n-6")
+    assert p["linear"] is True
+    assert len(p["references"]) == 5, "linear molecules get 5 references, not 6"
+    assert p["n_modes"] == 3 * len(g["atoms"]) - 5
+
+
+def test_unknown_mode_set_raises():
+    g, bonds = _molecule()
+    with pytest.raises(ValueError, match="mode_set"):
+        analyse(g["atoms"], g["coords"], bonds, g["modes"], mode_set="all")
+
+
+def test_viewer_frame_is_the_score_frame():
+    """The geometry and vectors the viewer draws must be the frame the scores
+    are defined in -- otherwise the drawn axes would not mean Tx/Ty/Tz.
+
+    Checked by recomputing s[T] straight from the payload the browser receives
+    and comparing with the reported score, and by confirming the ideal Tx
+    reference displaces purely along +x.
+    """
+    import numpy as np
+    for stem, log, com, _ in molecules()[:6]:
+        _, _, p = run(log, com, stem)
+        for r in p["vibrations"][:3]:
+            V = np.array(r["vector"])
+            L = np.sqrt((V ** 2).sum(axis=1))
+            mask = L > 1e-6
+            U = np.zeros_like(V)
+            U[mask] = V[mask] / L[mask, None]
+            tx, ty, tz = U.sum(axis=0) / len(V)
+            for got, key in ((tx, "Tx"), (ty, "Ty"), (tz, "Tz")):
+                assert got == pytest.approx(r["scores"][key], abs=2e-4), (
+                    f"{stem} {r['name']} {key}: payload gives {got}, "
+                    f"score says {r['scores'][key]} -- viewer frame != score frame")
+
+        by_name = {r["name"]: r for r in p["references"]}
+        for name, axis in (("Tx", 0), ("Ty", 1), ("Tz", 2)):
+            if name not in by_name:
+                continue
+            V = np.array(by_name[name]["vector"])
+            assert np.allclose(V[:, axis], V[0, axis]), f"{stem} {name} not uniform"
+            for other in (0, 1, 2):
+                if other != axis:
+                    assert np.allclose(V[:, other], 0.0, atol=1e-6), \
+                        f"{stem} {name} has a component off the {name[-1]} axis"
+
+
+def test_frame_rotation_is_reported():
+    """The angle between the input orientation and the score frame is surfaced,
+    so a molecule that looks turned in the viewer is explained rather than
+    mistaken for a mismatch between the axes and the scores."""
+    for stem, log, com, _ in molecules()[:5]:
+        _, _, p = run(log, com, stem)
+        assert "frame_rotation_deg" in p
+        assert 0.0 <= p["frame_rotation_deg"] <= 180.0
+
+
+def test_rotation_labels_match_the_physical_axis_in_the_principal_frame():
+    """A mode labelled Rx must actually rotate about x, for T/R built in the
+    principal frame.
+
+    s[R_Q] measures whether the tangential SENSE is consistent about Q, not how
+    much of the rotation axis lies along Q. For a planar molecule an
+    off-principal rotation can therefore saturate at |1.000| on the wrong axis:
+    HCOOH's rotation about [0.956, -0.294, 0] scored s[Ry] = -1.000 (all five
+    sign terms agreed) against s[Rx] = +0.600 (one disagreed), and was labelled
+    Ry while visibly rotating about x. Built in the principal frame the labels
+    and the physical axes agree exactly.
+    """
+    import numpy as np
+    from app.core.scoring import ModeScorer
+    g, bonds = _molecule()
+    coords, modes = _complete_3n(g, bonds)
+    p = analyse(g["atoms"], coords, bonds, modes, mode_set="3n")
+    G = np.array(p["geometry"])
+
+    for r in p["vibrations"]:
+        if not (r["label"].startswith("R") and len(r["label"]) == 2):
+            continue
+        D = np.array(r["vector"])
+        A, b = [], []
+        for rr, d in zip(G, D):
+            A.append([[0, rr[2], -rr[1]], [-rr[2], 0, rr[0]], [rr[1], -rr[0], 0]])
+            b.append(d)
+        w, *_ = np.linalg.lstsq(np.vstack(A), np.concatenate(b), rcond=None)
+        n = np.linalg.norm(w)
+        assert n > 1e-9, f"{r['name']} labelled {r['label']} is not a rotation"
+        u = w / n
+        axis = "xyz"[int(np.argmax(np.abs(u)))]
+        assert r["label"] == "R" + axis, (
+            f"{r['name']} labelled {r['label']} but rotates about {axis} "
+            f"(axis {np.round(u, 3).tolist()})")
+        assert abs(u["xyz".index(axis)]) > 0.99, \
+            f"{r['name']} axis {np.round(u, 3).tolist()} is not a clean {axis} rotation"

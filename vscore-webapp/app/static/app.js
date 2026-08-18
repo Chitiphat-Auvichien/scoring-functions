@@ -18,9 +18,17 @@
   var framed = false;          // camera framed once, then left to the user
 
   // ---------------------------------------------------------------- table
+  // The T/R toggle is only rendered when references were constructed (the
+  // 3N-6 path). On a 3N upload the element does not exist -- nothing was
+  // constructed -- so treat it as off rather than dereferencing null.
+  function refsOn() {
+    var el = document.getElementById("f-ref");
+    return !!el && el.checked;
+  }
+
   function rows() {
     var out = P.vibrations.slice();
-    if (document.getElementById("f-ref").checked) out = P.references.concat(out);
+    if (refsOn()) out = P.references.concat(out);
     return out;
   }
 
@@ -71,12 +79,24 @@
         // V_S on a real mode -- see pipeline._row. On a real mode the six T/R
         // numbers are dimmed: they are diagnostics, not the mode's assigned
         // character, and only these six reference modes carry T/R character.
-        if (k === r.highlight) cls += " hot";
-        if (!r.is_reference && k !== "V_S") cls += " dim";
+        // r.highlights follows the LABEL: one cell for a clean external or an
+        // internal mode, two for a mixed external (V_S + the largest |T/R|),
+        // which by definition is part vibration and part rigid-body motion.
+        if (r.highlights.indexOf(k) !== -1) cls += " hot";
+        else if (!r.is_reference && k !== "V_S") cls += " dim";
         cells += '<td class="' + cls + '">' + fmt(r.scores[k]) + "</td>";
       });
+      // A starred external carries its vibrational character as
+      // annotation="vibration=SB". Show that as a second chip rather than
+      // spelling it out: [Tx*] [SB].
+      var ann = "";
+      if (r.annotation) {
+        var vm = /^vibration=(\w+)$/.exec(r.annotation);
+        ann = vm ? '<b class="lab ' + vm[1] + '">' + vm[1] + "</b>"
+                 : '<span class="ann">' + r.annotation + "</span>";
+      }
       cells += '<td><b class="lab ' + r.label.replace("*", "x") + '">' + r.label + "</b>" +
-               (r.annotation ? '<span class="ann">' + r.annotation + "</span>" : "") + "</td>" +
+               ann + "</td>" +
                "<td>" + (r.irrep || "—") + "</td>";
       tr.innerHTML = cells;
 
@@ -138,6 +158,38 @@
     return lines.join("\n") + "\n";
   }
 
+  /* Principal axes of inertia. The molecule is rotated into this frame before
+   * scoring, so Tx / Rz and friends are defined against exactly these
+   * directions -- drawing them makes the score columns readable. Colours avoid
+   * red, which is the displacement arrows. */
+  var AXES = [
+    { k: "x", v: [1, 0, 0], c: "#f59e0b" },
+    { k: "y", v: [0, 1, 0], c: "#3b82f6" },
+    { k: "z", v: [0, 0, 1], c: "#10b981" }
+  ];
+
+  function drawAxes() {
+    viewer.removeAllLabels();
+    if (!document.getElementById("axes").checked) return;
+    var span = 1.0;
+    P.geometry.forEach(function (g) {
+      span = Math.max(span, Math.abs(g[0]), Math.abs(g[1]), Math.abs(g[2]));
+    });
+    var L = span * 1.35 + 0.6;
+    AXES.forEach(function (a) {
+      viewer.addArrow({
+        start: { x: 0, y: 0, z: 0 },
+        end: { x: a.v[0] * L, y: a.v[1] * L, z: a.v[2] * L },
+        radius: 0.035, radiusRatio: 2.2, mid: 0.88, color: a.c
+      });
+      viewer.addLabel(a.k, {
+        position: { x: a.v[0] * (L + 0.28), y: a.v[1] * (L + 0.28), z: a.v[2] * (L + 0.28) },
+        fontSize: 12, fontColor: a.c, backgroundOpacity: 0.0,
+        showBackground: false, inFront: true
+      });
+    });
+  }
+
   function draw(r) {
     if (!viewer) return;
 
@@ -157,14 +209,14 @@
     model = viewer.addModel(extendedXyz(r), "xyz", { assignBonds: false });
 
     var atoms = model.selectedAtoms({});
+    // drawBondSticks draws each bond once, from the lower-index atom to the
+    // higher: `if (atom.index < partner.index)`. 3Dmol's xyz parser sets
+    // `serial` but leaves `index` null, and `null < null` is false -- so every
+    // bond was skipped and no sticks were ever drawn. Assign it explicitly.
+    atoms.forEach(function (a, i) { a.index = i; });
     P.bonds.forEach(function (b) {
       atoms[b[0]].bonds.push(b[1]); atoms[b[0]].bondOrder.push(1);
       atoms[b[1]].bonds.push(b[0]); atoms[b[1]].bondOrder.push(1);
-    });
-
-    model.setStyle({}, {
-      stick: { radius: 0.13 },
-      sphere: { scale: 0.22 }
     });
 
     var amp = parseFloat(document.getElementById("amp").value);
@@ -181,6 +233,17 @@
     // out as -amp -> 0 -> +amp, which is why the loop below is backAndForth:
     // a plain forward loop would snap from +amp straight back to -amp.
     model.vibrate(frames, amp, true, arrowSpec);
+
+    // Style AFTER vibrate(): vibrate rebuilds the model's frames, and a style
+    // set beforehand is applied to geometry it then replaces. Sticks are drawn
+    // from atom.bonds, which is OUR connectivity (assignBonds:false above), so
+    // the sticks and s[V_S] describe the same bonds.
+    var showBonds = document.getElementById("bonds").checked;
+    model.setStyle({}, showBonds
+      ? { stick: { radius: 0.15 }, sphere: { scale: 0.25 } }
+      : { sphere: { scale: 0.32 } });   // no sticks -> larger spheres to read
+
+    drawAxes();
 
     // Frame the molecule once. Re-zooming on every mode change fights the
     // user's own rotate/zoom and looks like the view jumping.
@@ -214,7 +277,8 @@
 
   // ------------------------------------------------------------- wire-up
   ["f-S", "f-B", "f-SB", "f-ref"].forEach(function (id) {
-    document.getElementById(id).addEventListener("change", render);
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("change", render);   // f-ref absent under 3N
   });
   ["f-lo", "f-hi"].forEach(function (id) {
     document.getElementById(id).addEventListener("input", render);
@@ -233,7 +297,7 @@
     ["f-S", "f-B", "f-SB"].forEach(function (i) { document.getElementById(i).checked = false; });
     render();
   });
-  ["amp", "frm", "arrows", "play"].forEach(function (id) {
+  ["amp", "frm", "arrows", "play", "bonds", "axes"].forEach(function (id) {
     document.getElementById(id).addEventListener("change", function () {
       if (selected !== null) {
         var r = P.references.concat(P.vibrations).find(function (x) { return x.index === selected; });

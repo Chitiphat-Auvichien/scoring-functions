@@ -23,7 +23,9 @@ function El(id, tag) {
   this.click=function(){ if(this._listeners.click) this._listeners.click({target:{classList:{contains:function(){return false}}}}); };
 }
 var REG={};
-function get(id){ if(!REG[id]) REG[id]=new El(id); return REG[id]; }
+var ABSENT={};
+function get(id){ if(ABSENT[id]) return null; if(!REG[id]) REG[id]=new El(id); return REG[id]; }
+
 REG["payload"]=new El("payload"); REG["payload"].textContent=PAYLOAD_TXT;
 REG["downloads"]=new El("downloads"); REG["downloads"].textContent=DL_TXT;
 var TBODY=new El("tbody","TBODY");
@@ -45,6 +47,8 @@ function getComputedStyle(){ return {getPropertyValue:function(){return "white"}
 // defaults the real inputs would carry
 get("f-lo").value="0"; get("f-hi").value="99999";
 get("amp").value="1"; get("frm").value="10";
-get("f-ref").checked=true;
+
 get("bonds").checked=true;
 get("axes").checked=true;
+
+ABSENT["f-ref"]=true; delete REG["f-ref"];

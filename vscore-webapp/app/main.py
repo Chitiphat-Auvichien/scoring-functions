@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .config import (MAX_UPLOAD_BYTES, SCORE_KEYS, SITE_NOTE, STATIC_DIR,
-                     TEMPLATES_DIR, VERSION)
+                     TEMPLATES_DIR, VERSION, asset_version)
 from .core.parsers import (ParseError, parse_connectivity, parse_gaussian_log,
                            parse_vsc, write_vsc)
 from .core.pipeline import analyse, to_csv_rows
@@ -38,6 +38,7 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals["version"] = VERSION
+templates.env.globals["asset_v"] = asset_version
 templates.env.globals["site_note"] = SITE_NOTE
 templates.env.globals["score_keys"] = SCORE_KEYS
 
@@ -67,7 +68,8 @@ async def _read(upload: UploadFile | None, what: str) -> str | None:
         raise ParseError(f"{what} could not be read as text.")
 
 
-def _build(mode, log_text, com_text, vsc_text, log_name, com_name, vsc_name):
+def _build(mode, log_text, com_text, vsc_text, log_name, com_name, vsc_name,
+           mode_set="3n-6"):
     """Route the three input paths onto one payload.
 
     Returns ``(payload, raw)``. ``raw`` keeps the geometry and displacements
@@ -86,7 +88,8 @@ def _build(mode, log_text, com_text, vsc_text, log_name, com_name, vsc_name):
                "bonds": v["bonds"], "modes": v["modes"]}
         payload = analyse(v["atoms"], v["coords"], v["bonds"], v["modes"],
                           title=v["title"] or _stem(vsc_name),
-                          source=vsc_name or "uploaded .vsc")
+                          source=vsc_name or "uploaded .vsc",
+                          mode_set=mode_set)
         return payload, raw
 
     if not log_text:
@@ -100,9 +103,12 @@ def _build(mode, log_text, com_text, vsc_text, log_name, com_name, vsc_name):
     bonds = parse_connectivity(com_text, len(g["atoms"]))
     raw = {"atoms": g["atoms"], "coords": g["coords"],
            "bonds": bonds, "modes": g["modes"]}
+    # A Gaussian frequency job prints 3N-6 (or 3N-5) modes; T/R are projected
+    # out at a stationary point, so this path is always the vibrations-only set.
     payload = analyse(g["atoms"], g["coords"], bonds, g["modes"],
                       title=_stem(log_name),
-                      source=f"{log_name} + {com_name}")
+                      source=f"{log_name} + {com_name}",
+                      mode_set="3n-6")
     return payload, raw
 
 
@@ -149,6 +155,7 @@ def index(request: Request):
 async def score(
     request: Request,
     mode: str = Form("log"),
+    mode_set: str = Form("3n-6"),
     logfile: UploadFile | None = File(None),
     comfile: UploadFile | None = File(None),
     vscfile: UploadFile | None = File(None),
@@ -162,6 +169,7 @@ async def score(
             logfile.filename if logfile else None,
             comfile.filename if comfile else None,
             vscfile.filename if vscfile else None,
+            mode_set=mode_set,
         )
     except ParseError as exc:
         return templates.TemplateResponse(
@@ -214,6 +222,7 @@ def api_health():
 @app.post("/api/score")
 async def api_score(
     mode: str = Form("log"),
+    mode_set: str = Form("3n-6"),
     logfile: UploadFile | None = File(None),
     comfile: UploadFile | None = File(None),
     vscfile: UploadFile | None = File(None),
@@ -227,6 +236,7 @@ async def api_score(
             logfile.filename if logfile else None,
             comfile.filename if comfile else None,
             vscfile.filename if vscfile else None,
+            mode_set=mode_set,
         )
     except ParseError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

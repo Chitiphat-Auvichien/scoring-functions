@@ -56,12 +56,15 @@ pytestmark = [
 CASES = ["HOCl", "CO2", "C6H6", "C10H8", "XeF2Cl2"]
 
 
-def _run_js(stem, tmp_path, probe):
-    log = REF / "logs" / f"{stem}.log"
-    com = REF / "gjf" / f"{stem}.com"
-    g = parse_gaussian_log(log.read_text(errors="replace"))
-    bonds = parse_connectivity(com.read_text(errors="replace"), len(g["atoms"]))
-    payload = analyse(g["atoms"], g["coords"], bonds, g["modes"], title=stem)
+def _run_js(stem, tmp_path, probe, payload=None, stub="dom_stub.js"):
+    """Drive app.js over a payload. Defaults to the .log path for `stem`;
+    pass `payload` to exercise a case the .log path cannot produce."""
+    if payload is None:
+        log = REF / "logs" / f"{stem}.log"
+        com = REF / "gjf" / f"{stem}.com"
+        g = parse_gaussian_log(log.read_text(errors="replace"))
+        bonds = parse_connectivity(com.read_text(errors="replace"), len(g["atoms"]))
+        payload = analyse(g["atoms"], g["coords"], bonds, g["modes"], title=stem)
 
     data = tmp_path / "data.js"
     data.write_text("var PAYLOAD_TXT=%s; var DL_TXT=%s;" % (
@@ -70,7 +73,7 @@ def _run_js(stem, tmp_path, probe):
 
     out = subprocess.run(
         [str(JSC), str(JS / "dom.js"), str(ROOT / "app/static/3Dmol-min.js"),
-         str(data), str(JS / "dom_stub.js"), str(JS / "real_viewer.js"),
+         str(data), str(JS / stub), str(JS / "real_viewer.js"),
          str(ROOT / "app/static/app.js"), "-e", probe],
         capture_output=True, text=True, cwd=ROOT)
     assert out.returncode == 0, out.stderr or out.stdout
@@ -255,3 +258,210 @@ def test_template_uses_floor_and_ceil_for_the_bounds():
     assert "round(0, 'ceil')" in tpl, "f-hi must ceil, not round"
     assert "freq_range[0]|round(0)|int" not in tpl
     assert "freq_range[1]|round(0)|int" not in tpl
+
+
+# ----------------------------------------------------------------------
+# Bonds must actually render, and the toggle must switch them.
+# ----------------------------------------------------------------------
+_STICK_PROBE = """
+    var m = CALLS.viewer.models[0];
+    function verts(style) {
+      var atoms = m.selectedAtoms({}).map(function (a) {
+        var c = {}; for (var k in a) c[k] = a[k]; c.style = style; return c;
+      });
+      var obj = m.createMolObj(atoms, {}), t = 0;
+      (obj.children || []).forEach(function (c) {
+        if (c.geometry && c.geometry.geometryGroups)
+          c.geometry.geometryGroups.forEach(function (g) { t += g.vertices || 0; });
+      });
+      return t;
+    }
+    print(JSON.stringify({
+      indices: m.selectedAtoms({}).map(function (x) { return x.index; }),
+      stick: verts({stick: {radius: 0.15}}),
+      sphere: verts({sphere: {scale: 0.32}})
+    }));
+"""
+
+
+@pytest.mark.parametrize("stem", ["HOCl", "C6H6", "C10H8", "CO2"])
+def test_bond_sticks_are_actually_generated(stem, tmp_path):
+    """Sticks must produce geometry, not merely be requested in the style.
+
+    3Dmol's drawBondSticks draws each bond once, from the lower-index atom to
+    the higher: `if (atom.index < partner.index)`. Its xyz parser sets `serial`
+    but leaves `index` null, and `null < null` is false -- so every bond was
+    silently skipped and the viewer drew spheres floating unconnected. The
+    style said `stick`, the atoms carried the right bonds, and nothing was
+    rendered. Only the vertex count catches that.
+    """
+    _, got = _run_js(stem, tmp_path, _STICK_PROBE)
+    r = json.loads(got)
+    assert r["indices"] == list(range(len(r["indices"]))), \
+        f"atom.index must be 0..N-1, got {r['indices'][:6]}"
+    assert r["stick"] > 0, "stick style produced no geometry -- bonds are not drawn"
+    assert r["sphere"] > 0
+
+
+def test_bonds_toggle_switches_the_style(tmp_path):
+    _, got = _run_js("C6H6", tmp_path, """
+        function fire(id) { var e = document.getElementById(id); e._listeners.change.call(e); }
+        var out = {on: CALLS.style};
+        var b = document.getElementById('bonds');
+        b.checked = false; fire('bonds'); out.off = CALLS.style;
+        b.checked = true;  fire('bonds'); out.back = CALLS.style;
+        out.loops = CALLS.live;
+        print(JSON.stringify(out));
+    """)
+    r = json.loads(got)
+    assert "stick" in r["on"] and "sphere" in r["on"]
+    assert "stick" not in r["off"], "bonds off must drop the stick style"
+    assert "sphere" in r["off"], "spheres must remain when bonds are hidden"
+    assert "stick" in r["back"]
+    assert r["loops"] == 1, "toggling bonds must not stack animation loops"
+
+
+# ----------------------------------------------------------------------
+# Highlighting follows the label; axes are drawn in the principal frame.
+# ----------------------------------------------------------------------
+def test_mixed_external_highlights_both_scores(tmp_path):
+    """A starred label is part external and part vibration, so one number
+    cannot describe it: highlight V_S AND the largest |T/R|."""
+    log = REF / "logs" / "C6H6.log"
+    payload, got = _run_js("C6H6", tmp_path, """
+        var K = ['Tx','Ty','Tz','Rx','Ry','Rz','V_S'], out = [];
+        document.querySelectorAll('#tbl tbody tr').forEach(function (tr) {
+            var h = tr.innerHTML, hot = [], ci = 0, re = /<td class="(n[^"]*)">/g, m;
+            while ((m = re.exec(h)) !== null) {
+                if (ci > 0 && ci < 8 && m[1].indexOf('hot') > -1) hot.push(K[ci - 1]);
+                ci++;
+            }
+            var lab = (h.match(/class="lab ([^"]*)">([^<]*)</) || [])[2];
+            out.push({label: lab, hot: hot});
+        });
+        print(JSON.stringify(out));
+    """)
+    rows = json.loads(got)
+    assert rows, "no rows rendered"
+    for r in rows:
+        lab = r["label"]
+        if lab and lab[0] in "TR" and lab.endswith("*"):
+            assert len(r["hot"]) == 2, f"{lab}: {r['hot']}"
+            assert "V_S" in r["hot"]
+            assert any(k != "V_S" for k in r["hot"])
+        elif lab and lab[0] in "TR":
+            assert r["hot"] == [lab], f"clean external {lab} highlighted {r['hot']}"
+        else:
+            assert r["hot"] == ["V_S"], f"internal {lab} highlighted {r['hot']}"
+
+
+@pytest.mark.parametrize("stem", ["HOCl", "C6H6", "CO2"])
+def test_axes_are_drawn_and_toggle(stem, tmp_path):
+    """Three labelled arrows along the principal axes, and a toggle."""
+    payload, got = _run_js(stem, tmp_path, """
+        function fire(id) { var e = document.getElementById(id); e._listeners.change.call(e); }
+        var on = {n: CALLS.arrows.length,
+                  labels: CALLS.labels.map(function (l) { return l.text; }),
+                  colors: CALLS.arrows.map(function (a) { return a.color; }),
+                  len: CALLS.arrows.length ? CALLS.arrows[0].end.x : 0};
+        var a = document.getElementById('axes');
+        a.checked = false; fire('axes');
+        var off = {n: CALLS.arrows.length, labels: CALLS.labels.length};
+        print(JSON.stringify({on: on, off: off, loops: CALLS.live}));
+    """)
+    r = json.loads(got)
+    assert r["on"]["n"] == 3, f"expected 3 axis arrows, got {r['on']['n']}"
+    assert r["on"]["labels"] == ["x", "y", "z"]
+    assert len(set(r["on"]["colors"])) == 3, "axes must be distinguishable"
+    assert "#e03131" not in r["on"]["colors"], \
+        "axis colour clashes with the red displacement arrows"
+    # axis length must scale past the molecule, not sit inside it
+    span = max(abs(c) for g in payload["geometry"] for c in g)
+    assert r["on"]["len"] > span, f"axis {r['on']['len']} shorter than span {span}"
+    assert r["off"]["n"] == 0 and r["off"]["labels"] == 0, "toggle must clear axes"
+    assert r["loops"] == 1, "toggling axes must not stack animation loops"
+
+
+def _payload_with_mixed_externals():
+    """A 3N pool whose T/R modes are built about NON-principal axes, so the
+    external slots come back starred. The .log path cannot produce this: it
+    constructs clean principal-frame references."""
+    from app.core.scoring import ModeScorer
+    log = REF / "logs" / "HCOOH.log"
+    com = REF / "gjf" / "HCOOH.com"
+    g = parse_gaussian_log(log.read_text(errors="replace"))
+    bonds = parse_connectivity(com.read_text(errors="replace"), len(g["atoms"]))
+    sc = ModeScorer(g["atoms"], g["coords"], bonds)      # COM only, not aligned
+    modes = [{"frequency": None, "vector": m["vector"]}
+             for m in sc.construct_T() + sc.construct_R()]
+    modes += [{"frequency": m["frequency"], "vector": m["vector"]} for m in g["modes"]]
+    return analyse(g["atoms"], g["coords"], bonds, modes, mode_set="3n")
+
+
+def test_starred_external_shows_a_second_label_chip(tmp_path):
+    """A mixed external renders as two chips, e.g. [Tx*][SB] -- not as the raw
+    annotation text "vibration=SB"."""
+    pay = _payload_with_mixed_externals()
+    assert any(r["label"].endswith("*") for r in pay["vibrations"]), \
+        "test setup produced no mixed external"
+    _, got = _run_js(None, tmp_path, """
+        var out = [];
+        document.querySelectorAll('#tbl tbody tr').forEach(function (tr) {
+            var cell = (tr.innerHTML.match(/<td>(<b class="lab[\\s\\S]*?)<\\/td>/) || [])[1] || '';
+            var chips = (cell.match(/<b class="lab [^"]*">([^<]*)<\\/b>/g) || [])
+                        .map(function (c) { return c.replace(/<[^>]*>/g, ''); });
+            out.push({chips: chips, raw: cell});
+        });
+        print(JSON.stringify(out));
+    """, payload=pay)
+    rows = json.loads(got)
+    assert rows
+    starred = [r for r in rows if r["chips"] and r["chips"][0].endswith("*")]
+    assert starred, "no mixed external rendered"
+    for r in starred:
+        assert len(r["chips"]) == 2, f"expected two chips, got {r['chips']}"
+        assert r["chips"][1] in ("S", "B", "SB"), r["chips"]
+        assert "vibration=" not in r["raw"], "raw annotation text must not be shown"
+    for r in rows:
+        if r["chips"] and not r["chips"][0].endswith("*"):
+            assert len(r["chips"]) == 1, f"unstarred row got {r['chips']}"
+
+
+def test_3n_hides_the_reference_toggle_and_js_survives_it(tmp_path):
+    """Under 3N nothing is constructed, so the T/R toggle is not rendered.
+
+    app.js must then not dereference the missing element: rows() previously did
+    document.getElementById("f-ref").checked unconditionally, which throws and
+    takes the whole table with it.
+    """
+    from app.core.parsers import parse_vsc
+    vsc = ROOT / "examples" / "C6H6_EMIT.vsc"
+    if not vsc.exists():
+        pytest.skip("EMIT example not present")
+    v = parse_vsc(vsc.read_text())
+    pay = analyse(v["atoms"], v["coords"], v["bonds"], v["modes"], mode_set="3n")
+    assert pay["references"] == []
+
+    _, got = _run_js(None, tmp_path, """
+        var n = 0;
+        document.querySelectorAll('#tbl tbody tr').forEach(function () { n++; });
+        print(JSON.stringify({
+            err: document.getElementById('mol').innerHTML || '',
+            rows: n,
+            toggle: document.getElementById('f-ref') === null,
+            loops: CALLS.live
+        }));
+    """, payload=pay, stub="dom_stub_noref.js")
+    r = json.loads(got)
+    assert r["err"] == "", f"app.js failed without the toggle: {r['err']}"
+    assert r["toggle"] is True, "test setup: f-ref should be absent"
+    assert r["rows"] == pay["n_modes"]
+    assert r["loops"] == 1
+
+
+def test_template_only_renders_the_toggle_with_references():
+    tpl = (ROOT / "app/templates/result.html").read_text()
+    i = tpl.index('id="f-ref"')
+    before = tpl[:i]
+    assert "{% if p.references %}" in before[-400:], \
+        "the T/R toggle must be guarded by {% if p.references %}"

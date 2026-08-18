@@ -3,7 +3,8 @@
  * parsing, bonding and vibrate() are genuinely exercised -- only WebGL
  * rendering is stubbed. */
 var CALLS = { vibrate:null, animate:null, style:null, viewer:null,
-              animateCount:0, stopCount:0, live:0, zooms:0, frame:null };
+              animateCount:0, stopCount:0, live:0, zooms:0, frame:null,
+              arrows:[], labels:[] };
 var REAL = $3Dmol;
 $3Dmol = {
   GLModel: REAL.GLModel,
@@ -24,6 +25,9 @@ $3Dmol = {
         m.setStyle = function (sel, st) { CALLS.style = st; return _s(sel, st); };
         this.models.push(m); return m;
       },
+      addArrow: function (spec) { CALLS.arrows.push(spec); },
+      addLabel: function (t, spec) { CALLS.labels.push({text: t, spec: spec}); },
+      removeAllLabels: function () { CALLS.labels = []; CALLS.arrows = []; },
       zoomTo: function () { CALLS.zooms++; }, render: function () {},
       // count loops started vs stopped, and model frame index
       animate: function (o) { CALLS.animate = o; CALLS.animateCount++; CALLS.live++; },

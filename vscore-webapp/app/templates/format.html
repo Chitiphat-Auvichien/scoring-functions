@@ -48,35 +48,98 @@
         <b>Required.</b></li>
     <li><b><code>[MODES] N</code></b> — <code>N</code> optional; if given it must match.
         Each mode opens with <code>mode &lt;n&gt;</code> plus optional
-        <code>freq=</code>, <code>mu=</code>, <code>k=</code>, <code>irrep=</code>,
-        followed by one <code>dx dy dz</code> row per atom (optional leading index).</li>
+        <code>freq=</code> (or <code>eigen=</code> for an EMIT mode), <code>mu=</code>,
+        <code>k=</code>, <code>irrep=</code>, followed by one <code>dx dy dz</code> row
+        per atom (optional leading index).</li>
   </ul>
 
-  <h2>All mode metadata is optional</h2>
+  <h2>EMIT modes</h2>
   <p>
-    <code>freq=</code>, <code>mu=</code>, <code>k=</code> and <code>irrep=</code> are
-    every one of them optional, in any combination. The scorer reads <em>none</em> of
-    them &mdash; they are row metadata that rides along to the output table and the CSV.
-    A bare <code>mode 1</code> followed by its displacement rows scores identically to
-    a fully annotated one.
+    Use <code>eigen=</code> instead of <code>freq=</code> on a mode header to mark it
+    as an EMIT mode rather than a Gaussian normal mode — eigenvalues can be negative,
+    unlike a vibrational frequency, and the two are scored differently. EMIT
+    eigenvectors already live in the principal-axis frame, so the pipeline rotates
+    <em>only the molecule</em> into that frame, not the mode vectors a second time
+    (rotating them again would silently invert the T/R scores). Getting this tag
+    right therefore matters more than any other piece of mode metadata, all of which
+    the scorer otherwise ignores. See <code>examples/C6H6_EMIT.vsc</code>.
   </p>
-<pre>[MODES] 3
-  mode 1   freq=667.6406   mu=17.7040   k=4.9258   irrep=A'   &larr; all four
-  mode 2   freq=1256.0043                                     &larr; just the frequency
-  mode 3                                                      &larr; nothing at all</pre>
+<pre>[MODES] 36
+  mode 1   eigen=-23.7514
+    1      0.00000      0.00000      0.00000
+    ...</pre>
+
+  <h2>Optional fields, in full</h2>
   <p>
-    An omitted <code>freq</code> stays <em>absent</em> rather than becoming
-    <code>0.0</code>, so the table shows a dash instead of an invented
-    0.00&nbsp;cm&#8315;&#185;, and the writer emits only the fields your file actually
-    had. Case does not matter (<code>FREQ=</code> works). Unknown
-    <code>key=value</code> pairs are ignored.
-  </p>
-  <p>
-    Only the four blocks below are load-bearing: the element symbols, the coordinates,
-    the connectivity, and the displacement rows.
+    Only four things are load-bearing: the element of each atom, its coordinates,
+    the connectivity, and the displacement rows. Everything below is optional and
+    every combination is accepted &mdash; each row here is exercised by the test
+    suite.
   </p>
 
-  <h2>3N or 3N&minus;6?</h2>
+  <h3>Mode metadata</h3>
+  <p>
+    Written after <code>mode&nbsp;&lt;n&gt;</code>, in any order, space separated.
+    Keys are case-insensitive (<code>FREQ=</code> works) and unrecognised
+    <code>key=value</code> pairs are ignored, so extra annotation is harmless.
+    <b>The scorer reads none of them</b> &mdash; they are row metadata that rides
+    through to the table and the CSV.
+  </p>
+  <table>
+    <tr><td><code>freq=</code></td>
+        <td>Harmonic frequency in cm&#8315;&#185;. Shown in the &nu; column.
+            Absent means absent, not zero: the row shows a dash rather than an
+            invented 0.00.</td></tr>
+    <tr><td><code>eigen=</code></td>
+        <td><b>Marks the mode as EMIT.</b> Carries an EMIT eigenvalue rather than a
+            wavenumber, so the column re-labels itself <em>eigenvalue</em> instead of
+            claiming cm&#8315;&#185;. It also changes how the mode is treated:
+            EMIT eigenvectors already live in the principal-axis frame, so the
+            molecule is rotated into that frame and the vectors are left alone.
+            Rotating them as well applies the transform twice &mdash; on benzene
+            that mislabels 9 of 36 modes. Use it whenever the geometry is in one
+            frame and the eigenvectors in another.
+            Mutually exclusive with <code>freq=</code>; if both appear,
+            <code>eigen=</code> wins as the more specific tag.</td></tr>
+    <tr><td><code>mu=</code></td><td>Reduced mass in AMU. Output only.</td></tr>
+    <tr><td><code>k=</code></td><td>Force constant in mDyne/&Aring;. Output only.</td></tr>
+    <tr><td><code>irrep=</code></td>
+        <td>Irreducible representation, free text (<code>A'</code>,
+            <code>B2U</code>&hellip;). Output only.</td></tr>
+  </table>
+<pre>  mode 1   freq=667.6406   mu=17.7040   k=4.9258   irrep=A'   &larr; all of them
+  mode 2   freq=1256.0043                                      &larr; one of them
+  mode 3   eigen=-23.7514                                      &larr; an EMIT mode
+  mode 4                                                       &larr; none at all</pre>
+
+  <h3>File and block syntax</h3>
+  <table>
+    <tr><td><code>#VSCORE 1.0</code></td>
+        <td>Version marker. Parsed as a comment, so a file without it still reads
+            &mdash; but write it: it is the only thing identifying the format.</td></tr>
+    <tr><td><code>#TITLE</code> / <code>#SOURCE</code></td>
+        <td>Free text. The title names the result page; the source is provenance
+            for whoever opens the file later.</td></tr>
+    <tr><td><code>#</code> comments</td>
+        <td>Anywhere, whole-line or trailing. Blank lines ignored throughout.</td></tr>
+    <tr><td><code>[GEOMETRY]</code> unit</td>
+        <td>The <code>Angstrom</code> after the tag is decorative; &Aring; is
+            assumed either way.</td></tr>
+    <tr><td>atom index</td>
+        <td>The leading serial in a <code>[GEOMETRY]</code> row may be omitted, and
+            likewise on displacement rows.</td></tr>
+    <tr><td>element</td>
+        <td>Symbol (<code>Cl</code>, any case) or atomic number (<code>17</code>).</td></tr>
+    <tr><td>bond orders</td>
+        <td>Accepted and ignored in <code>[CONNECTIVITY]</code>, so a block pasted
+            straight from a <code>.com</code> deck works. Bonds are symmetric and
+            de-duplicated &mdash; listing each once is enough.</td></tr>
+    <tr><td><code>[MODES] N</code></td>
+        <td>The count is optional. Given, it must match the number of modes found,
+            which catches a truncated paste.</td></tr>
+  </table>
+
+  <h2>3N or 3N&minus;6? Detected, not declared</h2>
   <p>
     A <code>.vsc</code> can hold either the vibrations alone or the complete set
     including translation and rotation, and the upload form asks which. The choice

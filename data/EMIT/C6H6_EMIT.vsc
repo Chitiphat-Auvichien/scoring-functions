@@ -1,34 +1,6 @@
 #VSCORE 1.0
-#TITLE   C6H6 (benzene) — 36 CART EMIT modes, MP2/3-21G
-#SOURCE  data/EMIT/C6H6_EMIT.txt (eigenvectors + eigenvalues)
-#        data/logs/C6H6.log      (geometry, standard orientation)
-#        data/gjf/C6H6.com       (connectivity)
-#
-# WHAT THIS IS
-#   EMIT eigenvectors, not normal modes. All 3N = 36 of them, so the app
-#   detects a 3N set: nothing is constructed, and the six external modes are
-#   found among these by the usual external-slot assignment. Unlike a normal
-#   mode set, real EMIT eigenvectors do win those slots — that is the point of
-#   this test case.
-#
-# eigen= RATHER THAN freq=
-#   Each mode carries an EMIT eigenvalue, not a wavenumber, so it is tagged
-#   eigen= instead of freq=. That tag does two jobs: it keeps the value out of
-#   a column headed cm-1, and it marks the mode as EMIT so the scorer does not
-#   re-rotate it — EMIT eigenvectors already live in the principal-axis frame,
-#   whereas the geometry below is Gaussian's standard orientation. Rotating
-#   them along with the molecule applies the transform twice and mislabels 9
-#   of these 36 modes.
-#
-# PRECISION — DO NOT "IMPROVE" IT
-#   Displacements are written at 5 dp, matching the published
-#   data/results/C6H6_EMIT.csv exactly (0.0000 worst deviation, 0/36 label
-#   mismatches). Writing them at full source precision does NOT help: atom 1
-#   of EMIT 33 has |d| = 1.130e-06 against the scorer's EPS_DENOM = 1e-6 noise
-#   floor, so at full precision it is promoted to a unit vector and shifts
-#   that mode's s[Tx] by 1/12 = 0.0833. The rounding keeps it below the floor,
-#   which is where the published run has it.
-#
+#TITLE   C6H6 EMIT
+#SOURCE  C6H6_EMIT.txt + C6H6.log + C6H6.com
 
 [GEOMETRY] Angstrom
     1  C        0.000000       1.406876       0.000000

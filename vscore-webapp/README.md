@@ -67,6 +67,14 @@ Element symbols or atomic numbers; leading indices optional; `#` comments and
 blank lines ignored; bond orders accepted and ignored. Full spec at `/format`.
 Samples in `examples/`.
 
+EMIT modes use `eigen=` instead of `freq=` on the mode header (eigenvalues can
+be negative, unlike a frequency). That tag is what tells the pipeline to skip
+the rotate-modes-with-the-molecule step: EMIT eigenvectors already live in the
+principal-axis frame, so re-rotating them the way a Gaussian normal mode is
+rotated would silently corrupt every score. See `examples/C6H6_EMIT.vsc` (36
+modes, `../data/EMIT/C6H6_EMIT.txt` converted) and
+`../data/EMIT/C6H6_EMIT.vsc`.
+
 Typically **23× smaller** than the logs it came from (9.4 MB of Gaussian output
 → 408 kB of `.vsc` across the reference set), because the parts that dominate a
 log — SCF iterations, the Hessian, integrals — are never read.

@@ -20,6 +20,8 @@ from .scoring import ModeScorer
 
 SCORE_KEYS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "V_S")
 
+_EXTERNAL_SLOTS = {"Tx", "Ty", "Tz", "Rx", "Ry", "Rz"}
+
 # Labels produced by Step 4 of the classifier, with the plain-language reading
 # the UI shows. External slots (Tx..Rz) are described in place.
 LABEL_TEXT = {
@@ -109,10 +111,20 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
     scorer = ModeScorer(atoms, coords, bonds)
     _as_given = np.array(scorer.coords, dtype=float)   # COM-shifted, not yet aligned
 
-    rotated = scorer.MIT([dict(m) for m in modes], rotate_modes=True)
+    # EMIT eigenvectors already live in the principal-axis frame, so MIT must
+    # rotate the MOLECULE only -- rotating them too applies the transform a
+    # second time. Done from a raw Gaussian orientation that mislabels 9 of
+    # benzene's 36 EMIT modes. Gaussian normal modes are printed in the same
+    # frame as the geometry and must be rotated with it. `eigen=` in a .vsc is
+    # what sets is_emit; see main.build_scorer_and_final's mode_type branch.
+    is_emit = any(m.get("is_emit") for m in modes)
+    rotated = scorer.MIT([dict(m) for m in modes], rotate_modes=not is_emit)
     frame_rotation = _rotation_between(_as_given, np.array(scorer.coords, dtype=float))
+    # Self-assign the name rather than trusting one to survive parsing:
+    # write_vsc/parse_vsc do not round-trip 'label', so every mode would
+    # otherwise fall back to classify_all_modes()'s generic "Mode i".
     for i, m in enumerate(rotated):
-        m["label"] = f"Vib {i + 1}"
+        m["label"] = f"EMIT {i + 1}" if is_emit else f"Vib {i + 1}"
 
     linear = is_linear(scorer)
     ideal_R = scorer.construct_R()
@@ -142,7 +154,17 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
     # classify_all_modes returns one entry per mode in `final`, in the same
     # order, but drops the displacement vector -- the viewer needs it, so pair
     # them back up here rather than re-deriving.
-    rows = [_row(m, vec["vector"], i, is_reference=(i < n_ref))
+    # With constructed references, POSITION identifies them (they win their own
+    # slot every time -- 0/463 counterexamples). Under 3N nothing is
+    # constructed, so the CLASSIFICATION is what says a mode is external.
+    rows = [_row(m, vec["vector"], i,
+                 is_reference=(i < n_ref if n_ref
+                               else m["classification"] in _EXTERNAL_SLOTS),
+                 # the SET-level flag, not the per-mode one: is_emit decides
+                 # rotation for the whole pool, and a per-row mix would name the
+                 # CSV column "Eigenvalue" on some rows and "Freq" on others,
+                 # which DictWriter rejects outright.
+                 is_emit=is_emit)
             for i, (m, vec) in enumerate(zip(scored, final))]
     references, vibrations = rows[:n_ref], rows[n_ref:]
 
@@ -198,13 +220,14 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
         },
         "precision_dp": dp,
         "mode_set": mode_set,
+        "is_emit": bool(is_emit),
         "warnings": warnings,
         "notes": notes,
         "freq_range": _freq_range(vibrations),
     }
 
 
-def _row(m, vector, index, is_reference=False):
+def _row(m, vector, index, is_reference=False, is_emit=False):
     """One table row: the seven scores, the label, and which score dominates."""
     scores = {
         "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
@@ -245,6 +268,7 @@ def _row(m, vector, index, is_reference=False):
         "index": index,
         "name": m["name"],
         "is_reference": bool(is_reference),
+        "is_emit": bool(is_emit),
         "highlight": highlight,
         "highlights": highlights,
         "frequency": _num(m["frequency"]),
@@ -296,7 +320,7 @@ def to_csv_rows(payload, include_references=False):
     for r in source:
         row = {
             "Mode": r["name"],
-            "Freq": r["frequency"],
+            ("Eigenvalue" if r["is_emit"] else "Freq"): r["frequency"],
             "Tx": r["scores"]["Tx"], "Ty": r["scores"]["Ty"], "Tz": r["scores"]["Tz"],
             "Rx": r["scores"]["Rx"], "Ry": r["scores"]["Ry"], "Rz": r["scores"]["Rz"],
             "V_Stretch": r["scores"]["V_S"],

@@ -443,6 +443,13 @@ def test_3n_hides_the_reference_toggle_and_js_survives_it(tmp_path):
     assert pay["references"] == []
 
     _, got = _run_js(None, tmp_path, """
+        // mirror the page defaults; the stub's are hardcoded and EMIT
+        // eigenvalues run negative
+        var P = JSON.parse(PAYLOAD_TXT);
+        var lo = document.getElementById('f-lo'), hi = document.getElementById('f-hi');
+        lo.value = String(Math.floor(P.freq_range[0]));
+        hi.value = String(Math.ceil(P.freq_range[1]));
+        lo._listeners.input.call(lo);
         var n = 0;
         document.querySelectorAll('#tbl tbody tr').forEach(function () { n++; });
         print(JSON.stringify({

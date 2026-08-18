@@ -52,9 +52,9 @@
       {# floor/ceil, never round: round() can move a bound PAST the extreme mode
          it is supposed to include -- HCOOH's lowest is 610.92, which rounds to
          611, and the filter then hides it. #}
-      <label class="rng">ν ≥ <input type="number" id="f-lo" step="1"
+      <label class="rng">{% if p.is_emit %}eig{% else %}ν{% endif %} ≥ <input type="number" id="f-lo" step="1"
              value="{{ p.freq_range[0]|round(0, 'floor')|int }}"></label>
-      <label class="rng">ν ≤ <input type="number" id="f-hi" step="1"
+      <label class="rng">{% if p.is_emit %}eig{% else %}ν{% endif %} ≤ <input type="number" id="f-hi" step="1"
              value="{{ p.freq_range[1]|round(0, 'ceil')|int }}"></label>
       <span class="sep"></span>
       {# 3N supplies its own T/R modes, so nothing is constructed and there is
@@ -74,7 +74,7 @@
           <tr>
             <th class="c"><input type="checkbox" id="chk-all" checked title="select all shown"></th>
             <th>mode</th>
-            <th class="n">ν / cm⁻¹</th>
+            <th class="n">{% if p.is_emit %}eigenvalue{% else %}ν / cm⁻¹{% endif %}</th>
             {% for k in score_keys %}<th class="n">{{ k }}</th>{% endfor %}
             <th>label</th>
             <th>irrep</th>

@@ -13,6 +13,7 @@ import csv
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -363,6 +364,100 @@ def test_write_vsc_omits_absent_metadata(header):
 
 
 
+# ----------------------------------------------------------------------
+# EMIT modes: a .vsc with eigen= (not freq=) headers must be rotated
+# with rotate_modes=False and score identically to the published
+# data/results/C6H6_EMIT.csv (main.py's headless EMIT pipeline).
+# ----------------------------------------------------------------------
+def _emit_vsc_path():
+    return REF / "EMIT" / "C6H6_EMIT.vsc"
+
+
+@pytest.mark.skipif(not _emit_vsc_path().exists(), reason="C6H6_EMIT.vsc not present")
+def test_emit_vsc_matches_reference():
+    v = parse_vsc(_emit_vsc_path().read_text())
+    assert all(m["is_emit"] for m in v["modes"]), "eigen= must mark every mode is_emit"
+
+    payload = analyse(v["atoms"], v["coords"], v["bonds"], v["modes"], title="C6H6 EMIT")
+    assert payload["references"] == [], "EMIT has no synthetic ideal T/R rows"
+    assert len(payload["vibrations"]) == 36
+
+    with open(REF / "results" / "C6H6_EMIT.csv") as f:
+        ref = list(csv.DictReader(f))
+    assert len(ref) == 36
+
+    for expected, got in zip(ref, payload["vibrations"]):
+        assert expected["Mode"] == got["name"], \
+            "row name must survive the .vsc round trip, not fall back to 'Mode i'"
+        for col in SCORE_COLS:
+            assert abs(float(expected[col]) - got["scores"][col]) < 5e-4, \
+                f"{got['name']} {col}"
+        assert abs(float(expected["V_Stretch"]) - got["scores"]["V_S"]) < 5e-4
+        assert expected["label"] == got["label"], f"{got['name']}"
+
+    # A real EMIT eigenvector must be able to win a slot outright (not just
+    # "*"-mixed) and be highlighted on that slot rather than V_S -- this is
+    # the entire point of the EMIT branch, so assert at least one exists.
+    clean_externals = [r for r in payload["vibrations"] if r["is_reference"]]
+    assert clean_externals, "expected at least one EMIT mode to cleanly win a T/R slot"
+    for r in clean_externals:
+        assert r["highlight"] == r["label"], f"{r['name']}: {r['highlight']} != {r['label']}"
+        assert r["highlight"] != "V_S"
+
+
+@pytest.mark.skipif(not _emit_vsc_path().exists(), reason="C6H6_EMIT.vsc not present")
+def test_emit_rotate_modes_false_matters():
+    """Scoring EMIT modes with rotate_modes=True (the normal-mode default)
+    must NOT reproduce the reference -- this is the exact silent-corruption
+    failure mode eigen= exists to prevent."""
+    from app.core.scoring import ModeScorer
+
+    v = parse_vsc(_emit_vsc_path().read_text())
+    scorer = ModeScorer(v["atoms"], v["coords"], v["bonds"])
+    wrongly_rotated = scorer.MIT([dict(m) for m in v["modes"]], rotate_modes=True)
+
+    with open(REF / "results" / "C6H6_EMIT.csv") as f:
+        expected = list(csv.DictReader(f))
+
+    # At least some mode's T/R scores must diverge once double-rotated --
+    # a handful of highly symmetric EMIT modes happen to keep near-zero T/R
+    # components under either rotation, so check across all 36, not just one.
+    max_diff = 0.0
+    for exp, wmode in zip(expected, wrongly_rotated):
+        got = scorer.calculate_scores(wmode["vector"])
+        for axis in "xyz":
+            max_diff = max(max_diff, abs(got["T"][axis] - float(exp[f"T{axis}"])))
+            max_diff = max(max_diff, abs(got["R"][axis] - float(exp[f"R{axis}"])))
+    assert max_diff > 1e-2, "double-rotating EMIT modes should visibly corrupt T/R scores"
+
+
+@pytest.mark.skipif(not _emit_vsc_path().exists(), reason="C6H6_EMIT.vsc not present")
+def test_emit_csv_uses_eigenvalue_column():
+    from app.core.pipeline import to_csv_rows
+
+    v = parse_vsc(_emit_vsc_path().read_text())
+    payload = analyse(v["atoms"], v["coords"], v["bonds"], v["modes"], title="C6H6 EMIT")
+    rows = to_csv_rows(payload)
+    assert all("Eigenvalue" in r and "Freq" not in r for r in rows)
+
+
+def test_write_vsc_eigen_roundtrips():
+    """write_vsc() must tag EMIT modes with eigen=, and parse_vsc() must read
+    it back as is_emit=True with the value preserved as 'frequency'."""
+    modes = [{"frequency": -23.7514, "vector": np.zeros((3, 3)), "is_emit": True,
+              "reduced_mass": None, "force_constant": None, "irrep": None}]
+    atoms, coords = ["O", "H", "Cl"], np.zeros((3, 3))
+    bonds = [(0, 1), (0, 2)]
+    text = write_vsc(atoms, coords, bonds, modes)
+    line = next(l.strip() for l in text.splitlines() if l.strip().startswith("mode"))
+    assert "eigen=-23.7514" in line
+    assert "freq=" not in line
+
+    v = parse_vsc(text)
+    assert v["modes"][0]["is_emit"] is True
+    assert v["modes"][0]["frequency"] == pytest.approx(-23.7514)
+
+
 def test_reference_data_was_actually_found():
     """Fail loudly if the reference data is missing, rather than skipping.
 
@@ -589,3 +684,93 @@ def test_rotation_labels_match_the_physical_axis_in_the_principal_frame():
             f"(axis {np.round(u, 3).tolist()})")
         assert abs(u["xyz".index(axis)]) > 0.99, \
             f"{r['name']} axis {np.round(u, 3).tolist()} is not a clean {axis} rotation"
+
+
+# ----------------------------------------------------------------------
+# Everything /format documents as optional must actually be optional.
+# ----------------------------------------------------------------------
+_G_SYM = ("O   0.038069   1.197522   0.000000\n"
+          "H  -0.951724   1.378354   0.000000\n"
+          "Cl  0.038069  -0.644619   0.000000")
+_G_NUM = (" 8   0.038069   1.197522   0.000000\n"
+          " 1  -0.951724   1.378354   0.000000\n"
+          "17   0.038069  -0.644619   0.000000")
+_G_IDX = ("1  O   0.038069   1.197522   0.000000\n"
+          "2  H  -0.951724   1.378354   0.000000\n"
+          "3 Cl   0.038069  -0.644619   0.000000")
+_D3 = ("   1    0.00088    0.85015   -0.00000\n"
+       "   2   -0.16190    0.30478   -0.00000\n"
+       "   3    0.00426   -0.39765    0.00000")
+
+
+def _mk(geom=_G_SYM, conn="1  2  3", count="", head="mode 1", vscore=True):
+    modes = f"{head}\n{_D3}\n mode 2\n{_D3}\n mode 3\n{_D3}"
+    return (("#VSCORE 1.0\n" if vscore else "")
+            + f"[GEOMETRY]\n{geom}\n[CONNECTIVITY]\n{conn}\n[MODES]{count}\n{modes}\n")
+
+
+@pytest.mark.parametrize("name,text", [
+    ("element symbols", _mk()),
+    ("atomic numbers", _mk(geom=_G_NUM)),
+    ("leading atom indices", _mk(geom=_G_IDX)),
+    ("[GEOMETRY] unit arg", _mk().replace("[GEOMETRY]", "[GEOMETRY] Angstrom")),
+    ("bond orders ignored", _mk(conn="1  2 1.0  3 1.0")),
+    ("[MODES] count given", _mk(count=" 3")),
+    ("no #VSCORE line", _mk(vscore=False)),
+    ("trailing # comment", _mk(head="mode 1  freq=667.64  # the bend")),
+    ("unknown key ignored", _mk(head="mode 1  foo=bar freq=667.64")),
+    ("uppercase keys", _mk(head="MODE 1  FREQ=667.64  IRREP=A'")),
+])
+def test_documented_optional_syntax_is_accepted(name, text):
+    v = parse_vsc(text)
+    assert v["atoms"] == ["O", "H", "Cl"], name
+    assert v["bonds"] == [(0, 1), (0, 2)], name
+    assert len(v["modes"]) == 3, name
+
+
+@pytest.mark.parametrize("head,freq,emit,irrep", [
+    ("mode 1   freq=667.6406   mu=17.7040   k=4.9258   irrep=A'", 667.6406, False, "A'"),
+    ("mode 1   freq=1256.0043", 1256.0043, False, None),
+    ("mode 1   eigen=-23.7514", -23.7514, True, None),
+    ("mode 1", None, False, None),
+    ("mode 1   eigen=-23.7514  freq=667.64", -23.7514, True, None),   # eigen wins
+])
+def test_documented_mode_metadata(head, freq, emit, irrep):
+    m = parse_vsc(_mk(head=head))["modes"][0]
+    assert m["frequency"] == (None if freq is None else pytest.approx(freq))
+    assert bool(m.get("is_emit")) is emit
+    assert m.get("irrep") == irrep
+
+
+def test_eigen_marks_the_set_as_emit_end_to_end():
+    """eigen= must reach analyse() and switch off mode-vector rotation."""
+    v = parse_vsc(_mk(head="mode 1   eigen=-23.7514"))
+    p = analyse(v["atoms"], v["coords"], v["bonds"], v["modes"])
+    assert p["is_emit"] is True
+    assert all(r["is_emit"] for r in p["vibrations"])
+
+
+def test_csv_column_is_uniform_when_only_some_modes_are_tagged():
+    """A partly-tagged file must still export.
+
+    is_emit is decided for the whole set -- one eigen= switches off mode
+    rotation for every mode -- but it used to be recorded per row. The CSV
+    names that column "Eigenvalue" or "Freq" from the row flag, so a mixed set
+    produced rows with different keys and DictWriter raised
+    "dict contains fields not in fieldnames: 'Freq'".
+    """
+    import csv, io
+    from app.core.pipeline import to_csv_rows
+    v = parse_vsc(_mk(head="mode 1   eigen=-23.7514"))    # only mode 1 tagged
+    p = analyse(v["atoms"], v["coords"], v["bonds"], v["modes"])
+    assert p["is_emit"] is True
+    assert all(r["is_emit"] for r in p["vibrations"]), \
+        "the set-level decision must be what every row records"
+
+    rows = to_csv_rows(p)
+    assert all("Eigenvalue" in r and "Freq" not in r for r in rows)
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=list(rows[0].keys()))
+    w.writeheader()
+    w.writerows(rows)                                     # must not raise
+    assert "Eigenvalue" in buf.getvalue().splitlines()[0]

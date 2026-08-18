@@ -270,7 +270,7 @@ def multi_centre_molecules(data_dir="data"):
 def out_of_calibration_scope_molecules(data_dir="data"):
     """Molecule names OUTSIDE the stretch/bend calibration's inclusion scope
     (mol_type not in {'ideal', 'non-ideal'}) -- currently the multi-centre
-    molecule (C6H6) plus the 9 held-out 'test' transferability molecules.
+    molecule (C6H6) plus the 18 held-out 'test' transferability molecules.
     Drives src/calibrate.py's SINGLE_CENTRE_ONLY_EXCLUDE: an INCLUSION
     filter (ideal/non-ideal only) expressed as its complement, so a future
     mol_type category is automatically excluded from calibration with no
@@ -278,6 +278,16 @@ def out_of_calibration_scope_molecules(data_dir="data"):
     multi-centre-only exclusion list now that mol_type=='test' exists)."""
     roster = load_mol_roster(data_dir)
     return frozenset(roster.loc[~roster["mol_type"].isin(("ideal", "non-ideal")), "molecule"])
+
+
+def test_tier_molecules(data_dir="data"):
+    """Molecule names tagged mol_type=='test' -- the 18-molecule held-out
+    transferability set, distinct from out_of_calibration_scope_molecules()
+    (which also includes the multi-centre molecule C6H6). Used by
+    src/figures.py's plot_transferability_confusion() to scope the
+    T/R/B/SB/S confusion matrix to exactly this tier."""
+    roster = load_mol_roster(data_dir)
+    return frozenset(roster.loc[roster["mol_type"] == "test", "molecule"])
 
 
 def attach_labels(df, csv_tables, label_lookup, freq_atol=0.05, freq_rtol=1e-4):

@@ -22,6 +22,16 @@ Internal/vibration fractions (C2_VS/C2_VB/C2_VMix): the stretch/bend/mixed
 split of a real normal mode's contribution reuses Step-4's classification
 (classifier.vib_label) on that mode's own s[V_S] score, so the boundary is
 defined in exactly one place (classifier.py), not duplicated here.
+
+Second, explicitly non-orthonormal pathway (build_reference_basis_cartesian /
+project_emit_cartesian, "C2cart_*" columns): the plain-Cartesian overlap this
+module's own docstring above says is NOT mutually orthogonal (off-diagonals up
+to 0.80). Kept only as an explicit point of comparison against the physically
+correct mass-weighted pathway -- e.g. to show a referee/reader what skipping
+the mass weighting would have produced -- not as an alternative to use on its
+own. Its fractions are not expected to sum to ~1; "C2cart_Sum" reports the
+actual (basis-dependent, physically uninterpretable) sum instead of asserting
+it.
 """
 
 import numpy as np
@@ -165,6 +175,99 @@ def project_emit(ref, final_emit, sum_tol=0.05):
                 f"{name}: projected fractions sum to {total:.4f}, expected ~1.0 "
                 f"(Q may not be a near-orthonormal basis -- check inputs)."
             )
+        rows.append(row)
+
+        full_row = {"Mode": name, "Eigenvalue": eig}
+        for lbl in labels:
+            full_row[lbl] = float(Frac[idx_of[lbl], j])
+        full_rows.append(full_row)
+
+    return rows, full_rows
+
+
+def _cartesian_unit_columns(mode_list):
+    """Flatten and unit-renormalize each mode's raw Cartesian displacement
+    vector -- no mass weighting (contrast _mass_weighted_unit_columns).
+    Returns ndarray (3N, len(mode_list)), columns in mode_list order."""
+    cols = []
+    for mode in mode_list:
+        v = np.asarray(mode["vector"], dtype=float).flatten()
+        norm = np.linalg.norm(v)
+        cols.append(v / norm if norm > 1e-12 else v)
+    return np.array(cols).T
+
+
+def build_reference_basis_cartesian(scorer, final_normal, thresholds=None):
+    """Cartesian-overlap counterpart of build_reference_basis(): the same T/R/
+    vibrational reference set, unit-normalized in the plain Cartesian inner
+    product instead of the mass-weighted one. See module docstring -- this
+    basis is NOT orthonormal in general, so it exists only as an explicit
+    point of comparison, not a replacement for the mass-weighted pathway.
+
+    Parameters / Returns: mirror build_reference_basis(), minus "weights"
+    (there are none to reuse on the EMIT side under this convention).
+    """
+    thresholds = thresholds or Thresholds(v_weighting="*")
+    Q = _cartesian_unit_columns(final_normal)
+
+    labels = []
+    groups = {}
+    for mode in final_normal:
+        label = mode.get("label")
+        labels.append(label)
+        if label in EXTERNAL_LABELS:
+            groups[label] = "EXTERNAL"
+        else:
+            sc = scorer.calculate_scores(mode["vector"])
+            groups[label] = vib_label(sc["V"], thresholds)
+    return {"Q": Q, "labels": labels, "groups": groups}
+
+
+def project_emit_cartesian(ref, final_emit):
+    """Cartesian-overlap counterpart of project_emit(): same grouping logic
+    and output shape (rows carry "C2cart_*" instead of "C2_*"), but Theta is
+    unit-normalized in plain Cartesian coordinates and the basis is not
+    orthonormal, so fractions are NOT expected to sum to ~1 -- "C2cart_Sum"
+    reports the actual sum as a diagnostic rather than asserting it (contrast
+    project_emit()'s hard sum_tol check, which relies on near-orthonormality).
+
+    Parameters
+    ----------
+    ref : dict, output of build_reference_basis_cartesian().
+    final_emit : list of mode dicts -- see project_emit().
+
+    Returns
+    -------
+    (rows, full_rows) : same shape as project_emit(), with "C2cart_Tx".."C2cart_Rz",
+        "C2cart_VS"/"C2cart_VB"/"C2cart_VMix", and "C2cart_Sum".
+    """
+    Q, labels, groups = ref["Q"], ref["labels"], ref["groups"]
+    Theta = _cartesian_unit_columns(final_emit)
+
+    Proj = Q.T @ Theta
+    Frac = Proj ** 2
+
+    idx_of = {lbl: i for i, lbl in enumerate(labels)}
+
+    rows = []
+    full_rows = []
+    for j, mode in enumerate(final_emit):
+        name = mode.get("label", f"EMIT {j + 1}")
+        eig = mode["frequency"]
+
+        row = {"Mode": name, "Eigenvalue": eig}
+        for slot in EXTERNAL_LABELS:
+            row[f"C2cart_{slot}"] = float(Frac[idx_of[slot], j]) if slot in idx_of else 0.0
+
+        totals = {g: 0.0 for g in _VIB_GROUPS}
+        for lbl in labels:
+            if lbl in EXTERNAL_LABELS:
+                continue
+            totals[groups[lbl]] += Frac[idx_of[lbl], j]
+        row["C2cart_VS"] = totals[STRETCHING]
+        row["C2cart_VB"] = totals[BENDING]
+        row["C2cart_VMix"] = totals[MIXED_STRETCH_BEND]
+        row["C2cart_Sum"] = sum(v for k, v in row.items() if k not in ("Mode", "Eigenvalue"))
         rows.append(row)
 
         full_row = {"Mode": name, "Eigenvalue": eig}

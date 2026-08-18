@@ -27,7 +27,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from main import run_projection_pipeline                          # noqa: E402
+from main import run_projection_pipeline, load_inputs, build_scorer_and_final  # noqa: E402
+from src.projection import build_reference_basis_cartesian, project_emit_cartesian  # noqa: E402
 
 TOL = 2e-3  # generous vs. the observed <=3.2e-4 max deviation from ground truth
 
@@ -81,6 +82,46 @@ def test_full_projection_file_has_per_mode_detail():
     vib_cols = [c for c in df_full.columns if c.startswith("Vib ")]
     assert len(vib_cols) == 30
     assert len(df_full) == len(df) == 36
+
+
+def test_cartesian_overlap_pathway_is_not_orthonormal():
+    """Unlike the mass-weighted pathway, the plain-Cartesian overlap basis is
+    NOT orthonormal (projection.py module docstring: off-diagonal Gram-matrix
+    entries up to 0.80 on benzene's real modes). EMIT 34's C2cart_* fractions
+    sum to well over 1, in contrast to the mass-weighted C2_* fractions'
+    ~1 (Parseval) for that same mode -- pinned regression values from a live
+    run, demonstrating why the mass-weighted pathway is the one to trust."""
+    df, _, _ = run_projection_pipeline("C6H6", write=False)
+    rows = _rows_by_mode(df)
+    assert abs(rows["EMIT 34"]["C2cart_Tx"] - 0.767360) < TOL
+    assert abs(rows["EMIT 34"]["C2cart_Sum"] - 1.931420) < TOL
+    mass_weighted_cols = ["C2_Tx", "C2_Ty", "C2_Tz", "C2_Rx", "C2_Ry", "C2_Rz",
+                           "C2_VS", "C2_VB", "C2_VMix"]
+    assert abs(sum(rows["EMIT 34"][c] for c in mass_weighted_cols) - 1.0) < 0.01
+
+
+def test_full_cartesian_projection_has_per_mode_detail():
+    """The Cartesian-overlap 'full' output has the same per-individual-
+    reference-mode shape as the mass-weighted one (build_reference_basis_cartesian
+    / project_emit_cartesian, tested directly since run_projection_pipeline
+    only writes the cartesian file rather than returning it)."""
+    raw_n, _ = load_inputs("C6H6", "normal")
+    scorer_n, final_n = build_scorer_and_final(raw_n, "normal")
+    raw_e, _ = load_inputs("C6H6", "emit")
+    _, final_e = build_scorer_and_final(raw_e, "emit")
+
+    ref = build_reference_basis_cartesian(scorer_n, final_n)
+    rows, full_rows = project_emit_cartesian(ref, final_e)
+
+    assert len(rows) == len(full_rows) == 36
+    expected_row_cols = {"Mode", "Eigenvalue", "C2cart_Tx", "C2cart_Ty", "C2cart_Tz",
+                          "C2cart_Rx", "C2cart_Ry", "C2cart_Rz", "C2cart_VS",
+                          "C2cart_VB", "C2cart_VMix", "C2cart_Sum"}
+    assert expected_row_cols <= set(rows[0].keys())
+    expected_ref_cols = {"Mode", "Eigenvalue", "Tx", "Ty", "Tz", "Rx", "Ry", "Rz"}
+    assert expected_ref_cols <= set(full_rows[0].keys())
+    vib_keys = [k for k in full_rows[0] if k.startswith("Vib ")]
+    assert len(vib_keys) == 30
 
 
 if __name__ == "__main__":

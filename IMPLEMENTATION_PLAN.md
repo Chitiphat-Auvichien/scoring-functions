@@ -410,6 +410,21 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 > One line per session, newest first. Full narration for any entry predating 2026-08-10 is in git history:
 > `git log -p -- IMPLEMENTATION_PLAN.md`.
 
+- **2026-08-18 (Cartesian-overlap comparison pathway)** — `src/projection.py` gained
+  `build_reference_basis_cartesian`/`project_emit_cartesian`, an explicitly non-orthonormal
+  counterpart to the locked mass-weighted `build_reference_basis`/`project_emit` (same T/R/vibrational
+  reference set, but Q and Theta unit-normalized in the plain Cartesian inner product instead of
+  `sum_A m_A (u_A . v_A)`). Requested to show what skipping mass weighting would have produced;
+  NOT a replacement for the mass-weighted result (module docstring already documented, pre-existing,
+  that the unweighted Gram matrix has off-diagonals up to 0.80 on benzene's real modes — i.e. this
+  basis is known not to be orthonormal). `run_projection_pipeline` (`main.py`) now also merges
+  `C2cart_Tx..C2cart_Sum` into `<mol>_EMIT.csv` and writes `<mol>_EMIT_full_cartesian.csv`;
+  `C2cart_Sum` is a diagnostic (actual, not asserted, fraction sum) since Parseval doesn't hold here —
+  confirmed on benzene EMIT 34: mass-weighted `C2_*` sums to ~1 as always, `C2cart_Sum` = 1.93.
+  Regenerated `C6H6_EMIT.csv`/`_EMIT_full_cartesian.csv` and `H2O_EMIT.csv`/`_EMIT_full_cartesian.csv`.
+  2 new regression tests in `tests/test_projection.py`; full suite 141/143 (2 pre-existing unrelated
+  `test_veda_fmt_regression.py` failures from a concurrent session's C6H6.log rerun, not this change).
+
 - **2026-08-14 (roster expansion)** — `test`-category transferability set 9 → 18: H2O retagged
   `non-ideal` → `test` (rerun at mp2/3-21g*, new `%mem`/`%nprocshared` header) and 8 new molecules added
   (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) with their own `.log`/`.gjf`/`.fchk` under

@@ -6,7 +6,8 @@ import pandas as pd
 from src.parser import GaussianParser, EMITParser, IntermediateIO
 from src.scoring import ModeScorer, V_WEIGHTINGS, DEFAULT_V_WEIGHTING, set_v_weighting
 from src.classifier import classify_all_modes, classify_to_rows, is_linear
-from src.projection import build_reference_basis, project_emit
+from src.projection import (build_reference_basis, project_emit,
+                             build_reference_basis_cartesian, project_emit_cartesian)
 from src.utils import find_file
 
 
@@ -186,7 +187,15 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
     data/results/<mol>_EMIT.csv in place (must already exist -- run
     `python main.py -m <mol> --mode emit` first), plus a separate
     <mol>_EMIT_full.csv with the per-reference-mode detail.
-    Returns (df_emit, df_full, (path_emit, path_full)).
+
+    Also runs the explicitly non-orthonormal plain-Cartesian-overlap
+    comparison pathway (src.projection.build_reference_basis_cartesian /
+    project_emit_cartesian -- see that module's docstring for why it exists
+    only as a point of comparison): merges "C2cart_Tx".."C2cart_Sum" into the
+    same <mol>_EMIT.csv, and writes the per-reference-mode detail to a
+    separate <mol>_EMIT_full_cartesian.csv.
+
+    Returns (df_emit, df_full, (path_emit, path_full, path_full_cartesian)).
     """
     raw_n, dirs = load_inputs(mol_name, "normal", data_dir)
     scorer_n, final_n = build_scorer_and_final(raw_n, "normal")
@@ -213,9 +222,10 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
             f"{emit_path} not found -- run `python main.py -m {mol_name} --mode emit` first.")
     df_emit = pd.read_csv(emit_path)
     # Re-running --emit-projection (e.g. after a fresh --mode emit) must not
-    # duplicate C2_* columns via merge's _x/_y suffixing -- drop any already
-    # merged in from a prior run first, so this is idempotent.
-    df_emit = df_emit.drop(columns=[c for c in df_emit.columns if c.startswith("C2_")])
+    # duplicate C2_*/C2cart_* columns via merge's _x/_y suffixing -- drop any
+    # already merged in from a prior run first, so this is idempotent.
+    df_emit = df_emit.drop(columns=[c for c in df_emit.columns
+                                     if c.startswith("C2_") or c.startswith("C2cart_")])
 
     ref = build_reference_basis(scorer_n, final_n, thresholds)
     rows, full_rows = project_emit(ref, final_e)
@@ -224,10 +234,20 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
     df_emit = df_emit.merge(contrib, on="Mode", how="left")
     df_full = pd.DataFrame(full_rows)
     out_full = os.path.join(dirs["results"], f"{mol_name}_EMIT_full.csv")
+
+    ref_cart = build_reference_basis_cartesian(scorer_n, final_n, thresholds)
+    rows_cart, full_rows_cart = project_emit_cartesian(ref_cart, final_e)
+
+    contrib_cart = pd.DataFrame(rows_cart).drop(columns=["Eigenvalue"])
+    df_emit = df_emit.merge(contrib_cart, on="Mode", how="left")
+    df_full_cart = pd.DataFrame(full_rows_cart)
+    out_full_cart = os.path.join(dirs["results"], f"{mol_name}_EMIT_full_cartesian.csv")
+
     if write:
         df_emit.to_csv(emit_path, index=False, float_format="%.4f")
         df_full.to_csv(out_full, index=False, float_format="%.6f")
-    return df_emit, df_full, (emit_path, out_full)
+        df_full_cart.to_csv(out_full_cart, index=False, float_format="%.6f")
+    return df_emit, df_full, (emit_path, out_full, out_full_cart)
 
 
 def _print_table(df, title):
@@ -291,7 +311,7 @@ def _run_flag_pipelines(args):
 
     if args.emit_projection:
         try:
-            df, df_full, (path_emit, path_full) = run_projection_pipeline(args.molecule)
+            df, df_full, (path_emit, path_full, path_full_cart) = run_projection_pipeline(args.molecule)
         except FileNotFoundError as e:
             print(f"Error: --emit-projection for '{args.molecule}' needs data/EMIT/, the "
                   f"normal-mode log, AND an existing <mol>_EMIT.csv ({e})")
@@ -303,6 +323,7 @@ def _run_flag_pipelines(args):
         print(f"Merged {len(df)}-mode grouped contributions into -> {path_emit}")
         print("(per-reference-mode full detail is wide -- not echoed here; "
               f"see the CSV) Wrote {len(df_full)}-row full projection detail -> {path_full}")
+        print(f"Wrote {len(df_full)}-row Cartesian-overlap comparison detail -> {path_full_cart}")
 
     if args.ped_merge:
         from ped.merge_ped_scores import merge_molecule_ped
@@ -363,8 +384,12 @@ def main():
                             help="Project raw EMIT eigenvectors onto the normal-mode reference "
                                  "basis for -m <molecule>. Requires <mol>_EMIT.csv to already "
                                  "exist (run -m <mol> --mode emit first); merges C2_Tx..C2_VMix "
-                                 "into that file in place and writes <mol>_EMIT_full.csv "
-                                 "(per-reference-mode detail).")
+                                 "(mass-weighted overlap) into that file in place and writes "
+                                 "<mol>_EMIT_full.csv (per-reference-mode detail). Also runs the "
+                                 "plain-Cartesian-overlap comparison pathway, merging "
+                                 "C2cart_Tx..C2cart_Sum and writing <mol>_EMIT_full_cartesian.csv "
+                                 "-- see src/projection.py's docstring for why it is kept only as "
+                                 "a comparison, not a replacement for the mass-weighted result.")
     dev_group.add_argument("--ped-merge", action="store_true", dest="ped_merge",
                             help="Merge real VEDA4 PED (data/ved/<mol>.ved+.vdf) into -m "
                                  "<molecule>'s <mol>_normal.csv (must already exist -- run "

@@ -14,6 +14,8 @@
       τ<sub>S</sub> {{ "%.3f"|format(p.thresholds.tau_S) }} ·
       τ<sub>B</sub> {{ "%.3f"|format(p.thresholds.tau_B) }}</span>
     <span title="displacement decimal places">{{ p.precision_dp }} dp</span>
+    <span title="Detected from the mode count. 3N = the complete set, so the six external modes were found among yours. 3N-6 (3N-5 linear) = vibrations only, so the ideal T/R references were constructed and added.">
+      {% if p.mode_set == "3n" %}<b>3N</b> set{% else %}<b>3N&minus;{{ 3 * p.n_atoms - p.n_modes }}</b> set{% endif %}</span>
     <span title="The molecule is rotated into its principal axes of inertia before scoring — that is the frame s[Tx]…s[Rz] are defined in, and the frame the viewer draws. This is how far it was turned from the orientation in your file.">
       frame <b>{{ "%.0f"|format(p.frame_rotation_deg) }}&deg;</b> from input</span>
   </div>

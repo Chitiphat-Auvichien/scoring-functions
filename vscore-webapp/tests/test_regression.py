@@ -270,10 +270,22 @@ _VSC_HEAD = """#VSCORE 1.0
 _VSC_DISP = ("   1    0.00088    0.85015   -0.00000\n"
              "   2   -0.16190    0.30478   -0.00000\n"
              "   3    0.00426   -0.39765    0.00000\n")
+# HOCl is 3 atoms, so a valid file must carry 3N-6 = 3 modes (or 3N = 9).
+# The metadata under test varies on mode 1; modes 2 and 3 just make the count
+# legal, since a partial set is refused rather than guessed at.
+_VSC_FILLER = ("  mode 2\n"
+               "   1   -0.04924   -0.02717    0.00000\n"
+               "   2    0.17600    0.97748   -0.00000\n"
+               "   3    0.01906   -0.02189    0.00000\n"
+               "  mode 3\n"
+               "   1   -0.05672    0.02347   -0.00000\n"
+               "   2    0.97331   -0.21988    0.00000\n"
+               "   3   -0.00108   -0.00035    0.00000\n")
 
 
-def _vsc(mode_header, count=" 1"):
-    return _VSC_HEAD + f"[MODES]{count}\n" + mode_header + "\n" + _VSC_DISP
+def _vsc(mode_header, count=" 3"):
+    return (_VSC_HEAD + f"[MODES]{count}\n" + mode_header + "\n"
+            + _VSC_DISP + _VSC_FILLER)
 
 
 @pytest.mark.parametrize("header,expect", [
@@ -318,12 +330,12 @@ def test_vsc_mode_metadata_is_optional(header, expect):
 
 def test_vsc_modes_count_is_optional():
     v = parse_vsc(_vsc("  mode 1   freq=667.6406", count=""))
-    assert len(v["modes"]) == 1
+    assert len(v["modes"]) == 3
 
 
 def test_vsc_modes_count_must_agree_when_given():
     with pytest.raises(ParseError, match="declares"):
-        parse_vsc(_vsc("  mode 1   freq=667.6406", count=" 3"))
+        parse_vsc(_vsc("  mode 1   freq=667.6406", count=" 7"))
 
 
 @pytest.mark.parametrize("header", [
@@ -453,23 +465,32 @@ def test_3n_recovery_degrades_off_principal_axes():
         "a starred label is information, not a fault -- it belongs in notes"
 
 
-@pytest.mark.parametrize("stem,mode_set,expect_hint", [
-    ("HCOOH", "3n", "3N-6"),      # 9 modes supplied, 3N wanted
-    ("H2O", "3n", "3N-6"),
-])
-def test_wrong_mode_set_is_refused_with_a_hint(stem, mode_set, expect_hint):
-    g, bonds = _molecule(stem)
-    with pytest.raises(ParseError) as exc:
-        analyse(g["atoms"], g["coords"], bonds, g["modes"], mode_set=mode_set)
-    assert expect_hint in str(exc.value)
-    assert "pick that option instead" in str(exc.value)
-
-
-def test_3n6_on_a_complete_set_is_refused():
+def test_mode_set_is_detected_from_the_counts():
+    """3N vs 3N-6 is never ambiguous, so the user does not declare it."""
     g, bonds = _molecule()
+    vib = analyse(g["atoms"], g["coords"], bonds, g["modes"])
+    assert vib["mode_set"] == "3n-6"
+    assert len(vib["references"]) == 6
+
     coords, modes = _complete_3n(g, bonds)
-    with pytest.raises(ParseError, match="3N \\(every mode, T/R included\\)"):
-        analyse(g["atoms"], coords, bonds, modes, mode_set="3n-6")
+    full = analyse(g["atoms"], coords, bonds, modes)
+    assert full["mode_set"] == "3n"
+    assert full["references"] == []
+
+
+def test_a_count_matching_neither_is_refused():
+    """A partial set cannot be classified: the external slots would be filled
+    from whatever happened to be supplied."""
+    g, bonds = _molecule()                      # 5 atoms -> 3N=15, 3N-6=9
+    for n in (1, 5, 8, 10, 14, 16):
+        with pytest.raises(ParseError, match="neither 3N"):
+            analyse(g["atoms"], g["coords"], bonds, g["modes"][:1] * n)
+
+
+def test_declared_mode_set_must_match_the_counts():
+    g, bonds = _molecule()
+    with pytest.raises(ParseError, match="but 3n was requested"):
+        analyse(g["atoms"], g["coords"], bonds, g["modes"], mode_set="3n")
 
 
 def test_linear_molecule_uses_3n_minus_5():
@@ -483,7 +504,7 @@ def test_linear_molecule_uses_3n_minus_5():
 def test_unknown_mode_set_raises():
     g, bonds = _molecule()
     with pytest.raises(ValueError, match="mode_set"):
-        analyse(g["atoms"], g["coords"], bonds, g["modes"], mode_set="all")
+        analyse(g["atoms"], g["coords"], bonds, g["modes"], mode_set="every")
 
 
 def test_viewer_frame_is_the_score_frame():

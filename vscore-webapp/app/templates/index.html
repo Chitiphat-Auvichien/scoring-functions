@@ -50,19 +50,16 @@
         <input type="file" name="vscfile" accept=".vsc,.txt">
         <span class="hint">geometry + connectivity + modes, all in one</span>
       </label>
-      <div class="modeset">
-        <span class="bk">modes in file</span>
-        <label>
-          <input type="radio" name="mode_set" value="3n-6" checked>
-          <b>3N&minus;6</b>
-          <span>vibrations only &middot; T/R references added</span>
-        </label>
-        <label>
-          <input type="radio" name="mode_set" value="3n">
-          <b>3N</b>
-          <span>includes T/R &middot; found among your modes</span>
-        </label>
-      </div>
+      <p class="note">
+        <b>The mode set is detected from the file.</b> If it holds
+        <code>3N</code> modes it is taken as the complete set, translations and
+        rotations included, and the six external modes are found among them &mdash;
+        nothing is constructed. If it holds <code>3N&minus;6</code>
+        (<code>3N&minus;5</code> when linear) it is taken as vibrations only, and
+        the six ideal T/R references are constructed and added so a real vibration
+        is never claimed for an external slot. Any other count is refused rather
+        than guessed at.
+      </p>
 
       <p class="note">
         One file, a few kB instead of megabytes. Download one from any result page,

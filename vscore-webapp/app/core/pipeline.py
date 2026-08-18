@@ -45,49 +45,32 @@ def _rotation_between(a, b):
     return round(float(np.degrees(np.arccos(np.clip(cos, -1.0, 1.0)))), 1)
 
 
-def _check_mode_count(n_modes, n_atoms, n_ext, mode_set, linear):
-    """Refuse a mode count that contradicts the declared mode_set.
+def _detect_mode_set(n_modes, n_atoms, n_ext, linear):
+    """Work out from the counts alone whether a file holds 3N or 3N-6 modes.
 
-    Asymmetric on purpose:
-
-    "3n"    must be EXACTLY 3N. The six external slots are filled from the
-            supplied modes, so a short set means the algorithm is choosing T/R
-            from candidates that do not include them.
-
-    "3n-6"  must be AT MOST 3N-6 (3N-5 linear). Fewer is fine -- scoring a
-            single mode of interest is legitimate, and the constructed
-            references still fill every external slot, so real vibrations are
-            never claimed for one. More than 3N-6 means the file almost
-            certainly holds the complete set.
-
-    Getting this wrong is silent rather than loud, which is why it is checked:
-    declaring "3n" on a vibrations-only file leaves the slots to be filled from
-    real vibrations, and declaring "3n-6" on a complete set puts constructed
-    T/R modes alongside the file's own, two candidates per slot.
+    The two are never ambiguous -- 3N and 3N-n_ext differ by 5 or 6 -- so the
+    user does not need to declare it. Anything else is refused rather than
+    guessed at: a count that matches neither means the file is incomplete or
+    holds something other than one molecule's modes, and either way the six
+    external slots would be filled from the wrong pool.
     """
-    full, vib_only = 3 * n_atoms, 3 * n_atoms - n_ext
+    full = 3 * n_atoms
+    vib_only = full - n_ext
+    if n_modes == full:
+        return "3n"
+    if n_modes == vib_only:
+        return "3n-6"
     shape = "3N-5" if linear else "3N-6"
-
-    if mode_set == "3n":
-        if n_modes == full:
-            return
-        hint = (f" That is exactly {shape} (vibrations only) for this molecule "
-                "-- pick that option instead." if n_modes == vib_only else "")
-        raise ParseError(
-            f"You selected 3N, which for {n_atoms} atoms means {full} modes, but "
-            f"the file has {n_modes}.{hint}")
-
-    if n_modes <= vib_only:
-        return
-    hint = (" That is exactly 3N (every mode, T/R included) for this molecule "
-            "-- pick that option instead." if n_modes == full else "")
     raise ParseError(
-        f"You selected {shape} (vibrations only), which for {n_atoms} atoms means "
-        f"at most {vib_only} modes, but the file has {n_modes}.{hint}")
+        f"The file has {n_modes} modes, which is neither 3N = {full} (every mode, "
+        f"translations and rotations included) nor {shape} = {vib_only} "
+        f"(vibrations only) for {n_atoms} atoms. Modes cannot be classified from "
+        "a partial set: the six external slots would be filled from whatever was "
+        "supplied.")
 
 
 def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
-            mode_set="3n-6"):
+            mode_set="auto"):
     """Score and classify one molecule. Returns a JSON-safe payload.
 
     ``coords``/``modes`` are taken in whatever frame they arrived in; the
@@ -110,8 +93,9 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
     """
     warnings = list(warnings or [])
     notes = []                      # informational; not a problem with the input
-    if mode_set not in ("3n", "3n-6"):
-        raise ValueError(f"mode_set must be '3n' or '3n-6', got {mode_set!r}")
+    if mode_set not in ("auto", "3n", "3n-6"):
+        raise ValueError(
+            f"mode_set must be 'auto', '3n' or '3n-6', got {mode_set!r}")
 
     if not bonds:
         # Belt and braces: every reader already refuses this, because an empty
@@ -139,7 +123,13 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
         ideal_R = [m for m in ideal_R if m["label"] != "Rx"]
 
     n_ext = 3 + len(ideal_R)                 # external slots: 3 T + 3 R (2 linear)
-    _check_mode_count(len(modes), len(atoms), n_ext, mode_set, linear)
+    detected = _detect_mode_set(len(modes), len(atoms), n_ext, linear)
+    if mode_set == "auto":
+        mode_set = detected
+    elif mode_set != detected:
+        raise ParseError(
+            f"This file holds {len(modes)} modes, i.e. {detected}, "
+            f"but {mode_set} was requested.")
 
     if mode_set == "3n":
         final = rotated                      # nothing constructed; T/R must be in here
@@ -207,6 +197,7 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
             "v_weighting": thresholds.v_weighting,
         },
         "precision_dp": dp,
+        "mode_set": mode_set,
         "warnings": warnings,
         "notes": notes,
         "freq_range": _freq_range(vibrations),

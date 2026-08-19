@@ -25,6 +25,7 @@ is satisfied here.
 import json
 import os
 import sys
+import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -41,6 +42,7 @@ from src.calibrate import (                                         # noqa: E402
     find_plateau, freeze_tau_tr, derive_stretch_bend_thresholds,
     confusion_matrix_stats, filter_single_centre_library,
     SINGLE_CENTRE_ONLY_EXCLUDE,
+    sweep_tau_sb, _error_plateau,
 )
 
 THRESHOLDS_JSON = os.path.join(ROOT, "data", "results", "thresholds.json")
@@ -528,6 +530,97 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     # still cancels net within what remains).
     assert abs(res["per_category"]["stretch"]["recall"] - 0.6019900497512438) < 1e-6
     assert abs(res["per_category"]["bend"]["recall"] - 0.9230769230769231) < 1e-6
+
+
+# --------------------------------------------------------------------------
+# sweep_tau_sb / _error_plateau -- synthetic fixture, no real geometry/log
+# parsing needed (see module docstring's design note for why this differs
+# from the tau_TR-plateau tests above).
+# --------------------------------------------------------------------------
+
+def _make_tau_sb_fixture(data_dir):
+    """Write a tiny mol_list_method.csv into `data_dir` covering the 3 scope
+    cases sweep_tau_sb must get right, and return the matching synthetic
+    lib_df. M1='ideal' (in 'all', not 'test'), M2='multi-centre' (excluded
+    from 'all' entirely, per SINGLE_CENTRE_ONLY_EXCLUDE's 'all molecules
+    excludes only C6H6'-style rule), M3='test' (in BOTH 'all' and 'test').
+    """
+    os.makedirs(data_dir, exist_ok=True)
+    roster = pd.DataFrame([
+        {"molecule": "M1", "mol_type": "ideal"},
+        {"molecule": "M2", "mol_type": "multi-centre"},
+        {"molecule": "M3", "mol_type": "test"},
+    ])
+    roster.to_csv(os.path.join(data_dir, "mol_list_method.csv"), index=False)
+
+    lib_df = pd.DataFrame([
+        # M1 ('all' only): unambiguous stretch/bend, plus an external row
+        # (kind != 'internal') and a literal 'SB' ref row -- both must be
+        # excluded regardless of scope.
+        {"molecule": "M1", "kind": "internal", "ref_label": "stretch", "V_Stretch": 0.90},
+        {"molecule": "M1", "kind": "internal", "ref_label": "bend", "V_Stretch": 0.10},
+        {"molecule": "M1", "kind": "internal", "ref_label": "SB", "V_Stretch": 0.50},
+        {"molecule": "M1", "kind": "external", "ref_label": "translation", "V_Stretch": 0.0},
+        # M2 (multi-centre): must be excluded from 'all' (and is not 'test').
+        {"molecule": "M2", "kind": "internal", "ref_label": "stretch", "V_Stretch": 0.90},
+        # M3 ('all' AND 'test'): unambiguous stretch/bend.
+        {"molecule": "M3", "kind": "internal", "ref_label": "stretch", "V_Stretch": 0.80},
+        {"molecule": "M3", "kind": "internal", "ref_label": "bend", "V_Stretch": 0.20},
+    ])
+    return lib_df
+
+
+def test_sweep_tau_sb_scopes_and_exclusions():
+    with tempfile.TemporaryDirectory() as tmp:
+        lib_df = _make_tau_sb_fixture(tmp)
+        sweep = sweep_tau_sb(lib_df, tau_grid=(0.0, 0.5, 1.0), data_dir=tmp)
+
+        # 'all' = M1 + M3's internal stretch/bend rows only: M2 (multi-centre)
+        # excluded, the 'SB' ref row excluded, the external row excluded.
+        assert (sweep["n_all"] == 4).all()
+        # 'test' = M3's internal stretch/bend rows only.
+        assert (sweep["n_test"] == 2).all()
+
+        row = sweep[sweep["tau_SB"] == 0.5].iloc[0]
+        # At tau=0.5: M1 stretch(0.90)->stretch OK, M1 bend(0.10)->bend OK,
+        # M3 stretch(0.80)->stretch OK, M3 bend(0.20)->bend OK -- 0 error
+        # both scopes (M3's stretch/bend also satisfy 'test').
+        assert row["error_all"] == 0.0
+        assert row["accuracy_all"] == 1.0
+        assert row["error_test"] == 0.0
+        assert row["accuracy_test"] == 1.0
+
+        row0 = sweep[sweep["tau_SB"] == 0.0].iloc[0]
+        # At tau=0.0 everything predicts 'stretch': both scopes' bend rows
+        # (1 of 2 in 'all', 1 of 2 in 'test') are now wrong.
+        assert row0["error_all"] == 0.5
+        assert row0["error_test"] == 0.5
+
+        row1 = sweep[sweep["tau_SB"] == 1.0].iloc[0]
+        # At tau=1.0 everything predicts 'bend': both scopes' stretch rows
+        # are now wrong, same 0.5 fraction (2 stretch/2 bend in each scope).
+        assert row1["error_all"] == 0.5
+        assert row1["error_test"] == 0.5
+
+
+def test_error_plateau_finds_the_flat_minimum_region():
+    with tempfile.TemporaryDirectory() as tmp:
+        lib_df = _make_tau_sb_fixture(tmp)
+        # A grid coarse enough that error_all==0.0 for every grid point
+        # strictly between the two populations' V_Stretch values (0.10-0.20
+        # bend, 0.80-0.90 stretch) -- a genuine flat plateau, not a single point.
+        grid = tuple(round(x, 2) for x in [0.0, 0.3, 0.4, 0.5, 0.6, 0.7, 1.0])
+        sweep = sweep_tau_sb(lib_df, tau_grid=grid, data_dir=tmp)
+
+        lo, hi, mid, min_error = _error_plateau(sweep, "error_all")
+        assert min_error == 0.0
+        assert lo == 0.3 and hi == 0.7  # the whole zero-error contiguous run
+        assert mid == 0.5
+
+        lo_t, hi_t, mid_t, min_error_t = _error_plateau(sweep, "error_test")
+        assert min_error_t == 0.0
+        assert lo_t == 0.3 and hi_t == 0.7
+        assert mid_t == 0.5
 
 
 if __name__ == "__main__":

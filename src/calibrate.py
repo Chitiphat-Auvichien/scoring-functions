@@ -23,6 +23,15 @@ the plateau's midpoint.
 Outputs: data/results/thresholds.json (frozen thresholds + derivation stats
 + plateau range), data/results/tau_sensitivity_sweep.csv (full sweep curve,
 fig:sensitivity).
+
+tau_SB (binary-scheme S/B split, see sweep_tau_sb/run_tau_sb_error_analysis
+below) is a SEPARATE, ADVISORY-ONLY analysis: it sweeps a single cutoff
+against classification error (not tau_TR-style label-change stability) over
+two scopes -- "all" (single-centre roster union the test tier, i.e.
+everything except C6H6) and "test" (the 18-molecule held-out tier only) --
+and reports where the error is minimized, WITHOUT overwriting the frozen
+tau_SB default. Outputs: data/results/tau_sb_sensitivity_sweep.csv and an
+advisory "tau_SB_error_sweep" block merged into thresholds.json.
 """
 import json
 import os
@@ -35,9 +44,16 @@ from src.scoring import get_v_weighting
 from src.library_ingest import (
     build_library_scores, resolve_log_basename, _EXTERNAL_SLOTS,
     multi_centre_molecules, out_of_calibration_scope_molecules,
+    test_tier_molecules,
 )
 
 DEFAULT_TAU_GRID = tuple(round(x, 4) for x in np.arange(0.05, 0.9991, 0.005))
+
+# Grid for the tau_SB (binary-scheme) error sweep -- coarser (0.01 step,
+# 0.00-1.00) than DEFAULT_TAU_GRID since this sweep is a cheap post-hoc
+# pass over the already-computed V_Stretch column (no re-scoring), not a
+# full library re-classification per grid point like sweep_tau_tr.
+DEFAULT_TAU_SB_GRID = tuple(round(x, 3) for x in np.arange(0.0, 1.001, 0.01))
 
 # Calibration-scope filter: the hydride-library validation (tau_S/tau_B
 # derivation + ideal/non-ideal confusion stats) is scoped to single-centre
@@ -364,3 +380,137 @@ def run_calibration_pipeline(data_dir="data",
             json.dump(result, f, indent=2)
         sweep_df.to_csv(path_sweep, index=False)
     return thresholds, result, sweep_df, (path_json, path_sweep)
+
+
+# --------------------------------------------------------------------------
+# tau_SB (binary-scheme) error-vs-threshold sweep.
+#
+# Distinct from sweep_tau_tr/calibrate() above: this sweeps a single cutoff
+# (tau_SB, the binary scheme's S/B split -- src/classifier.py's
+# vib_label_binary) against classification ERROR relative to the literature
+# reference labels, not against tau_TR label-change stability. It is purely
+# advisory: it reports where the error is minimized over two scopes so a
+# human can decide, by hand, whether to adopt that value as the new default
+# via --tau-sb or by editing thresholds.json -- it never overwrites the
+# frozen tau_SB field itself.
+# --------------------------------------------------------------------------
+
+def sweep_tau_sb(lib_df, tau_grid=DEFAULT_TAU_SB_GRID, data_dir="data"):
+    """Sweep a single S/B cutoff (tau_SB) over `tau_grid`, scoring
+    classification error against the literature ref_label for two molecule
+    scopes: "all" (single-centre roster union the 18-molecule test tier --
+    everything except C6H6, the only multi-centre molecule) and "test" (the
+    18 held-out mol_type=='test' molecules only, the genuinely out-of-sample
+    check).
+
+    Restricted to internal rows with a known binary ground truth
+    (ref_label in {"stretch", "bend"}) -- this drops literal "SB" reference
+    rows (a different question: "is this mode genuinely mixed?", not
+    answered by a binary S/B classifier) and any unlabeled row, mirroring
+    confusion_matrix_stats's _KNOWN_REF_LABELS exclusion rationale.
+
+    No re-scoring needed: V_Stretch is already threshold-independent (see
+    derive_stretch_bend_thresholds's precedent), so this is a cheap post-hoc
+    pass over the already-computed library_scores.csv column.
+
+    Returns a DataFrame with columns tau_SB, error_all, accuracy_all, n_all,
+    error_test, accuracy_test, n_test.
+    """
+    df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ref_label"].isin(("stretch", "bend")))]
+
+    multi_centre = multi_centre_molecules(data_dir)
+    test_mols = test_tier_molecules(data_dir)
+    all_df = df[~df["molecule"].isin(multi_centre)]
+    test_df = df[df["molecule"].isin(test_mols)]
+
+    n_all = len(all_df)
+    n_test = len(test_df)
+    ref_all = all_df["ref_label"].to_numpy()
+    v_all = all_df["V_Stretch"].to_numpy(dtype=float)
+    ref_test = test_df["ref_label"].to_numpy()
+    v_test = test_df["V_Stretch"].to_numpy(dtype=float)
+
+    records = []
+    for tau in tau_grid:
+        pred_all = np.where(v_all >= tau, "stretch", "bend")
+        error_all = float((pred_all != ref_all).mean()) if n_all else float("nan")
+        pred_test = np.where(v_test >= tau, "stretch", "bend")
+        error_test = float((pred_test != ref_test).mean()) if n_test else float("nan")
+        records.append({
+            "tau_SB": tau,
+            "error_all": error_all, "accuracy_all": 1 - error_all if n_all else float("nan"),
+            "n_all": n_all,
+            "error_test": error_test, "accuracy_test": 1 - error_test if n_test else float("nan"),
+            "n_test": n_test,
+        })
+    return pd.DataFrame(records)
+
+
+def _error_plateau(sweep_df, error_col):
+    """Longest contiguous run of grid points within 1e-9 of `error_col`'s
+    minimum (mirrors find_plateau's contiguous-run logic, but keyed off
+    minimum error rather than the tau_TR sweep's change-fraction+accuracy
+    criterion, since this sweep has no "label-change" signal of its own).
+    Returns (tau_lo, tau_hi, midpoint, min_error).
+    """
+    min_error = sweep_df[error_col].min()
+    ok = sweep_df[error_col] <= min_error + 1e-9
+
+    best_start = best_len = cur_start = cur_len = 0
+    for i, v in enumerate(ok.tolist()):
+        if v:
+            if cur_len == 0:
+                cur_start = i
+            cur_len += 1
+            if cur_len > best_len:
+                best_len, best_start = cur_len, cur_start
+        else:
+            cur_len = 0
+    if best_len == 0:
+        raise ValueError(f"No plateau found for {error_col}: this should be unreachable "
+                          "since the grid's own minimum always satisfies its own tolerance.")
+    lo = float(sweep_df["tau_SB"].iloc[best_start])
+    hi = float(sweep_df["tau_SB"].iloc[best_start + best_len - 1])
+    midpoint = round((lo + hi) / 2, 4)
+    return lo, hi, midpoint, float(min_error)
+
+
+def run_tau_sb_error_analysis(data_dir="data", tau_grid=DEFAULT_TAU_SB_GRID, write=True):
+    """Headless entry point: ingest the library fresh, sweep tau_SB, and
+    (optionally) write data/results/tau_sb_sensitivity_sweep.csv plus an
+    ADVISORY "tau_SB_error_sweep" block merged into
+    data/results/thresholds.json -- WITHOUT touching the frozen tau_SB field
+    itself (that stays whatever Thresholds's default/JSON value already is;
+    this analysis only reports where the error is minimized, it does not
+    silently adopt that value).
+
+    Returns (sweep_df, plateau_all, plateau_test, path_sweep), where
+    plateau_all/plateau_test are (tau_lo, tau_hi, midpoint, min_error) tuples
+    from _error_plateau.
+    """
+    lib_df = build_library_scores(data_dir)
+    sweep_df = sweep_tau_sb(lib_df, tau_grid, data_dir)
+    plateau_all = _error_plateau(sweep_df, "error_all")
+    plateau_test = _error_plateau(sweep_df, "error_test")
+
+    path_sweep = os.path.join(data_dir, "results", "tau_sb_sensitivity_sweep.csv")
+    path_json = os.path.join(data_dir, "results", "thresholds.json")
+    if write:
+        sweep_df.to_csv(path_sweep, index=False)
+
+        result = {}
+        if os.path.exists(path_json):
+            with open(path_json) as f:
+                result = json.load(f)
+        lo_all, hi_all, mid_all, err_all = plateau_all
+        lo_test, hi_test, mid_test, err_test = plateau_test
+        result["tau_SB_error_sweep"] = {
+            "grid": "0.00-1.00 step 0.01",
+            "optimal_tau_all": mid_all, "min_error_all": err_all,
+            "n_all": int(sweep_df["n_all"].iloc[0]) if len(sweep_df) else 0,
+            "optimal_tau_test": mid_test, "min_error_test": err_test,
+            "n_test": int(sweep_df["n_test"].iloc[0]) if len(sweep_df) else 0,
+        }
+        with open(path_json, "w") as f:
+            json.dump(result, f, indent=2)
+    return sweep_df, plateau_all, plateau_test, path_sweep

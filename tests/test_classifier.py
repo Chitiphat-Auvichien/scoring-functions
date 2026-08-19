@@ -43,6 +43,7 @@ from src.classifier import (                                       # noqa: E402
     classify_all_modes, classify_to_rows, Thresholds,
     is_mixed_external, vib_label, vib_label_binary,
     STRETCHING, BENDING, MIXED_STRETCH_BEND,
+    gate2_bar, rescheme_external_label,
 )
 
 TOL = 5e-4  # 3 decimal places
@@ -238,9 +239,13 @@ def test_classify_all_modes_binary_scheme_never_produces_sb():
     for m in scored_b.values():
         assert m["classification"] != MIXED_STRETCH_BEND
 
-    # Step 2/3 (external T/R assignment + purity gates) are untouched by
-    # scheme -- every mode's classification is identical between the two
-    # runs EXCEPT where the threeway label was literally "SB".
+    # Step 2 (assignment) and gate 1 (tau_TR) are untouched by scheme; gate 2
+    # is scheme-dependent as of the tau_purity split (see gate2_bar), so this
+    # equality only holds here because benzene's normal-mode external slots
+    # are always the trivially-perfect synthetic ideal T/R references
+    # (V_Stretch=0 exactly -- see build_scorer_and_final), which pass gate 2
+    # under EITHER bar. See test_gate2_scheme_divergence_synthetic_case below
+    # for a case constructed to actually diverge on gate 2 itself.
     for name in scored_3:
         if scored_3[name]["classification"] != MIXED_STRETCH_BEND:
             assert scored_3[name]["classification"] == scored_b[name]["classification"], name
@@ -263,6 +268,132 @@ def test_classify_all_modes_default_scheme_is_now_binary():
     # Confirms this genuinely differs from the threeway-pinned result above,
     # not just a coincidentally-identical annotation string.
     assert vib_label(0.667, _PROVISIONAL) != vib_label(0.667, _PROVISIONAL, scheme="threeway")
+
+
+# --------------------------------------------------------------------------
+# Step-3 gate 2 decoupling (tau_purity, 2026-08): gate 2's bar is now
+# scheme-dependent -- tau_purity (fixed 0.05) under "binary", tau_B
+# (calibrated) under "threeway", unchanged from before this split existed.
+# Gate 1 (tau_TR) and Step 2's assignment remain scheme-independent.
+# --------------------------------------------------------------------------
+
+def test_gate2_bar_scheme_dependent():
+    """gate2_bar() returns tau_B for threeway (unchanged historical
+    behavior) and tau_purity for binary (the new decoupled constant) -- and
+    with Thresholds()'s provisional defaults the two genuinely differ
+    (0.2 vs 0.05), not just in name."""
+    th = _PROVISIONAL  # tau_B=0.2, tau_purity=0.05 (provisional defaults)
+    assert gate2_bar(th, "threeway") == th.tau_B == 0.2
+    assert gate2_bar(th, "binary") == th.tau_purity == 0.05
+    assert gate2_bar(th, "threeway") != gate2_bar(th, "binary")
+
+
+def test_gate2_bar_threeway_matches_pre_tau_purity_behavior():
+    """Overriding tau_B (the OLD gate-2 bar, still used unconditionally by
+    every pipeline before tau_purity existed) must move threeway's gate 2 --
+    proving scheme="threeway" is wired to tau_B specifically, not some other
+    threshold, and that tau_purity plays no role in this scheme at all."""
+    th = Thresholds(tau_B=0.37, tau_purity=0.05)
+    assert gate2_bar(th, "threeway") == 0.37
+    # Changing tau_B must never move binary's gate 2 -- the whole point of
+    # the decoupling.
+    assert gate2_bar(th, "binary") == 0.05
+
+
+def test_rescheme_external_label_gate2_scheme_divergence():
+    """The exact case the tau_purity decoupling was introduced for: a mode
+    that passes gate 1 (|score|=1.0 >= tau_TR=0.95) with V_Stretch=0.1,
+    strictly between tau_purity=0.05 and tau_B=0.2 -- clean under threeway
+    (0.1 <= tau_B=0.2), mixed under binary (0.1 > tau_purity=0.05). Proves
+    the two schemes now genuinely diverge on STEP 3 output, not just Step 4
+    internal vocabulary."""
+    th = _PROVISIONAL  # tau_TR=0.95, tau_B=0.2, tau_purity=0.05
+    assert th.tau_purity < 0.1 <= th.tau_B  # sanity: 0.1 is in the sensitive band
+    assert rescheme_external_label("Tx", 1.0, 0.1, th, scheme="threeway") == "Tx"
+    assert rescheme_external_label("Tx", 1.0, 0.1, th, scheme="binary") == "Tx*"
+    # Gate 1 still governs regardless of scheme: a score below tau_TR is
+    # mixed under EITHER scheme, even at V=0 (trivially passes gate 2 both
+    # ways) -- gate 2's scheme-dependence never overrides gate 1.
+    assert rescheme_external_label("Tx", 0.5, 0.0, th, scheme="threeway") == "Tx*"
+    assert rescheme_external_label("Tx", 0.5, 0.0, th, scheme="binary") == "Tx*"
+
+
+def test_rescheme_external_label_internal_label_passthrough():
+    """A Step-4 internal label (S/B/SB) is returned unchanged -- gate 2's
+    threshold never touches Step 4, mirroring rescheme_internal_label's
+    symmetric contract for external labels."""
+    th = _PROVISIONAL
+    for label in (STRETCHING, BENDING, MIXED_STRETCH_BEND):
+        assert rescheme_external_label(label, 1.0, 0.1, th, scheme="binary") == label
+        assert rescheme_external_label(label, 1.0, 0.1, th, scheme="threeway") == label
+
+
+class _StubScorer:
+    """Minimal classify_all_modes()-compatible stub -- calculate_scores()
+    returns the caller-supplied {"T":.., "R":.., "V":..} dict verbatim
+    (the mode's own "vector" IS that dict, an opaque payload as far as
+    classify_all_modes is concerned), ignoring geometry entirely. Lets Step
+    3 be exercised with an EXACT, hand-picked V_Stretch (0.1) without
+    needing a real molecule whose external-slot V happens to land in the
+    (tau_purity, tau_B] band -- none of this repo's example molecules do:
+    normal-mode T/R rows are always the trivially-perfect synthetic ideal
+    references (V=0 exactly, see build_scorer_and_final), and every real
+    EMIT external-slot mode either fails gate 1 outright or has V well
+    above tau_B=0.2 (empirically audited when tau_purity was introduced --
+    zero rows in library_scores.csv/C6H6_EMIT.csv/H2O_EMIT.csv flip under
+    the new gate 2 bar)."""
+    def __init__(self, v_weighting):
+        self.v_weighting = v_weighting
+
+    def calculate_scores(self, vector):
+        return vector
+
+    def score_bonds(self):
+        return []
+
+    def principal_axes(self):
+        # Non-linear (smallest moment far from 0) -- n_R=3, all 6 slots present.
+        import numpy as np
+        return np.array([1.0, 2.0, 3.0]), None
+
+
+def test_gate2_scheme_divergence_synthetic_case():
+    """classify_all_modes()-level integration test (not just the pure-
+    function unit tests above): a synthetic 6-mode pool, one mode per
+    external slot, each perfectly aligned with its own axis (score=1.0,
+    trivial unambiguous Step-2 assignment) so Step 3 is the only thing
+    under test. "Ext_Tx" is hand-picked with V_Stretch=0.1 -- passes gate 2
+    at tau_B=0.2 (threeway) but fails at tau_purity=0.05 (binary); every
+    other slot has V=0 (clean under either bar), isolating the divergence
+    to exactly the one mode constructed to exercise it.
+    """
+    th = _PROVISIONAL  # tau_TR=0.95, tau_B=0.2, tau_purity=0.05
+    mode_specs = [
+        ("Ext_Tx", {"x": 1.0, "y": 0.0, "z": 0.0}, {"x": 0.0, "y": 0.0, "z": 0.0}, 0.1),
+        ("Ext_Ty", {"x": 0.0, "y": 1.0, "z": 0.0}, {"x": 0.0, "y": 0.0, "z": 0.0}, 0.0),
+        ("Ext_Tz", {"x": 0.0, "y": 0.0, "z": 1.0}, {"x": 0.0, "y": 0.0, "z": 0.0}, 0.0),
+        ("Ext_Rx", {"x": 0.0, "y": 0.0, "z": 0.0}, {"x": 1.0, "y": 0.0, "z": 0.0}, 0.0),
+        ("Ext_Ry", {"x": 0.0, "y": 0.0, "z": 0.0}, {"x": 0.0, "y": 1.0, "z": 0.0}, 0.0),
+        ("Ext_Rz", {"x": 0.0, "y": 0.0, "z": 0.0}, {"x": 0.0, "y": 0.0, "z": 1.0}, 0.0),
+    ]
+    final = [{"label": name, "frequency": 0.0,
+              "vector": {"T": T, "R": R, "V": V}}
+             for name, T, R, V in mode_specs]
+
+    scorer = _StubScorer(th.v_weighting)
+    scored_3 = {m["name"]: m for m in classify_all_modes(scorer, final, th, scheme="threeway")}
+    scored_b = {m["name"]: m for m in classify_all_modes(scorer, final, th, scheme="binary")}
+
+    assert scored_3["Ext_Tx"]["classification"] == "Tx"    # 0.1 <= tau_B=0.2 -> clean
+    assert scored_b["Ext_Tx"]["classification"] == "Tx*"   # 0.1 >  tau_purity=0.05 -> mixed
+    assert scored_b["Ext_Tx"]["annotation"] == f"vibration={vib_label(0.1, th, scheme='binary')}"
+
+    # Every other slot's V=0 passes gate 2 under EITHER bar -- confirms the
+    # divergence above is Ext_Tx-specific, not a wholesale scheme effect.
+    for name in ("Ext_Ty", "Ext_Tz", "Ext_Rx", "Ext_Ry", "Ext_Rz"):
+        axis = name.replace("Ext_", "")
+        assert scored_3[name]["classification"] == axis
+        assert scored_b[name]["classification"] == axis
 
 
 if __name__ == "__main__":

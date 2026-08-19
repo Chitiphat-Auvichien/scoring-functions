@@ -33,9 +33,13 @@ Step 2  global external-mode assignment: one-to-one ``linear_sum_assignment``
         within a degenerate inertia tensor is a labeling convention fixed by
         the eigensolver, not an assignment ambiguity).
 Step 3  two-gate purity test on each assigned (slot, mode) pair: clean iff
-        |score_for_slot| >= tau_TR AND s[V_S] <= tau_B -> the bare slot name
-        (e.g. "Tx"); else the slot name with a trailing "*" (e.g. "Tx*"),
-        annotated with vib_label(s[V_S]).
+        |score_for_slot| >= tau_TR AND s[V_S] <= gate2_bar -> the bare slot
+        name (e.g. "Tx"); else the slot name with a trailing "*" (e.g.
+        "Tx*"), annotated with vib_label(s[V_S]). gate2_bar is
+        SCHEME-DEPENDENT: tau_purity (fixed, 0.05) under scheme="binary";
+        tau_B (calibrated, ~0.17) under scheme="threeway", unchanged from
+        before this split existed. Gate 1 (tau_TR) and Step 2's assignment
+        itself remain scheme-independent.
 Step 4  every mode NOT assigned an external slot in Step 2: vib_label(s[V_S])
         -> STRETCHING ("S") / BENDING ("B") / MIXED_STRETCH_BEND ("SB").
         Per-bond s_AB (signed) attached for every mode, regardless of label.
@@ -138,20 +142,31 @@ class Thresholds:
     """Step 2/3/4 thresholds.
 
     tau_TR : purity bar for a clean external (near 1; PDF example 0.95).
-    tau_S  : stretching bar on s[V_S] (>= -> STRETCHING).
-    tau_B  : bending bar on s[V_S] (<= -> BENDING); also gate 2 of Step 3.
+    tau_S  : stretching bar on s[V_S] (>= -> STRETCHING). scheme="threeway" only.
+    tau_B  : bending bar on s[V_S] (<= -> BENDING), and Step 3's gate 2 under
+        scheme="threeway" ONLY (unchanged from before tau_purity existed).
+        Under scheme="binary", gate 2 uses tau_purity instead -- see below.
     tau_SB : single-cutoff S/B split used by the *binary* classification
         scheme (scheme="binary"); unrelated to tau_S/tau_B's three-way split
         (a different threshold, not a synonym -- distinct name deliberately
         chosen to avoid collision). v >= tau_SB -> STRETCHING, else BENDING;
         never produces "SB".
+    tau_purity : Step-3 gate 2's vibrational-leakage bound for a clean
+        external, scheme="binary" only -- analogous to tau_TR's fixed
+        purity bar, decoupled from tau_B/tau_S's three-way split (which
+        conceptually doesn't exist under binary). Fixed default 0.05 ("allow
+        5% vibrational leakage", symmetric to tau_TR's "allow 5%
+        uncertainty" on the T/R-likeness side) -- a lighter-weight,
+        exploratory constant like tau_SB's own initial rollout, NOT swept/
+        calibrated here. scheme="threeway" continues to use tau_B for gate
+        2, completely unchanged.
     v_weighting : which eq:vscore bond weighting these thresholds were
         calibrated against ('mu' or 'none'), or '*' to match any. tau_S and
         tau_B are read off an s[V_S] distribution, so they are only meaningful
         against the definition that produced it -- classify_all_modes() refuses
         a mismatch rather than silently mislabelling modes.
 
-    Defaults (0.95/0.9/0.2/0.50) are the provisional pre-calibration
+    Defaults (0.95/0.9/0.2/0.50/0.05) are the provisional pre-calibration
     constants, deliberately NOT auto-overwritten by Phase-3 calibration --
     use `Thresholds.calibrated()` for the calibrated values instead.
     tests/test_classifier.py pins `Thresholds()` explicitly so its regression
@@ -162,6 +177,7 @@ class Thresholds:
     tau_S: float = 0.9
     tau_B: float = 0.2
     tau_SB: float = 0.50
+    tau_purity: float = 0.05
     v_weighting: str = DEFAULT_V_WEIGHTING
 
     @classmethod
@@ -172,11 +188,15 @@ class Thresholds:
                 data = json.load(f)
             # A thresholds.json written before the weighting variant existed
             # carries no stamp, and was by definition calibrated unweighted.
-            # A thresholds.json written before tau_SB existed carries no
-            # tau_SB key either -- fall back to the class default (0.50)
-            # rather than KeyError.
+            # A thresholds.json written before tau_SB/tau_purity existed
+            # carries no such key either -- fall back to the class default
+            # (0.50 / 0.05 respectively) rather than KeyError. tau_purity is
+            # a fixed exploratory constant, not swept by --calibrate, so it
+            # is not expected to ever appear in thresholds.json; the
+            # data.get() fallback is future-proofing, not the normal path.
             return cls(tau_TR=data["tau_TR"], tau_S=data["tau_S"], tau_B=data["tau_B"],
                        tau_SB=data.get("tau_SB", 0.50),
+                       tau_purity=data.get("tau_purity", 0.05),
                        v_weighting=data.get("v_weighting", "none"))
         return cls()
 
@@ -237,6 +257,41 @@ def vib_label(v, thresholds, scheme="binary"):
     if v <= thresholds.tau_B:
         return BENDING
     return MIXED_STRETCH_BEND
+
+
+def gate2_bar(thresholds, scheme):
+    """Step-3 gate 2's comparison bar for `scheme`: thresholds.tau_purity
+    (fixed, 0.05) under scheme="binary"; thresholds.tau_B (calibrated) under
+    scheme="threeway", unchanged from before this split existed. Single
+    source of truth used by both classify_all_modes()'s own Step 3 and
+    rescheme_external_label() below, so the two can never drift apart.
+    """
+    return thresholds.tau_purity if scheme == "binary" else thresholds.tau_B
+
+
+def rescheme_external_label(predicted_label, score_value, v_stretch, thresholds, scheme):
+    """Cheaply re-derive a mode's Step-3 clean-vs-mixed-external status under
+    a DIFFERENT `scheme`/`thresholds` than the one it was originally
+    classified with, from its own already-computed `score_value` (the
+    assigned slot's own T/R score, e.g. a library_scores.csv row's "Tx"
+    column value for a mode assigned the "Tx" slot) and `v_stretch`
+    (s[V_S], Step 1's score) alone -- both scheme-independent Step-1/2
+    outputs -- with NO re-assignment (Step 2) and no re-parsing. Mirrors
+    `rescheme_internal_label`'s contract for Step 4.
+
+    `predicted_label` must already be an external label (clean, e.g. "Tx",
+    or mixed, e.g. "Tx*") for the recompute to apply; any other (Step-4
+    internal) label is returned unchanged, since gate 2's threshold never
+    touches Step 4. Gate 1 (tau_TR) is unaffected by `scheme` -- only gate
+    2's bar (see `gate2_bar`) is scheme-dependent, so only rows that pass
+    gate 1 can ever change clean<->mixed status here.
+    """
+    axis = external_axis(predicted_label)
+    if axis is None:
+        return predicted_label
+    if abs(score_value) >= thresholds.tau_TR and v_stretch <= gate2_bar(thresholds, scheme):
+        return axis
+    return axis + "*"
 
 
 def rescheme_internal_label(predicted_label, v_stretch, thresholds, scheme):
@@ -307,9 +362,10 @@ def classify_all_modes(scorer, final, thresholds=None, scheme="binary"):
     opt-in, may produce "SB"; kept fully functional for comparison/on-demand
     use) -- passed through to every vib_label() call site below (Step 3's
     mixed-external annotation AND Step 4's internal label), so the two stay
-    in agreement; it does NOT affect Step 2/Step 3's external T/R assignment
-    or purity gate itself, only which vocabulary is used to describe a
-    mode's internal (vibrational) character. Returns a list of dicts, one
+    in agreement. It does NOT affect Step 2's assignment itself, or Step 3's
+    gate 1 (tau_TR) -- but it DOES select Step 3's gate 2 bar (see
+    `gate2_bar`): tau_purity under "binary", tau_B under "threeway"
+    (unchanged historical behavior). Returns a list of dicts, one
     per mode in `final`
     (same order): {name, frequency, is_emit, T, R, V, classification,
     annotation, bonds, bonds_all}. 'bonds' (see ModeScorer.score_bonds()) carries
@@ -369,9 +425,12 @@ def classify_all_modes(scorer, final, thresholds=None, scheme="binary"):
         assignment[mi] = (slot, _score_slot(scored[mi], slot))
 
     # ---- Step 3: two-gate purity test ----
+    # gate2_bar is scheme-dependent: tau_purity (fixed) under "binary",
+    # tau_B (calibrated) under "threeway" -- see gate2_bar()'s docstring.
+    gate2 = gate2_bar(thresholds, scheme)
     for mi, (slot, score_value) in assignment.items():
         v = scored[mi]["V"]
-        if abs(score_value) >= thresholds.tau_TR and v <= thresholds.tau_B:
+        if abs(score_value) >= thresholds.tau_TR and v <= gate2:
             scored[mi]["classification"] = slot
         else:
             scored[mi]["classification"] = slot + "*"

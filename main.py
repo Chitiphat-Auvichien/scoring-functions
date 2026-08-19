@@ -421,13 +421,19 @@ def main():
                                   "see --tau-tr. Only affects scheme=threeway (no longer the "
                                   "default; pass --classify-scheme threeway to use it).")
     user_group.add_argument("--tau-b", type=float, default=None, dest="tau_b",
-                             help="Override tau_B (three-way bending bar / Step-3 gate 2) for "
-                                  "this run only -- see --tau-tr. Only affects scheme=threeway "
-                                  "(no longer the default) and Step 3's gate 2, which is always "
-                                  "active regardless of scheme.")
+                             help="Override tau_B (three-way bending bar) for this run only -- "
+                                  "see --tau-tr. Only affects scheme=threeway (no longer the "
+                                  "default), including that scheme's own Step-3 gate 2. Does NOT "
+                                  "affect scheme=binary's gate 2 -- see --tau-purity.")
     user_group.add_argument("--tau-sb", type=float, default=None, dest="tau_sb",
                              help="Override tau_SB (single-cutoff binary S/B split) for this run "
                                   "only -- see --tau-tr. Only affects scheme=binary.")
+    user_group.add_argument("--tau-purity", type=float, default=None, dest="tau_purity",
+                             help="Override tau_purity (Step-3 gate 2's vibrational-leakage bound) "
+                                  "for this run only -- see --tau-tr. Only affects scheme=binary's "
+                                  "Step-3 gate 2. Default: 0.05, fixed (not calibrated via a "
+                                  "sweep). scheme=threeway's gate 2 continues to use tau_B, "
+                                  "unaffected by this flag.")
     user_group.add_argument("--classify-scheme", choices=["threeway", "binary"],
                              default="binary", dest="classify_scheme",
                              help="Step-4 internal classification vocabulary: 'binary' "
@@ -495,13 +501,15 @@ def main():
         tau_S=args.tau_s if args.tau_s is not None else base.tau_S,
         tau_B=args.tau_b if args.tau_b is not None else base.tau_B,
         tau_SB=args.tau_sb if args.tau_sb is not None else base.tau_SB,
+        tau_purity=args.tau_purity if args.tau_purity is not None else base.tau_purity,
         v_weighting=base.v_weighting,
     )
-    if any(v is not None for v in (args.tau_tr, args.tau_s, args.tau_b, args.tau_sb)) \
+    if any(v is not None for v in (args.tau_tr, args.tau_s, args.tau_b, args.tau_sb, args.tau_purity)) \
             or args.classify_scheme != "binary":
         print(f"Note: threshold/scheme override active for this run only (not written to "
               f"thresholds.json): tau_TR={thresholds.tau_TR} tau_S={thresholds.tau_S} "
               f"tau_B={thresholds.tau_B} tau_SB={thresholds.tau_SB} "
+              f"tau_purity={thresholds.tau_purity} "
               f"scheme={args.classify_scheme}")
 
     if _run_flag_pipelines(args, thresholds):

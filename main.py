@@ -160,7 +160,7 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
 
 
 def run_scoring_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, write=True,
-                          scheme="threeway"):
+                          scheme="binary"):
     """Headless pipeline: load inputs -> classify_all_modes (Algorithm 1) -> CSV.
 
     This is the single, complete per-molecule result: scores (Tx..Rz,
@@ -168,8 +168,11 @@ def run_scoring_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, 
     annotation, s_AB) all in one row per mode -- there is no separate
     scores-only output. Writes data/results/<mol>_{normal,EMIT}.csv.
 
-    `scheme` ("threeway" default or "binary") is passed straight through to
-    classify_all_modes() -- see that function's docstring.
+    `scheme` ("binary" default, paper-standard, or "threeway" explicit
+    opt-in) is passed straight through to classify_all_modes() -- see that
+    function's docstring. Default tracks classify_all_modes()'s own default
+    so callers that don't pass `scheme` (e.g. reproduce.py's per-molecule
+    stages) automatically follow the global scheme choice.
     """
     raw, dirs = load_inputs(mol_name, mode_type, data_dir)
     scorer, final = build_scorer_and_final(raw, mode_type)
@@ -415,20 +418,24 @@ def main():
                                   "to data/results/thresholds.json. Default: the calibrated value.")
     user_group.add_argument("--tau-s", type=float, default=None, dest="tau_s",
                              help="Override tau_S (three-way stretching bar) for this run only -- "
-                                  "see --tau-tr. Only affects scheme=threeway.")
+                                  "see --tau-tr. Only affects scheme=threeway (no longer the "
+                                  "default; pass --classify-scheme threeway to use it).")
     user_group.add_argument("--tau-b", type=float, default=None, dest="tau_b",
                              help="Override tau_B (three-way bending bar / Step-3 gate 2) for "
-                                  "this run only -- see --tau-tr.")
+                                  "this run only -- see --tau-tr. Only affects scheme=threeway "
+                                  "(no longer the default) and Step 3's gate 2, which is always "
+                                  "active regardless of scheme.")
     user_group.add_argument("--tau-sb", type=float, default=None, dest="tau_sb",
                              help="Override tau_SB (single-cutoff binary S/B split) for this run "
                                   "only -- see --tau-tr. Only affects scheme=binary.")
     user_group.add_argument("--classify-scheme", choices=["threeway", "binary"],
-                             default="threeway", dest="classify_scheme",
-                             help="Step-4 internal classification vocabulary: 'threeway' "
-                                  "(default) may label a mode 'SB' (mixed stretch/bend); "
-                                  "'binary' forces every internal mode to 'S' or 'B' via the "
-                                  "single tau_SB cutoff, never 'SB'. Does not affect Step 2/3 "
-                                  "(external T/R assignment, purity gates).")
+                             default="binary", dest="classify_scheme",
+                             help="Step-4 internal classification vocabulary: 'binary' "
+                                  "(default, paper-standard) forces every internal mode to "
+                                  "'S' or 'B' via the single tau_SB cutoff, never 'SB'; "
+                                  "'threeway' (explicit opt-in) may label a mode 'SB' (mixed "
+                                  "stretch/bend) via the tau_S/tau_B split. Does not affect "
+                                  "Step 2/3 (external T/R assignment, purity gates).")
 
     dev_group = ap.add_argument_group(
         "Developer / maintainer workflow",
@@ -491,7 +498,7 @@ def main():
         v_weighting=base.v_weighting,
     )
     if any(v is not None for v in (args.tau_tr, args.tau_s, args.tau_b, args.tau_sb)) \
-            or args.classify_scheme != "threeway":
+            or args.classify_scheme != "binary":
         print(f"Note: threshold/scheme override active for this run only (not written to "
               f"thresholds.json): tau_TR={thresholds.tau_TR} tau_S={thresholds.tau_S} "
               f"tau_B={thresholds.tau_B} tau_SB={thresholds.tau_SB} "

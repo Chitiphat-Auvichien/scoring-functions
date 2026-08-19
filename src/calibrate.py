@@ -172,15 +172,20 @@ def sweep_tau_tr(lib_df, tau_S, tau_B, data_dir="data", tau_grid=DEFAULT_TAU_GRI
         labels = {}
         correct = 0
         total = 0
+        # scheme="threeway" pinned explicitly: this sweep determines the
+        # THREE-WAY tau_S/tau_B boundaries specifically, regardless of
+        # classify_all_modes()'s own default (binary as of the 2026-08
+        # scheme switch) -- flipping that default must not silently change
+        # what this sweep measures.
         for mol, (scorer, final) in pool.items():
-            scored = classify_all_modes(scorer, final, th)
+            scored = classify_all_modes(scorer, final, th, scheme="threeway")
             for m in scored:
                 if m["name"] in _EXTERNAL_SLOTS:
                     total += 1
                     is_clean = is_clean_external(m["classification"])
                     correct += int(is_clean)
                     labels[(mol, m["name"])] = m["classification"]
-        scored_e = classify_all_modes(scorer_e, final_e, th)
+        scored_e = classify_all_modes(scorer_e, final_e, th, scheme="threeway")
         for m in scored_e:
             labels[("benzene_EMIT", m["name"])] = m["classification"]
 

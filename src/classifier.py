@@ -9,11 +9,15 @@ Self-contained; ``main.py`` orchestrates via ``main.run_classify_pipeline``.
 
 Label vocabulary: a clean external (Step 3 gate pass) is the Step-2 slot name
 ("Tx".."Rz"); a mixed external+vibration (gate fail) is the slot name with a
-trailing "*" (e.g. "Tx*"); internal modes (Step 4) are "S"/"B"/"SB"
-(stretching/bending/mixed) under the default THREE-WAY scheme. A second,
-BINARY scheme (``scheme="binary"``, single cutoff ``tau_SB``) forces every
-internal mode to "S" or "B" and never produces "SB" -- see ``vib_label``/
-``vib_label_binary`` below. Use ``is_external_label``/``external_axis``/
+trailing "*" (e.g. "Tx*"); internal modes (Step 4) are "S"/"B" under the
+default BINARY scheme (``scheme="binary"``, single cutoff ``tau_SB``), which
+forces every internal mode to STRETCHING or BENDING and never produces "SB"
+-- this is the paper-standard scheme as of the 2026-08 binary-classification
+decision. A second, THREE-WAY scheme (``scheme="threeway"``, explicit
+opt-in) splits on ``tau_S``/``tau_B`` and may additionally produce "SB"
+(mixed stretch/bend) -- kept fully functional for comparison/on-demand use,
+just no longer the default. See ``vib_label``/``vib_label_binary`` below.
+Use ``is_external_label``/``external_axis``/
 ``is_clean_external``/``is_mixed_external``/``is_translation``/``is_rotation``
 below rather than hand-rolling regex against these strings.
 
@@ -215,14 +219,16 @@ def vib_label_binary(v, tau_SB):
     return STRETCHING if v >= tau_SB else BENDING
 
 
-def vib_label(v, thresholds, scheme="threeway"):
+def vib_label(v, thresholds, scheme="binary"):
     """Step-4 internal sub-classification from s[V_S].
 
-    scheme="threeway" (default): the three-way tau_S/tau_B split (may
-    produce MIXED_STRETCH_BEND). scheme="binary": delegates to
-    vib_label_binary(v, thresholds.tau_SB) -- forces S or B, never SB. One
-    entry point keeps Step 3's mixed-external annotation and Step 4's label
-    in agreement on which scheme is active.
+    scheme="binary" (default, paper-standard as of the 2026-08 binary-
+    classification decision): delegates to vib_label_binary(v,
+    thresholds.tau_SB) -- forces S or B, never SB. scheme="threeway"
+    (explicit opt-in, kept fully functional for comparison): the three-way
+    tau_S/tau_B split (may produce MIXED_STRETCH_BEND). One entry point
+    keeps Step 3's mixed-external annotation and Step 4's label in
+    agreement on which scheme is active.
     """
     if scheme == "binary":
         return vib_label_binary(v, thresholds.tau_SB)
@@ -231,6 +237,34 @@ def vib_label(v, thresholds, scheme="threeway"):
     if v <= thresholds.tau_B:
         return BENDING
     return MIXED_STRETCH_BEND
+
+
+def rescheme_internal_label(predicted_label, v_stretch, thresholds, scheme):
+    """Cheaply re-derive a mode's Step-4 internal label under a DIFFERENT
+    `scheme` than the one it was originally classified with, from its own
+    `v_stretch` (s[V_S], Step 1's score -- always scheme-independent) alone,
+    with NO re-run of Step 2/3 (external assignment/purity, also scheme-
+    independent). `predicted_label` is the mode's already-computed
+    classify_all_modes() label (under whichever scheme produced it, e.g. a
+    library_scores.csv row); if its bucket is a vibrational one
+    (stretch/bend/mixed) it is recomputed via vib_label(v_stretch,
+    thresholds, scheme); a Step-2 external-slot label (clean or
+    mixed-external, e.g. "Tx"/"Tx*") is returned unchanged, since scheme
+    never touches Step 2/3.
+
+    This is the general form of the per-row re-labeling pattern already used
+    ad hoc in a few places (e.g. figures.py's plot_confusion_matrix_binary/
+    plot_transferability_confusion_binary/plot_benzene_internal_confusion_binary's
+    own inline `_binarize` closures, which special-case scheme="binary"
+    specifically) -- lets a caller obtain ANY scheme's labels from an
+    already-scored table without re-parsing/re-running the whole classifier
+    (e.g. src.benzene_validation's threeway-only SB diagnostics, needed once
+    library_scores.csv's own predicted_label became binary-by-default).
+    """
+    bucket = classification_bucket(predicted_label)
+    if bucket in ("stretch", "bend", "mixed"):
+        return vib_label(v_stretch, thresholds, scheme=scheme)
+    return predicted_label
 
 
 def _score_slot(scores, slot):
@@ -260,7 +294,7 @@ def _assert_weighting_match(scorer, thresholds):
         f"`--v-weighting {thresholds.v_weighting}`.")
 
 
-def classify_all_modes(scorer, final, thresholds=None, scheme="threeway"):
+def classify_all_modes(scorer, final, thresholds=None, scheme="binary"):
     """Algorithm 1: score every mode, globally assign externals (Step 2:
     plain Hungarian assignment, no degenerate-axis special-casing -- Decision
     8, deliberately not reintroduced), apply two-gate purity (Step 3), then
@@ -268,13 +302,15 @@ def classify_all_modes(scorer, final, thresholds=None, scheme="threeway"):
 
     scorer must already be MIT-aligned (as build_scorer_and_final leaves it);
     final is its candidate mode pool. thresholds defaults to
-    Thresholds.calibrated(). `scheme` is "threeway" (default, may produce
-    "SB") or "binary" (single tau_SB cutoff, never produces "SB") -- passed
-    through to every vib_label() call site below (Step 3's mixed-external
-    annotation AND Step 4's internal label), so the two stay in agreement;
-    it does NOT affect Step 2/Step 3's external T/R assignment or purity gate
-    itself, only which vocabulary is used to describe a mode's internal
-    (vibrational) character. Returns a list of dicts, one per mode in `final`
+    Thresholds.calibrated(). `scheme` is "binary" (default, paper-standard:
+    single tau_SB cutoff, never produces "SB") or "threeway" (explicit
+    opt-in, may produce "SB"; kept fully functional for comparison/on-demand
+    use) -- passed through to every vib_label() call site below (Step 3's
+    mixed-external annotation AND Step 4's internal label), so the two stay
+    in agreement; it does NOT affect Step 2/Step 3's external T/R assignment
+    or purity gate itself, only which vocabulary is used to describe a
+    mode's internal (vibrational) character. Returns a list of dicts, one
+    per mode in `final`
     (same order): {name, frequency, is_emit, T, R, V, classification,
     annotation, bonds, bonds_all}. 'bonds' (see ModeScorer.score_bonds()) carries
     the per-bond s_AB list for every mode regardless of classification; 'bonds_all'

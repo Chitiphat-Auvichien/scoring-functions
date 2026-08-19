@@ -9,21 +9,32 @@ numbering) and is ingested as ``ref_label`` for molecule C6H6 in
 ``library_scores.csv``. Comparing the classifier's own ``predicted_label``
 against that independent label is a genuine, non-circular accuracy check.
 
-Every function here reuses already-computed ``library_scores.csv`` columns;
-no new scores/classification are computed:
+Every function here reuses already-computed ``library_scores.csv`` columns
+-- no re-parsing/re-running of Step 1-3 is ever done here. The three-way-only
+SB diagnostics below additionally cheaply RE-DERIVE ``predicted_label`` for
+every internal row from its own ``V_Stretch`` (``classifier.
+rescheme_internal_label``, an explicit ``scheme="threeway"`` default),
+since ``library_scores.csv``'s own ``predicted_label`` column is built under
+the global default scheme (binary, as of the 2026-08 switch) and
+MIXED_STRETCH_BEND never occurs there -- see
+``benzene_normal_reference_detail``'s ``scheme``/``thresholds`` parameters:
 - ``benzene_normal_reference_detail``/``_summary``: per-mode and per-category
   recall against ``ref_label``, including an explicit "crossed_opposite"
-  flag and literature "SB" (mixed) handling for modes 21/22.
+  flag and literature "SB" (mixed) handling for modes 21/22. ``scheme=None``
+  by default -- tracks the cached CSV's own scheme (binary).
 - ``benzene_internal_confusion_matrix``: 3x3 (bend/stretch/SB x
   bend/stretch/mixed) confusion table for the 30 internal modes.
+  ``scheme="threeway"`` by default (V_Stretch rescheme).
 - ``benzene_mixed_bond_diagnostic``: per-bond C-C vs. C-H breakdown for
   MIXED_STRETCH_BEND-predicted modes, plus a near-degenerate-pair
-  correlation check.
+  correlation check. ``scheme="threeway"`` by default (V_Stretch rescheme).
 - ``benzene_sb_vs_stretch_bond_diagnostic``: contrasts the SB "bending blind
   spot" modes (21/22) against the stretch modes the classifier calls mixed
-  (23/24), with the same per-bond evidence.
+  (23/24), with the same per-bond evidence. ``scheme="threeway"`` by default
+  (V_Stretch rescheme).
 - ``benzene_worked_examples``: identifies ring-breathing and representative
-  C-H-stretch modes for the manuscript's worked-example gallery.
+  C-H-stretch modes for the manuscript's worked-example gallery. Tracks the
+  cached CSV's own scheme (binary) like ``benzene_normal_reference_detail``.
 
 Deliberately benzene-specific (single ``MOLECULE`` constant, hardcoded C-C
 ring-bond ordering) -- not generalized to arbitrary molecules, by design.
@@ -34,7 +45,7 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
-from src.classifier import classification_bucket
+from src.classifier import classification_bucket, Thresholds, rescheme_internal_label
 from src.library_ingest import load_library_scores
 from src.scoring import parse_bond_string
 
@@ -60,7 +71,7 @@ _CH_BONDS = ("C1-H7", "C2-H8", "C3-H9", "C4-H10", "C5-H11", "C6-H12")
 # Task A: primary classification-vs-reference validation
 # --------------------------------------------------------------------------
 
-def benzene_normal_reference_detail(lib_df=None, data_dir="data"):
+def benzene_normal_reference_detail(lib_df=None, data_dir="data", scheme=None, thresholds=None):
     """One row per benzene normal mode with a literature ``ref_label`` (6
     external T/R + 30 internal stretch/bend/SB), comparing
     ``predicted_label`` against ``ref_label`` (via
@@ -69,6 +80,23 @@ def benzene_normal_reference_detail(lib_df=None, data_dir="data"):
 
     Columns: mode_index, kind, freq, ref_label, predicted_label,
     predicted_bucket, correct, crossed_opposite, migrated_to_mixed.
+
+    `scheme` (None by default): None reads ``predicted_label`` exactly as
+    already computed in ``library_scores.csv`` -- tracks whichever scheme
+    ``library_ingest`` last classified the roster under (binary by default,
+    the paper-standard scheme as of the 2026-08 switch). An explicit
+    "threeway"/"binary" cheaply RE-DERIVES ``predicted_label`` for every
+    internal row from its own ``V_Stretch`` (Step 1's score -- always
+    scheme-independent) via ``classifier.rescheme_internal_label``, with NO
+    re-parse/re-run of Step 1-3 -- needed by the threeway-only SB
+    diagnostics below (``benzene_internal_confusion_matrix``,
+    ``benzene_mixed_bond_diagnostic``, ``benzene_sb_vs_stretch_bond_diagnostic``),
+    since MIXED_STRETCH_BEND never occurs under the binary scheme and those
+    functions would otherwise degenerate to an empty "mixed" bucket once
+    library_scores.csv's canonical column is binary-only. A Step-2
+    external-slot row (e.g. an internal reference mode that won a T/R slot)
+    is left untouched, since scheme never touches Step 2/3 -- see
+    ``rescheme_internal_label``'s own docstring.
 
     Raises ValueError if benzene has no ref_label rows (ingest not run) or
     if any ref_label row lacks a predicted_label (incomplete geometry merge).
@@ -79,6 +107,13 @@ def benzene_normal_reference_detail(lib_df=None, data_dir="data"):
         raise ValueError(
             f"No {MOLECULE} rows with a ref_label in library_scores.csv -- "
             "has src.library_ingest.build_library_scores() been run?")
+
+    if scheme is not None:
+        th = thresholds or Thresholds.calibrated()
+        b["predicted_label"] = b.apply(
+            lambda row: rescheme_internal_label(row["predicted_label"], row["V_Stretch"], th, scheme),
+            axis=1)
+
     missing_pred = b["predicted_label"].isna()
     if missing_pred.any():
         bad = b.loc[missing_pred, "mode_index"].tolist()
@@ -152,11 +187,22 @@ INTERNAL_REF_CATEGORIES = ("bend", "stretch", "SB")
 INTERNAL_PRED_CATEGORIES = ("bend", "stretch", "mixed")
 
 
-def benzene_internal_confusion_matrix(lib_df=None, data_dir="data"):
+def benzene_internal_confusion_matrix(lib_df=None, data_dir="data", scheme="threeway",
+                                       thresholds=None):
     """3x3 reference (bend/stretch/SB) x predicted-bucket (bend/stretch/
     mixed) confusion table + per-category recall for benzene's 30 internal
     normal modes. Built entirely from `benzene_normal_reference_detail`'s
-    own columns (never recomputes score/classification logic).
+    own columns.
+
+    `scheme` defaults to "threeway" (unlike `benzene_normal_reference_detail`
+    itself, whose own default None just tracks the cached CSV): this table's
+    entire point is a genuine 3-class (bend/stretch/SB) breakdown, which is
+    only meaningful under the three-way scheme -- under "binary" the "mixed"
+    predicted column would always be empty. Re-derives benzene's predicted
+    labels under `scheme` via `benzene_normal_reference_detail`'s cheap
+    V_Stretch-based rescheme path (`thresholds` defaulting to
+    `Thresholds.calibrated()`), independent of whatever scheme the cached
+    library_scores.csv (`lib_df`) happens to be built under.
 
     Returns (confusion_table, per_category):
       confusion_table -- 3x3 DataFrame, index=['bend','stretch','SB'],
@@ -168,7 +214,7 @@ def benzene_internal_confusion_matrix(lib_df=None, data_dir="data"):
         <-> stretch crossings only; always 0 for 'SB', which has no
         "opposite" clean category to cross into).
     """
-    detail = benzene_normal_reference_detail(lib_df, data_dir)
+    detail = benzene_normal_reference_detail(lib_df, data_dir, scheme=scheme, thresholds=thresholds)
     internal = detail[detail["kind"] == "internal"].copy()
 
     confusion_table = pd.crosstab(internal["ref_label"], internal["predicted_bucket"])
@@ -192,10 +238,12 @@ def benzene_internal_confusion_matrix(lib_df=None, data_dir="data"):
     return confusion_table, per_category
 
 
-def run_benzene_internal_confusion(lib_df=None, data_dir="data", write=True):
+def run_benzene_internal_confusion(lib_df=None, data_dir="data", write=True,
+                                    scheme="threeway", thresholds=None):
     """Headless entry point (Task A'). Returns
     (confusion_table, per_category, (path_table, path_summary) or None)."""
-    confusion_table, per_category = benzene_internal_confusion_matrix(lib_df, data_dir)
+    confusion_table, per_category = benzene_internal_confusion_matrix(
+        lib_df, data_dir, scheme=scheme, thresholds=thresholds)
     paths = None
     if write:
         p_table = os.path.join(data_dir, "results", "benzene_internal_confusion_matrix.csv")
@@ -239,13 +287,20 @@ def _bond_row_stats(r):
     return row
 
 
-def benzene_mixed_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0):
+def benzene_mixed_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0,
+                                   scheme="threeway", thresholds=None):
     """Per-bond C-C vs. C-H breakdown for benzene's MIXED_STRETCH_BEND-
     predicted normal modes, plus a computed near-degenerate-pair check.
 
     The set of "mixed" modes is FOUND from
     `benzene_normal_reference_detail` (predicted_bucket == "mixed"), not
     hardcoded, so this stays correct across recalibration.
+
+    `scheme` defaults to "threeway" (see `benzene_internal_confusion_matrix`
+    for why): MIXED_STRETCH_BEND never occurs under "binary", so this
+    diagnostic would always raise ValueError there -- it is inherently a
+    three-way-scheme tool. Re-derives benzene's predicted labels under
+    `scheme` (`thresholds` defaulting to `Thresholds.calibrated()`).
 
     Returns (bond_detail_df, pairs_df):
       bond_detail_df -- one row per mixed mode: mode_index, freq, V_Stretch,
@@ -260,7 +315,7 @@ def benzene_mixed_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0):
     Raises ValueError if no MIXED_STRETCH_BEND modes are found at all
     (nothing to diagnose).
     """
-    detail = benzene_normal_reference_detail(lib_df, data_dir)
+    detail = benzene_normal_reference_detail(lib_df, data_dir, scheme=scheme, thresholds=thresholds)
     mixed_modes = detail.loc[detail["predicted_bucket"] == "mixed", "mode_index"].tolist()
     if not mixed_modes:
         raise ValueError(
@@ -307,11 +362,13 @@ def benzene_mixed_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0):
     return bond_detail_df, pairs_df
 
 
-def run_benzene_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0, write=True):
+def run_benzene_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0, write=True,
+                                 scheme="threeway", thresholds=None):
     """Headless entry point (Task B). Returns
     (bond_detail_df, pairs_df, (path_bonds, path_pairs) or None).
     """
-    bond_detail_df, pairs_df = benzene_mixed_bond_diagnostic(lib_df, data_dir, freq_tol)
+    bond_detail_df, pairs_df = benzene_mixed_bond_diagnostic(
+        lib_df, data_dir, freq_tol, scheme=scheme, thresholds=thresholds)
     paths = None
     if write:
         p_bonds = os.path.join(data_dir, "results", "benzene_mixed_bond_diagnostic.csv")
@@ -331,11 +388,18 @@ def run_benzene_bond_diagnostic(lib_df=None, data_dir="data", freq_tol=1.0, writ
 # so finding them via the predicted bucket would find nothing.
 # --------------------------------------------------------------------------
 
-def benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data"):
+def benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data",
+                                           scheme="threeway", thresholds=None):
     """Per-bond C-C vs. C-H breakdown contrasting benzene's literature-'SB'
     modes (21/22, bending blind spot) against the literature-'stretch' modes
     the classifier calls mixed (23/24), with the same per-bond evidence
     `benzene_mixed_bond_diagnostic` uses for the other predicted-mixed modes.
+
+    `scheme` defaults to "threeway" (see `benzene_internal_confusion_matrix`
+    for why): the "recovered_mixed"/"overflagged_mixed" cases this
+    diagnostic derives are three-way-scheme concepts (the "mixed" bucket
+    never occurs under "binary"). Re-derives benzene's predicted labels
+    under `scheme` (`thresholds` defaulting to `Thresholds.calibrated()`).
 
     Returns one row per mode (21, 22, 23, 24): mode_index, freq, V_Stretch,
     ref_label, predicted_label, predicted_bucket, case
@@ -347,7 +411,7 @@ def benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data"):
     Raises ValueError if benzene has no ref_label=='SB' modes (literature
     relabeling not ingested).
     """
-    detail = benzene_normal_reference_detail(lib_df, data_dir)
+    detail = benzene_normal_reference_detail(lib_df, data_dir, scheme=scheme, thresholds=thresholds)
     sb_modes = detail.loc[detail["ref_label"] == "SB", "mode_index"].astype(int).tolist()
     if not sb_modes:
         raise ValueError(
@@ -408,9 +472,10 @@ def benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data"):
     return pd.DataFrame(rows).sort_values("mode_index").reset_index(drop=True)[cols]
 
 
-def run_benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data", write=True):
+def run_benzene_sb_vs_stretch_bond_diagnostic(lib_df=None, data_dir="data", write=True,
+                                               scheme="threeway", thresholds=None):
     """Headless entry point (Task B'). Returns (df, path or None)."""
-    result = benzene_sb_vs_stretch_bond_diagnostic(lib_df, data_dir)
+    result = benzene_sb_vs_stretch_bond_diagnostic(lib_df, data_dir, scheme=scheme, thresholds=thresholds)
     path = None
     if write:
         path = os.path.join(data_dir, "results", "benzene_sb_vs_stretch_bond_diagnostic.csv")

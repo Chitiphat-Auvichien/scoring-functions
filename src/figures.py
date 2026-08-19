@@ -546,8 +546,10 @@ def plot_benzene_normal_modes(
 ):
     """Build the benzene normal-mode worked-example gallery: ``s[V_S]`` vs.
     frequency for all 36 real normal modes (6 external T/R + 30 internal),
-    colored by the full T/R/S/B/SB scheme (shared CATEGORY_COLOR/
-    CATEGORY_LABEL). Separate figure from ``plot_benzene_stress_test``
+    colored by the binary T/R/S/B scheme (shared CATEGORY_COLOR/
+    CATEGORY_LABEL; C6H6_normal.csv's own label column, never "SB" under the
+    default binary classify-scheme). Separate figure from
+    ``plot_benzene_stress_test``
     (fig:benzene, untouched), the descriptive companion for the "Benzene
     normal modes" section.
 
@@ -603,9 +605,11 @@ def plot_benzene_normal_modes(
     ax.set_ylabel(r"$s[\mathrm{V_S}]$")
     ax.set_ylim(-0.05, 1.15)
     ax.set_xlim(-120, normal["Freq"].max() * 1.06)
-    # Anchored clear of the tau_SB line, not the default "upper left", which
-    # would put the dashed threshold line straight through the legend text.
-    ax.legend(loc="center left", bbox_to_anchor=(0.0, 0.52), frameon=False,
+    # Upper-left corner: clear of both the tau_SB line at y=0.50 (a plain
+    # "center left" placement puts a legend row right on top of it -- the S
+    # row sits at that same height) and of all data (nothing above y~0.7
+    # below freq~800).
+    ax.legend(loc="upper left", bbox_to_anchor=(0.0, 1.02), frameon=False,
               handletextpad=0.3, labelspacing=0.3, borderaxespad=0.2)
 
     fig.tight_layout()
@@ -615,7 +619,7 @@ def plot_benzene_normal_modes(
     summary = {
         "pdf": pdf_path, "png": png_path,
         "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL for the "
-                               "full T/R/S/B/SB scheme -- same mapping as "
+                               "binary T/R/S/B scheme -- same mapping as "
                                "fig:benzene panel (a). ONE marker shape "
                                "(circle) for all points, all rendered "
                                "hollow (IDEAL_STYLE['no']); color is the "

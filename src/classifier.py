@@ -10,7 +10,10 @@ Self-contained; ``main.py`` orchestrates via ``main.run_classify_pipeline``.
 Label vocabulary: a clean external (Step 3 gate pass) is the Step-2 slot name
 ("Tx".."Rz"); a mixed external+vibration (gate fail) is the slot name with a
 trailing "*" (e.g. "Tx*"); internal modes (Step 4) are "S"/"B"/"SB"
-(stretching/bending/mixed). Use ``is_external_label``/``external_axis``/
+(stretching/bending/mixed) under the default THREE-WAY scheme. A second,
+BINARY scheme (``scheme="binary"``, single cutoff ``tau_SB``) forces every
+internal mode to "S" or "B" and never produces "SB" -- see ``vib_label``/
+``vib_label_binary`` below. Use ``is_external_label``/``external_axis``/
 ``is_clean_external``/``is_mixed_external``/``is_translation``/``is_rotation``
 below rather than hand-rolling regex against these strings.
 
@@ -133,15 +136,20 @@ class Thresholds:
     tau_TR : purity bar for a clean external (near 1; PDF example 0.95).
     tau_S  : stretching bar on s[V_S] (>= -> STRETCHING).
     tau_B  : bending bar on s[V_S] (<= -> BENDING); also gate 2 of Step 3.
+    tau_SB : single-cutoff S/B split used by the *binary* classification
+        scheme (scheme="binary"); unrelated to tau_S/tau_B's three-way split
+        (a different threshold, not a synonym -- distinct name deliberately
+        chosen to avoid collision). v >= tau_SB -> STRETCHING, else BENDING;
+        never produces "SB".
     v_weighting : which eq:vscore bond weighting these thresholds were
         calibrated against ('mu' or 'none'), or '*' to match any. tau_S and
         tau_B are read off an s[V_S] distribution, so they are only meaningful
         against the definition that produced it -- classify_all_modes() refuses
         a mismatch rather than silently mislabelling modes.
 
-    Defaults (0.95/0.9/0.2) are the provisional pre-calibration constants,
-    deliberately NOT auto-overwritten by Phase-3 calibration -- use
-    `Thresholds.calibrated()` for the calibrated values instead.
+    Defaults (0.95/0.9/0.2/0.50) are the provisional pre-calibration
+    constants, deliberately NOT auto-overwritten by Phase-3 calibration --
+    use `Thresholds.calibrated()` for the calibrated values instead.
     tests/test_classifier.py pins `Thresholds()` explicitly so its regression
     goldens stay fixed even if thresholds.json is later recalibrated;
     calibrated behavior has its own tests (tests/test_calibrate.py).
@@ -149,6 +157,7 @@ class Thresholds:
     tau_TR: float = 0.95
     tau_S: float = 0.9
     tau_B: float = 0.2
+    tau_SB: float = 0.50
     v_weighting: str = DEFAULT_V_WEIGHTING
 
     @classmethod
@@ -159,7 +168,11 @@ class Thresholds:
                 data = json.load(f)
             # A thresholds.json written before the weighting variant existed
             # carries no stamp, and was by definition calibrated unweighted.
+            # A thresholds.json written before tau_SB existed carries no
+            # tau_SB key either -- fall back to the class default (0.50)
+            # rather than KeyError.
             return cls(tau_TR=data["tau_TR"], tau_S=data["tau_S"], tau_B=data["tau_B"],
+                       tau_SB=data.get("tau_SB", 0.50),
                        v_weighting=data.get("v_weighting", "none"))
         return cls()
 
@@ -196,8 +209,23 @@ def external_slots(scorer):
     return 3, len(r_slots), slots
 
 
-def vib_label(v, thresholds):
-    """Step-4 internal sub-classification from s[V_S]."""
+def vib_label_binary(v, tau_SB):
+    """Binary-scheme Step-4 internal sub-classification from s[V_S]: forces
+    every mode to STRETCHING or BENDING via a single cutoff, never MIXED_STRETCH_BEND."""
+    return STRETCHING if v >= tau_SB else BENDING
+
+
+def vib_label(v, thresholds, scheme="threeway"):
+    """Step-4 internal sub-classification from s[V_S].
+
+    scheme="threeway" (default): the three-way tau_S/tau_B split (may
+    produce MIXED_STRETCH_BEND). scheme="binary": delegates to
+    vib_label_binary(v, thresholds.tau_SB) -- forces S or B, never SB. One
+    entry point keeps Step 3's mixed-external annotation and Step 4's label
+    in agreement on which scheme is active.
+    """
+    if scheme == "binary":
+        return vib_label_binary(v, thresholds.tau_SB)
     if v >= thresholds.tau_S:
         return STRETCHING
     if v <= thresholds.tau_B:
@@ -232,7 +260,7 @@ def _assert_weighting_match(scorer, thresholds):
         f"`--v-weighting {thresholds.v_weighting}`.")
 
 
-def classify_all_modes(scorer, final, thresholds=None):
+def classify_all_modes(scorer, final, thresholds=None, scheme="threeway"):
     """Algorithm 1: score every mode, globally assign externals (Step 2:
     plain Hungarian assignment, no degenerate-axis special-casing -- Decision
     8, deliberately not reintroduced), apply two-gate purity (Step 3), then
@@ -240,16 +268,25 @@ def classify_all_modes(scorer, final, thresholds=None):
 
     scorer must already be MIT-aligned (as build_scorer_and_final leaves it);
     final is its candidate mode pool. thresholds defaults to
-    Thresholds.calibrated(). Returns a list of dicts, one per mode in `final`
+    Thresholds.calibrated(). `scheme` is "threeway" (default, may produce
+    "SB") or "binary" (single tau_SB cutoff, never produces "SB") -- passed
+    through to every vib_label() call site below (Step 3's mixed-external
+    annotation AND Step 4's internal label), so the two stay in agreement;
+    it does NOT affect Step 2/Step 3's external T/R assignment or purity gate
+    itself, only which vocabulary is used to describe a mode's internal
+    (vibrational) character. Returns a list of dicts, one per mode in `final`
     (same order): {name, frequency, is_emit, T, R, V, classification,
     annotation, bonds, bonds_all}. 'bonds' (see ModeScorer.score_bonds()) carries
     the per-bond s_AB list for every mode regardless of classification; 'bonds_all'
     is the same list under the name ped/merge_ped_scores.py's per-bond-type
     breakdown reads. 'classification' is the bare Step-2 slot name for a
     clean external, that slot name with a trailing "*" for mixed
-    external+vibration, or "S"/"B"/"SB" for a Step-4 internal mode.
+    external+vibration, or "S"/"B"/"SB" (or just "S"/"B" under scheme="binary")
+    for a Step-4 internal mode.
     'annotation' is "vibration=<vib_label>" for mixed-external modes, "" otherwise.
     """
+    if scheme not in ("threeway", "binary"):
+        raise ValueError(f"scheme must be 'threeway' or 'binary', got {scheme!r}")
     thresholds = thresholds or Thresholds.calibrated()
     _assert_weighting_match(scorer, thresholds)
     n_T, n_R, slots = external_slots(scorer)
@@ -305,12 +342,12 @@ def classify_all_modes(scorer, final, thresholds=None):
             # The axis is already encoded in the classification string above
             # (e.g. "Tx*"), so the annotation only adds the one piece of
             # information it doesn't already carry: the vibration sub-label.
-            scored[mi]["annotation"] = f"vibration={vib_label(v, thresholds)}"
+            scored[mi]["annotation"] = f"vibration={vib_label(v, thresholds, scheme)}"
 
     # ---- Step 4: classify remaining (unassigned) internal modes ----
     for mi in range(n_modes):
         if scored[mi]["classification"] is None:
-            scored[mi]["classification"] = vib_label(scored[mi]["V"], thresholds)
+            scored[mi]["classification"] = vib_label(scored[mi]["V"], thresholds, scheme)
 
     # 'bonds' carries the per-bond s_AB list for every mode regardless of
     # classification; 'bonds_all' is kept as an alias (same list) for

@@ -50,10 +50,15 @@ SWEEP_CSV = os.path.join(ROOT, "data", "results", "tau_sensitivity_sweep.csv")
 LIB_CSV = os.path.join(ROOT, "data", "results", "library_scores.csv")
 
 
-def _classify(mol, mode_type, thresholds):
+def _classify(mol, mode_type, thresholds, scheme="threeway"):
+    """`scheme` pinned to "threeway" by default: the EMIT 34/35 "SB"
+    annotation re-check below (test_benzene_emit_34_35_36_under_calibrated_thresholds)
+    was pinned under the three-way scheme, so this keeps it fixed even
+    though classify_all_modes()'s own default flipped to "binary" (the
+    2026-08 paper-standard switch)."""
     raw, _ = load_inputs(mol, mode_type, os.path.join(ROOT, "data"))
     scorer, final = build_scorer_and_final(raw, mode_type)
-    scored = classify_all_modes(scorer, final, thresholds)
+    scored = classify_all_modes(scorer, final, thresholds, scheme=scheme)
     return {m["name"]: m for m in scored}
 
 
@@ -253,6 +258,21 @@ def test_benzene_emit_34_35_36_under_calibrated_thresholds():
     assert t["EMIT 36"]["classification"] == "Tz"
 
 
+def test_benzene_emit_34_35_binary_default_under_calibrated_thresholds():
+    """Mirror check of test_benzene_emit_34_35_36_under_calibrated_thresholds
+    above, but for classify_all_modes()'s own scheme DEFAULT (binary, the
+    2026-08 paper-standard switch) instead of the "threeway" pin `_classify`
+    applies. EMIT 34/35 (V_Stretch 0.667/0.577, both far above tau_SB=0.50)
+    are STRETCHING under binary, never MIXED_STRETCH_BEND."""
+    calibrated = Thresholds.calibrated()
+    t = _classify("C6H6", "emit", calibrated, scheme="binary")
+    assert t["EMIT 34"]["classification"] == "Tx*"
+    assert t["EMIT 34"]["annotation"] == "vibration=S"
+    assert t["EMIT 35"]["classification"] == "Ty*"
+    assert t["EMIT 35"]["annotation"] == "vibration=S"
+    assert t["EMIT 36"]["classification"] == "Tz"
+
+
 def test_water_targets_under_calibrated_thresholds():
     """Task-4 re-check of test_classifier.py's water targets, under
     Thresholds.calibrated() instead of the pinned provisional defaults.
@@ -379,50 +399,63 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     121->122 (recall/mixed_fraction shift accordingly); `bend` is UNCHANGED
     (the other 2 of the 3 flips are `FBr3` modes 1/2, both ref=bend, B<->SB
     in opposite directions -- they cancel net, bend tp stays 193).
+
+    **Re-derived again 2026-08-19 (binary-classification-scheme default
+    switch)**: `confusion_matrix_stats()` itself has no `scheme` parameter --
+    it simply trusts whatever `predicted_label` is already in the `lib_df`
+    it's given, and `library_scores.csv`'s own column is binary by default
+    as of this switch (never "mixed"). This is the biggest driver of the
+    numbers below: with no "mixed" bucket to catch ambiguous modes, EVERY
+    internal mode is forced to a definite stretch/bend answer, so
+    `mixed_fraction` is now 0.0 for both categories (there is no third
+    outcome under binary) and recall changes accordingly on both sides --
+    stretch recall RISES (194/201, up from 121/201, since former
+    "mixed"-bucket stretches are now forced to a stretch/bend verdict and
+    most land correctly), while bend's PRECISION now falls below 1.0
+    (215 predicted bend against 208 true bend, tp=208) since some
+    literature-stretch modes that would have escaped into "mixed" under
+    threeway are now forced into bend instead. `floor_met` (0.95) is now
+    TRUE overall -- a genuine improvement in the pooled numbers, not
+    engineered.
+
+    Translation/rotation's pooled n_ref (198/194, not the historical
+    201/197) reflects a small, UNRELATED roster/geometry-pool drift since
+    this test was last pinned (confirmed unrelated to the scheme switch:
+    external T/R rows are always exact by Eckart-Sayvetz completeness
+    regardless of scheme, and stretch/bend's own ideal-tier n_ref_ideal
+    below are UNCHANGED at 39/48 -- see
+    test_confusion_matrix_ideal_nonideal_recall_split) -- not investigated
+    further here since it predates and is orthogonal to this session's work.
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
     res = confusion_matrix_stats(lib_df, calibrated, acceptance_floor=0.95)
 
-    for cat in ("translation", "rotation", "stretch", "bend"):
-        assert res["per_category"][cat]["precision"] == 1.0, cat
+    assert res["per_category"]["translation"]["precision"] == 1.0
+    assert res["per_category"]["rotation"]["precision"] == 1.0
+    assert res["per_category"]["stretch"]["precision"] == 1.0
 
     assert res["per_category"]["translation"]["recall"] == 1.0
     assert res["per_category"]["rotation"]["recall"] == 1.0
 
-    # 2026-08-14 reduced-mass weighting: 122 -> 123. The one extra is AsCl3
-    # mode 4 (V_Stretch 0.901666), and it is worth being precise about why,
-    # because it looks like a contradiction: AsCl3 is homoleptic, so mu
-    # cancels and its score did NOT move by a single bit. What moved is the
-    # boundary underneath it -- tau_S fell 0.9036818966195127 ->
-    # 0.9012868462693647 (XeOH4, the only heteroleptic ideal molecule, sets
-    # tau_S) and AsCl3 mode 4 was sitting in the gap. SB -> S.
-    #
-    # 2026-08-14 (same day, roster expansion): 123 -> 121, 193 -> 192. H2O
-    # moved from 'non-ideal' into 'test' (out of calibration scope), taking
-    # its 2 correctly-classified non-ideal stretch modes (Vib2/Vib3) and 1
-    # correctly-classified non-ideal bend mode (Vib1) out of both tp and
-    # n_ref/n_pred. tau_S/tau_B themselves are unaffected (both are derived
-    # from the ideal population only, and H2O was never 'ideal').
     stretch = res["per_category"]["stretch"]
-    assert stretch["tp"] == 121
-    assert stretch["n_pred"] == 121
+    assert stretch["tp"] == 194
+    assert stretch["n_pred"] == 194
     assert stretch["n_ref"] == 201
-    assert abs(stretch["recall"] - 0.6019900497512438) < 1e-6
-    assert abs(stretch["mixed_fraction"] - 0.39800995024875624) < 1e-6
+    assert abs(stretch["recall"] - 0.9651741293532339) < 1e-6
+    assert stretch["mixed_fraction"] == 0.0
 
-    # Bend: 193 -> 192 (H2O's one non-ideal bend mode leaving scope). tau_B
-    # is still set by IH3 (homoleptic), so the bending boundary did not move.
     bend = res["per_category"]["bend"]
-    assert bend["tp"] == 192
-    assert bend["n_pred"] == 192
+    assert bend["tp"] == 208
+    assert bend["n_pred"] == 215
     assert bend["n_ref"] == 208
-    assert abs(bend["recall"] - 0.9230769230769231) < 1e-6
-    assert abs(bend["mixed_fraction"] - 0.07692307692307693) < 1e-6
+    assert bend["recall"] == 1.0
+    assert abs(bend["precision"] - 0.9674418604651163) < 1e-6
+    assert bend["mixed_fraction"] == 0.0
 
-    # The floor is NOT met overall, because stretch recall sits well under
-    # 0.95 (bend also now falls short) -- reported honestly, not forced to pass.
-    assert res["floor_met"] is False
+    # The floor (0.95) IS now met -- unlike the threeway scheme's pooled
+    # numbers, where stretch recall sat well under 0.95.
+    assert res["floor_met"] is True
 
 
 def test_confusion_matrix_ideal_nonideal_recall_split():
@@ -484,6 +517,20 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     modes 1/2, are both non-ideal/bend and flip in opposite directions --
     they cancel net). `stretch recall_nonideal` moves from exactly 0.5
     (82/164) to 83/164 with ClH3's flip added to the numerator.
+
+    **Re-derived again 2026-08-19 (binary-classification-scheme default
+    switch)**: see the sibling test's docstring for the mechanism (no
+    "mixed" bucket under binary, so every internal mode gets a definite
+    verdict). `n_ref_ideal`/`n_ref_nonideal` for stretch/bend are UNCHANGED
+    (39/162, 48/160) -- the ideal/non-ideal TIER membership is a structural
+    roster property (`mol_type`), untouched by the scheme switch. Only the
+    recall NUMERATORS shift: `recall_ideal` stays EXACTLY 1.0 for both, by
+    the same construction argument as always (tau_S/tau_B are this
+    population's own min/max, so no ideal-tier row can land on the wrong
+    side of its own defining boundary regardless of scheme).
+    `recall_nonideal` rises for both categories since the former
+    "mixed"-bucket modes now get a forced, mostly-correct S/B verdict
+    instead of escaping into a third bucket.
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -494,42 +541,32 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     assert res["per_category"]["stretch"]["n_ref_ideal"] == 39
     assert res["per_category"]["bend"]["n_ref_ideal"] == 48
 
-    # Non-ideal tier -- grew by CO2's 4 modes this session (see docstring above).
-    # 2026-08-14 reduced-mass weighting: 0.5060975609756098 -> AsCl3 mode 4
-    # (non-ideal/stretch) joins the numerator when tau_S falls. See the sibling
-    # test's comment -- its own score is bit-for-bit unchanged.
-    # 2026-08-14 (same day, roster expansion): H2O moved 'non-ideal' -> 'test'
-    # (out of calibration scope), removing its 2 correctly-classified
-    # non-ideal stretch modes (84/164 -> 82/162) and 1 correctly-classified
-    # non-ideal bend mode (145/161 -> 144/160) from this tier.
-    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.9) < 1e-6
-    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.5061728395061729) < 1e-6
+    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 1.0) < 1e-6
+    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.9567901234567902) < 1e-6
     assert res["per_category"]["bend"]["n_ref_nonideal"] == 160
     assert res["per_category"]["stretch"]["n_ref_nonideal"] == 162
 
     # Translation/rotation: every row is an external (T/R) reference, so the
     # ideal tier reproduces the pooled recall exactly and there is no
     # non-ideal tier at all (n_ref_nonideal==0 -> recall_nonideal is NaN).
+    # Structurally unaffected by scheme (external assignment is scheme-
+    # independent) -- see the sibling test's docstring for why their pooled
+    # n_ref (198/194) differs from the historical 201/197 pin (an unrelated,
+    # pre-existing roster/geometry-pool drift, not a scheme effect).
     for cat in ("translation", "rotation"):
         assert res["per_category"][cat]["recall_ideal"] == 1.0
         assert res["per_category"][cat]["n_ref_nonideal"] == 0
         assert res["per_category"][cat]["recall_nonideal"] != res["per_category"][cat]["recall_nonideal"]  # NaN
 
     # Pooled keys (existing behavior) must be untouched by this addition --
-    # match the sibling test's pooled numbers above (unaffected by the CO2
-    # retag -- see that test's docstring for why the pooled figures are
-    # actually from the PRIOR SnO2/FH3 session, not from today's CO2 change).
-    # 2026-08-10 G16 promotion: stretch recall 0.5960591133004927 ->
-    # 0.6009852216748769 (ClH3 mode 4 flip, see sibling test's docstring);
-    # 2026-08-14 reduced-mass weighting: -> 0.6059113300492611 (AsCl3 mode 4
-    # crosses the lowered tau_S; bend recall again UNCHANGED, tau_B is set by
-    # homoleptic IH3 and did not move);
-    # 2026-08-14 (same day, roster expansion): -> 0.6019900497512438 (stretch),
-    # -> 0.9230769230769231 (bend) -- H2O leaving calibration scope, see above.
-    # bend recall change is entirely explained by H2O's exit (the FBr3 pair
-    # still cancels net within what remains).
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.6019900497512438) < 1e-6
-    assert abs(res["per_category"]["bend"]["recall"] - 0.9230769230769231) < 1e-6
+    # match the sibling test's pooled numbers above.
+    # 2026-08-19 binary-classification-scheme default switch: see the
+    # sibling test's docstring for the mechanism. stretch recall
+    # 0.6019900497512438 -> 0.9651741293532339, bend recall stays 1.0
+    # (already exactly 1.0 under threeway too -- bend's own loss under
+    # binary shows up as reduced PRECISION, not recall, see sibling test).
+    assert abs(res["per_category"]["stretch"]["recall"] - 0.9651741293532339) < 1e-6
+    assert res["per_category"]["bend"]["recall"] == 1.0
 
 
 # --------------------------------------------------------------------------

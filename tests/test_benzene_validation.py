@@ -49,26 +49,34 @@ def test_benzene_normal_detail_covers_all_36_modes():
 
 
 def test_benzene_normal_summary_matches_ad_hoc_session_numbers():
-    """Pins the exact headline numbers (Task A), **updated 2026-07-05** for
-    the literature relabeling (mode_index 19/23/24 bend->stretch, 21/22
-    bend->SB -- see src/csv_label_ingest.py): 6/6 external correct; 7/10
-    literature stretch modes recalled (the 3 newly-stretch modes 19/23/24
-    still migrate to the predicted MIXED bucket, unchanged from before);
-    16/18 literature bend modes recalled (the 5 original bend "misses"
-    minus the 3 that moved to stretch = 2 remaining migrated-to-mixed,
-    modes 13/14); 0/2 literature SB modes recalled (modes 21/22 are BOTH
-    predicted a clean BENDING, not MIXED -- the tau_B purity-gate "bending
-    blind spot"; see benzene_internal_confusion_matrix for the full 3-class
-    table). ZERO crossings into the opposite clean category in either
-    direction (bend<->stretch), unaffected by the relabeling.
+    """Pins the exact headline numbers (Task A). History: 6/6 external
+    correct throughout. Under the three-way scheme (see
+    test_benzene_internal_confusion_matrix_3x3_matches_hand_derived_table
+    for that pinned table): 6/10 stretch, 13/18 bend, 2/2 SB recalled, with
+    the remainder migrating to the predicted MIXED bucket, zero
+    opposite-category (bend<->stretch) crossings.
 
-    **Re-derived 2026-08-14 (reduced-mass V-score weighting)**: 6/10 stretch,
-    13/18 bend, 2/2 SB. The tau_B "bending blind spot" described above is
-    GONE for benzene -- modes 21/22 now score 0.279/0.314 instead of
-    0.082/0.091 and are called MIXED, matching the literature. The cost is
-    that four more modes leave the pure buckets for MIXED. Zero
-    opposite-category crossings still holds. Per-mode causes are in the
-    assertion comments below."""
+    **Re-derived 2026-08-19 (binary-classification-scheme default switch)**:
+    `benzene_normal_reference_detail()`'s own default (`scheme=None`) now
+    tracks `library_scores.csv`'s own scheme, binary as of this switch --
+    forcing every internal mode to bend or stretch, never "mixed". Since
+    literature ref_label=='SB' (modes 21/22) can only ever be "correct"
+    against a predicted "mixed" bucket (`_expected_pred_bucket`), which
+    binary never produces, SB recall is now 0/2 by construction (NOT a
+    regression -- the binary scheme has no answer for "is this mode
+    genuinely mixed?", only "is it more stretch-like or bend-like?"). The
+    previously-migrated-to-mixed modes are now forced into a definite S/B
+    answer instead: stretch recall rises to 10/10 (perfect -- every
+    literature-stretch mode's V_Stretch clears tau_SB=0.5) and bend recall
+    is 17/18, with exactly ONE opposite-category crossing this time: mode 14
+    (1056.39 cm-1) crosses bend->stretch (its V_Stretch clears tau_SB even
+    though its literature label is bend) -- the three-way scheme's genuine
+    3-class table (via benzene_internal_confusion_matrix, scheme="threeway"
+    default) is unaffected and still shows zero crossings, since this
+    binary-forced call is a different question, not a threeway "miss".
+    n_migrated_to_mixed is 0 across every category under binary by
+    construction (binary never produces a "mixed" predicted bucket at
+    all)."""
     detail = benzene_normal_reference_detail(_lib())
     summary = benzene_normal_reference_summary(detail)
     by_ref = summary.set_index("ref_label")
@@ -81,21 +89,41 @@ def test_benzene_normal_summary_matches_ad_hoc_session_numbers():
     assert int(by_ref.loc["rotation", "n_correct"]) == 3
     assert by_ref.loc["rotation", "recall"] == 1.0
 
-    # 2026-08-14 reduced-mass weighting. Benzene has both C-C (mu 6.005) and
-    # C-H (mu 0.930) bonds, so unlike the homoleptic library it genuinely
-    # re-scores. Six modes change bucket, all of them into MIXED, and the
-    # trade is the point of the change: the two pure buckets each give some
-    # modes up, and in exchange the mixed bucket goes from finding NEITHER of
-    # the reference's two mixed modes to finding BOTH.
-    #   stretch 7 -> 6 correct (migrated to mixed 3 -> 4): Vib 25, the
-    #     3182.29 cm-1 C-H stretch, falls 0.982 -> 0.894, just under tau_S.
-    #   bend   16 -> 13 correct (migrated 2 -> 5): Vib 16 (1237.29) and the
-    #     Vib 17/18 pair (1247.14) rise out of the bending band.
-    #   SB      0 -> 2 correct, recall 0.0 -> 1.0: the 1532.85 cm-1 E1u pair
-    #     (Vib 21/22) rises 0.082/0.091 -> 0.279/0.314, so both of the
-    #     reference's mixed modes are now called mixed. This reverses the
-    #     manuscript's current argument about that pair -- see the JCC .tex
-    #     follow-up list, it needs rewriting rather than renumbering.
+    assert int(by_ref.loc["stretch", "n"]) == 10
+    assert int(by_ref.loc["stretch", "n_correct"]) == 10
+    assert by_ref.loc["stretch", "recall"] == 1.0
+    assert int(by_ref.loc["stretch", "n_migrated_to_mixed"]) == 0
+
+    assert int(by_ref.loc["bend", "n"]) == 18
+    assert int(by_ref.loc["bend", "n_correct"]) == 17
+    assert abs(by_ref.loc["bend", "recall"] - 17 / 18) < 1e-9
+    assert int(by_ref.loc["bend", "n_migrated_to_mixed"]) == 0
+    assert int(by_ref.loc["bend", "n_crossed_opposite"]) == 1
+
+    assert int(by_ref.loc["SB", "n"]) == 2
+    assert int(by_ref.loc["SB", "n_correct"]) == 0
+    assert by_ref.loc["SB", "recall"] == 0.0
+    assert int(by_ref.loc["SB", "n_migrated_to_mixed"]) == 0
+    assert int(by_ref.loc["SB", "n_crossed_opposite"]) == 0
+
+    assert int(by_ref.loc["stretch", "n_crossed_opposite"]) == 0
+
+
+def test_benzene_normal_summary_threeway_matches_prior_pinned_numbers():
+    """The three-way scheme's own numbers (explicit scheme="threeway",
+    bypassing the now-binary-default library_scores.csv column via the
+    cheap V_Stretch rescheme -- see benzene_normal_reference_detail's
+    docstring), pinned 2026-08-14 under reduced-mass V-score weighting and
+    UNCHANGED by the 2026-08-19 binary-default switch (V_Stretch itself
+    never depends on scheme, only which cutoffs are applied to it): 6/10
+    stretch, 13/18 bend, 2/2 SB recalled -- see
+    test_benzene_internal_confusion_matrix_3x3_matches_hand_derived_table
+    for the full 3x3 breakdown these numbers are consistent with. Zero
+    opposite-category (bend<->stretch) crossings."""
+    detail = benzene_normal_reference_detail(_lib(), scheme="threeway")
+    summary = benzene_normal_reference_summary(detail)
+    by_ref = summary.set_index("ref_label")
+
     assert int(by_ref.loc["stretch", "n"]) == 10
     assert int(by_ref.loc["stretch", "n_correct"]) == 6
     assert abs(by_ref.loc["stretch", "recall"] - 0.6) < 1e-9
@@ -111,7 +139,6 @@ def test_benzene_normal_summary_matches_ad_hoc_session_numbers():
     assert by_ref.loc["SB", "recall"] == 1.0
     assert int(by_ref.loc["SB", "n_migrated_to_mixed"]) == 0
 
-    # The zero-crossings claim, computed, not eyeballed.
     assert int(by_ref.loc["stretch", "n_crossed_opposite"]) == 0
     assert int(by_ref.loc["bend", "n_crossed_opposite"]) == 0
     assert int(by_ref.loc["SB", "n_crossed_opposite"]) == 0
@@ -342,12 +369,17 @@ def test_benzene_worked_examples_raises_if_fewer_than_two_stretch_modes():
 
 
 def test_benzene_mixed_bond_diagnostic_raises_if_no_mixed_modes():
+    """scheme="binary" explicitly: benzene_mixed_bond_diagnostic's own
+    default (scheme="threeway") cheaply RE-DERIVES predicted_label from
+    V_Stretch (rescheme_internal_label), which would ignore a hand-mutated
+    predicted_label column and still find the real threeway "mixed" modes --
+    so the no-mixed-modes edge case has to be forced via the scheme itself
+    (binary never produces "mixed" at all, by construction) rather than by
+    mutating the (now-irrelevant, since it gets rescheme'd away)
+    predicted_label column the way this test used to."""
     lib_df = _lib().copy()
-    mask = lib_df["molecule"] == MOLECULE
-    lib_df.loc[mask, "predicted_label"] = lib_df.loc[mask, "predicted_label"].replace(
-        MIXED_STRETCH_BEND, BENDING)
     try:
-        benzene_mixed_bond_diagnostic(lib_df)
+        benzene_mixed_bond_diagnostic(lib_df, scheme="binary")
         assert False, "expected ValueError when no MIXED_STRETCH_BEND modes exist"
     except ValueError:
         pass

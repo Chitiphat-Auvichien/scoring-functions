@@ -52,10 +52,17 @@ TOL = 5e-4  # 3 decimal places
 _PROVISIONAL = Thresholds()
 
 
-def _classify(mol, mode_type):
+def _classify(mol, mode_type, scheme="threeway"):
+    """`scheme` pinned to "threeway" by default: every golden target below
+    (water B/S, benzene EMIT 34/35/36 SB annotation, CO2) was derived/pinned
+    under the three-way scheme, so this keeps them fixed and reproducible
+    even though classify_all_modes()'s own default flipped to "binary" (the
+    2026-08 paper-standard switch) -- see
+    test_classify_all_modes_default_scheme_is_now_binary below for the
+    dedicated check that the new global default is genuinely binary."""
     raw, _ = load_inputs(mol, mode_type, os.path.join(ROOT, "data"))
     scorer, final = build_scorer_and_final(raw, mode_type)
-    scored = classify_all_modes(scorer, final, _PROVISIONAL)
+    scored = classify_all_modes(scorer, final, _PROVISIONAL, scheme=scheme)
     return {m["name"]: m for m in scored}
 
 
@@ -237,6 +244,25 @@ def test_classify_all_modes_binary_scheme_never_produces_sb():
     for name in scored_3:
         if scored_3[name]["classification"] != MIXED_STRETCH_BEND:
             assert scored_3[name]["classification"] == scored_b[name]["classification"], name
+
+
+def test_classify_all_modes_default_scheme_is_now_binary():
+    """2026-08 paper-standard switch: classify_all_modes()'s own default
+    (no `scheme` kwarg at all, unlike `_classify()` above which pins
+    "threeway" explicitly) must now be BINARY, not threeway. Benzene EMIT
+    34/35 (V_Stretch 0.667/0.577, both >= tau_SB=0.5) are STRETCHING under
+    binary, never MIXED_STRETCH_BEND -- the mirror-image check of
+    test_benzene_emit_34_35_mixed_external's threeway-pinned "SB" result."""
+    raw, _ = load_inputs("C6H6", "emit", os.path.join(ROOT, "data"))
+    scorer, final = build_scorer_and_final(raw, "emit")
+    scored = {m["name"]: m for m in classify_all_modes(scorer, final, _PROVISIONAL)}  # no scheme=
+    assert scored["EMIT 34"]["classification"] == "Tx*"
+    assert scored["EMIT 34"]["annotation"] == f"vibration={STRETCHING}"
+    assert scored["EMIT 35"]["classification"] == "Ty*"
+    assert scored["EMIT 35"]["annotation"] == f"vibration={STRETCHING}"
+    # Confirms this genuinely differs from the threeway-pinned result above,
+    # not just a coincidentally-identical annotation string.
+    assert vib_label(0.667, _PROVISIONAL) != vib_label(0.667, _PROVISIONAL, scheme="threeway")
 
 
 if __name__ == "__main__":

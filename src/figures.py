@@ -77,6 +77,7 @@ import matplotlib.colors as mcolors
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 import matplotlib.patheffects as pe
+import matplotlib.ticker as mtick
 from scipy.optimize import curve_fit
 
 from src.classifier import (
@@ -1489,6 +1490,91 @@ def plot_benzene_internal_confusion(
     return summary_dict
 
 
+def plot_benzene_internal_confusion_binary(
+    library_csv="data/results/library_scores.csv",
+    out_dir="data/figures",
+    label="fig_benzene_confusion_binary",
+    tau_SB=None,
+):
+    """Binary-scheme sibling of plot_benzene_internal_confusion
+    (fig:benzeneconfusion): benzene's 6 external (Tx..Rz, collapsed to one
+    T/R row/column) + internal modes, but:
+
+    - internal reference rows literally labeled "SB" (modes 21/22) are
+      DROPPED (n_dropped_sb_ref), not folded into a bucket -- a binary
+      classifier has no "mixed" answer to compare a genuine literature "is
+      this mode mixed?" label against, same convention as
+      plot_confusion_matrix_binary/plot_transferability_confusion_binary.
+    - every remaining internal row's predicted category comes from
+      vib_label_binary(V_Stretch, tau_SB) instead of the three-way
+      predicted_label, so the internal side of the matrix is 2-way
+      (bend/stretch only, never "mixed").
+
+    tau_SB defaults to Thresholds.calibrated().tau_SB. Reads
+    library_scores.csv directly (unlike plot_benzene_internal_confusion,
+    which uses benzene_normal_reference_detail() -- that helper doesn't
+    carry V_Stretch, which this figure needs) -- self-contained, doesn't
+    depend on plot_benzene_internal_confusion having run.
+    """
+    _style()
+    from src.benzene_validation import MOLECULE
+
+    lib_df = pd.read_csv(library_csv)
+    b = lib_df[(lib_df["molecule"] == MOLECULE) & lib_df["ref_label"].notna()].copy()
+    tau_SB = tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB
+
+    n_dropped_sb_ref = int((b["ref_label"] == "SB").sum())
+    b = b[b["ref_label"] != "SB"]
+
+    def _binarize(row):
+        if row["kind"] != "internal":
+            return row["predicted_label"]
+        bucket = classification_bucket(row["predicted_label"])
+        if bucket in ("stretch", "bend", "mixed"):
+            return vib_label_binary(row["V_Stretch"], tau_SB)
+        return row["predicted_label"]  # external crossover -- left untouched
+
+    b["predicted_label"] = b.apply(_binarize, axis=1)
+
+    ref_order = ["T/R", "bend", "stretch"]
+    pred_order = ["T/R", "bend", "stretch"]
+    tbl = _joint_confusion_table(b, ref_order, pred_order, collapse_external=True)
+    n_total = int(tbl.values.sum())
+
+    fig, ax_h = plt.subplots(figsize=(4.6, 4.2))
+    _confusion_heatmap(ax_h, fig, tbl, ref_order)
+
+    ext_rows, int_rows = ref_order[:1], ref_order[1:]
+    ext_cols, int_cols = pred_order[:1], pred_order[1:]
+    crossover_ext_ref_to_internal_pred = int(tbl.loc[ext_rows, int_cols].values.sum())
+    crossover_internal_ref_to_ext_pred = int(tbl.loc[int_rows, ext_cols].values.sum())
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary_dict = {
+        "pdf": pdf_path, "png": png_path,
+        "tau_SB": tau_SB,
+        "shared_categories": ("reuses CATEGORY_COLOR/CATEGORY_LABEL/"
+                               "_confusion_heatmap from plot_confusion_matrix "
+                               "(fig:confusion) -- does not modify "
+                               "fig:benzeneconfusion itself."),
+        "n_total": n_total,
+        "n_dropped_sb_ref": n_dropped_sb_ref,
+        "confusion_table": tbl.to_dict(),
+        "crossover_ext_ref_to_internal_pred": crossover_ext_ref_to_internal_pred,
+        "crossover_internal_ref_to_ext_pred": crossover_internal_ref_to_ext_pred,
+        "note": (f"3x3 joint matrix (binary scheme, tau_SB={tau_SB:g}): benzene's "
+                 "6 external T/R modes collapsed to one T/R row/column (per-axis "
+                 "detail lives in fig:confusion instead); the 2 literal literature "
+                 "'SB' reference rows (modes 21/22) are dropped rather than folded "
+                 "into a bucket. Binary sibling of fig:benzeneconfusion -- see that "
+                 "figure for the three-way (S/B/SB) version."),
+    }
+    return summary_dict
+
+
 def plot_benzene_confusion_precision_recall(
     matrix_csv="data/results/benzene_internal_confusion_matrix.csv",
     summary_csv="data/results/benzene_internal_confusion_summary.csv",
@@ -2263,7 +2349,8 @@ def plot_tau_sb_sensitivity(
     l2, = ax1.plot(sweep["tau_SB"], sweep["error_test"], color=COLORS["sens_accuracy"],
                    marker="s", markersize=2.5, lw=1.1, zorder=3, label="error (test)")
     ax1.set_xlabel(r"$\tau_{\mathrm{SB}}$")
-    ax1.set_ylabel("Classification error (binary S/B scheme)")
+    ax1.set_ylabel("Classification error")
+    ax1.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
     ax1.set_ylim(-0.01, max(0.05, float(sweep[["error_all", "error_test"]].max().max()) * 1.1))
     ax1.legend(loc="best", frameon=False, fontsize=LEGEND_FONTSIZE,
                handletextpad=0.5, labelspacing=0.4)
@@ -2888,6 +2975,8 @@ def regenerate_all(verbose=True):
         ("fig:transferabilityconfusion binary scheme (no fig: label yet)",
          plot_transferability_confusion_binary),
         ("fig:benzeneconfusion", plot_benzene_internal_confusion),
+        ("fig:benzeneconfusion binary scheme (no fig: label yet)",
+         plot_benzene_internal_confusion_binary),
         ("SI benzene precision/recall (no fig: label yet)", plot_benzene_confusion_precision_recall),
         ("fig:benzeneemitcounts", plot_benzene_emit_counts),
         ("fig:bondscores", plot_bond_scores),

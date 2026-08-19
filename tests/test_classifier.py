@@ -41,7 +41,7 @@ sys.path.insert(0, ROOT)
 from main import load_inputs, build_scorer_and_final              # noqa: E402
 from src.classifier import (                                       # noqa: E402
     classify_all_modes, classify_to_rows, Thresholds,
-    is_mixed_external,
+    is_mixed_external, vib_label, vib_label_binary,
     STRETCHING, BENDING, MIXED_STRETCH_BEND,
 )
 
@@ -171,6 +171,72 @@ def test_rejects_thresholds_calibrated_for_the_other_weighting():
     # Matching, and the '*' bootstrap sentinel, both go through.
     assert classify_all_modes(scorer, final, Thresholds(v_weighting="mu"))
     assert classify_all_modes(scorer, final, Thresholds.bootstrap())
+
+
+def test_vib_label_binary_boundary_and_no_third_outcome():
+    """vib_label_binary forces every value to S or B -- there is no third
+    outcome, unlike the threeway split's MIXED_STRETCH_BEND band."""
+    tau_SB = 0.5
+    assert vib_label_binary(0.0, tau_SB) == BENDING
+    assert vib_label_binary(0.499999, tau_SB) == BENDING
+    assert vib_label_binary(0.5, tau_SB) == STRETCHING  # boundary: >= -> STRETCHING
+    assert vib_label_binary(1.0, tau_SB) == STRETCHING
+    # A value that would be MIXED_STRETCH_BEND under the threeway split
+    # (strictly between tau_B and tau_S) still lands cleanly on one side here.
+    assert vib_label_binary(0.6, tau_SB) in (STRETCHING, BENDING)
+
+
+def test_vib_label_scheme_param_delegates_to_binary():
+    """vib_label(..., scheme="binary") must delegate to vib_label_binary
+    (same tau_SB cutoff, same S/B-only vocabulary) rather than reimplementing it."""
+    thresholds = Thresholds(tau_S=0.9, tau_B=0.2, tau_SB=0.5)
+    for v in (0.0, 0.2, 0.45, 0.5, 0.6, 0.9, 1.0):
+        assert vib_label(v, thresholds, scheme="binary") == vib_label_binary(v, thresholds.tau_SB)
+    # Threeway is unaffected by tau_SB entirely -- a value in the SB band
+    # under threeway must still come out MIXED_STRETCH_BEND there, even
+    # though the binary scheme (same thresholds object) would call it S or B.
+    assert vib_label(0.45, thresholds, scheme="threeway") == MIXED_STRETCH_BEND
+    assert vib_label(0.45, thresholds, scheme="binary") == BENDING
+
+
+def test_classify_all_modes_binary_scheme_never_produces_sb():
+    """On a real mode pool (benzene's normal modes) with known V_Stretch
+    values straddling tau_SB=0.5 and both strictly inside the threeway
+    SB band (tau_B=0.2 < V < tau_S=0.9), scheme='threeway' must produce
+    MIXED_STRETCH_BEND for both, while scheme='binary' must produce S or B
+    for EVERY internal mode in the pool (never 'SB') -- and specifically
+    diverge on these two modes (Vib 13 -> B, Vib 14 -> S), confirming the
+    two schemes are genuinely different, not just synonyms.
+    """
+    raw, _ = load_inputs("C6H6", "normal", os.path.join(ROOT, "data"))
+    scorer, final = build_scorer_and_final(raw, "normal")
+    thresholds = Thresholds()  # provisional tau_S=0.9, tau_B=0.2, tau_SB=0.5
+
+    scored_3 = {m["name"]: m for m in classify_all_modes(scorer, final, thresholds, scheme="threeway")}
+    scored_b = {m["name"]: m for m in classify_all_modes(scorer, final, thresholds, scheme="binary")}
+
+    # Both real modes' V_Stretch sit strictly inside the threeway SB band.
+    assert 0.2 < scored_3["Vib 13"]["V"] < 0.9
+    assert 0.2 < scored_3["Vib 14"]["V"] < 0.9
+    assert scored_3["Vib 13"]["classification"] == MIXED_STRETCH_BEND
+    assert scored_3["Vib 14"]["classification"] == MIXED_STRETCH_BEND
+
+    # Binary scheme diverges: same V_Stretch, different verdict either side
+    # of tau_SB=0.5 (Vib 13's V~0.451 < 0.5 -> BENDING; Vib 14's V~0.509 >= 0.5 -> STRETCHING).
+    assert scored_b["Vib 13"]["classification"] == BENDING
+    assert scored_b["Vib 14"]["classification"] == STRETCHING
+
+    # No internal (non-external-slot) mode in the WHOLE pool is ever labeled
+    # "SB" under the binary scheme.
+    for m in scored_b.values():
+        assert m["classification"] != MIXED_STRETCH_BEND
+
+    # Step 2/3 (external T/R assignment + purity gates) are untouched by
+    # scheme -- every mode's classification is identical between the two
+    # runs EXCEPT where the threeway label was literally "SB".
+    for name in scored_3:
+        if scored_3[name]["classification"] != MIXED_STRETCH_BEND:
+            assert scored_3[name]["classification"] == scored_b[name]["classification"], name
 
 
 if __name__ == "__main__":

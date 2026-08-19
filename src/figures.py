@@ -560,7 +560,7 @@ def plot_benzene_normal_modes(
     _style()
     normal = pd.read_csv(normal_csv)
     thresholds = Thresholds.calibrated()
-    TAU_S, TAU_B = thresholds.tau_S, thresholds.tau_B
+    TAU_SB = thresholds.tau_SB
 
     # Width 7.2in leaves horizontal room to manually composite depicted
     # normal-mode panel images beside the scatter.
@@ -592,27 +592,19 @@ def plot_benzene_normal_modes(
         ax.scatter(row["Freq"], row["V_Stretch"], s=26, zorder=3,
                    label=leg_label, **kw)
 
-    ax.axhline(TAU_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-    ax.axhline(TAU_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-    # Threshold labels nudged clear of their dashed lines (y_offset). tau_S's
-    # label is anchored LEFT (x=0.02), not right like tau_B: the S/stretch
-    # cluster sits in the upper-right corner (high freq, s[V_S]~1), which a
-    # right-anchored tau_S label would collide with.
+    ax.axhline(TAU_SB, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
     y_offset = 0.045
-    ax.text(0.02, TAU_S + y_offset, r"$\tau_\text{S}=$" + f"{TAU_S:.2f}", ha="left",
-            va="bottom", color=COLORS["threshold"],
-            transform=ax.get_yaxis_transform())
-    ax.text(0.98, TAU_B - y_offset, r"$\tau_\text{B}=$" + f"{TAU_B:.2f}", ha="right",
-            va="top", color=COLORS["threshold"],
+    # Right side (ha="right"), clear of the legend which sits on the left.
+    ax.text(0.98, TAU_SB + y_offset, r"$\tau_{\mathrm{SB}}=$" + f"{TAU_SB:.2f}",
+            ha="right", va="bottom", color=COLORS["threshold"],
             transform=ax.get_yaxis_transform())
 
     ax.set_xlabel(r"Frequency (cm$^{-1}$)")
     ax.set_ylabel(r"$s[\mathrm{V_S}]$")
     ax.set_ylim(-0.05, 1.15)
     ax.set_xlim(-120, normal["Freq"].max() * 1.06)
-    # Anchored between the tau_B/tau_S lines (that band is empty of points),
-    # not the default "upper left", which would put the dashed threshold
-    # lines straight through the legend text.
+    # Anchored clear of the tau_SB line, not the default "upper left", which
+    # would put the dashed threshold line straight through the legend text.
     ax.legend(loc="center left", bbox_to_anchor=(0.0, 0.52), frameon=False,
               handletextpad=0.3, labelspacing=0.3, borderaxespad=0.2)
 
@@ -633,7 +625,7 @@ def plot_benzene_normal_modes(
         "n_points": len(normal),
         "freq_range": (float(normal["Freq"].min()), float(normal["Freq"].max())),
         "vs_range": (float(normal["V_Stretch"].min()), float(normal["V_Stretch"].max())),
-        "tau_S": TAU_S, "tau_B": TAU_B,
+        "tau_SB": TAU_SB,
     }
     return summary
 
@@ -1988,8 +1980,8 @@ def plot_boxplots(
         ax.set_ylabel(ylabel)
         ax.set_title(title, loc="center", fontweight="bold")
 
-    # tau_S/tau_B are not drawn on panel (c) (visual clutter); values are
-    # still returned below for the caption/summary.
+    # tau_SB is not drawn on panel (c) (visual clutter); the value is still
+    # returned below for the caption/summary.
     th = Thresholds.calibrated()
 
     fig.tight_layout()
@@ -2010,7 +2002,7 @@ def plot_boxplots(
         "freq_range": (float(internal["freq"].min()), float(internal["freq"].max())),
         "delta_b_range": (float(internal["delta_b_mean"].min()), float(internal["delta_b_mean"].max())),
         "vscore_range": (float(internal["V_Stretch"].min()), float(internal["V_Stretch"].max())),
-        "tau_S": th.tau_S, "tau_B": th.tau_B,
+        "tau_SB": th.tau_SB,
     }
     return summary
 
@@ -2072,8 +2064,7 @@ def plot_mode_mixing(
             point_label = f"{CATEGORY_LABEL[cat]}, {ideal_suffix}"
             ax.scatter(sub["delta_b_mean"], sub["V_Stretch"], s=20,
                        label=point_label, **kw)
-        ax.axhline(th.tau_S, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-        ax.axhline(th.tau_B, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
+        ax.axhline(th.tau_SB, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
         ax.set_xlabel(r"Averaged $|\Delta|\boldsymbol{b}|\,/\,|\boldsymbol{b}|\,|$")
         ax.set_title(title, loc="center", fontweight="bold")
         ax.set_xlim(-0.03, internal["delta_b_mean"].max() * 1.08)
@@ -2089,9 +2080,8 @@ def plot_mode_mixing(
     ax_n.legend(loc="center right", frameon=True, edgecolor="black",
                 facecolor="white", framealpha=1.0,
                 handletextpad=0.4, labelspacing=0.4)
-    ax_i.text(0.98, th.tau_S, r"$\tau_\text{S}$", ha="right", va="bottom",
-              color=COLORS["threshold"], transform=ax_i.get_yaxis_transform())
-    ax_i.text(0.98, th.tau_B, r"$\tau_\text{B}$", ha="right", va="top",
+    # Left side, clear of the "center right" legend.
+    ax_i.text(0.02, th.tau_SB, r"$\tau_{\mathrm{SB}}$", ha="left", va="bottom",
               color=COLORS["threshold"], transform=ax_i.get_yaxis_transform())
 
     fig.tight_layout()
@@ -2111,7 +2101,7 @@ def plot_mode_mixing(
                                "fig:benzene / fig:bondscores / fig:boxplots."),
         "n_ideal_modes": n_ideal,
         "n_nonideal_modes": n_nonideal,
-        "tau_S": th.tau_S, "tau_B": th.tau_B,
+        "tau_SB": th.tau_SB,
         "irrep_degeneracy_panel": ("NOT BUILT in this figure -- see the "
                                    "separate SI figure plot_irrep_coupling "
                                    "(fig_irrep_coupling) below (AB3 "

@@ -7,32 +7,57 @@ recomputes scores -- presentation-only), builds the figure with the shared
 house style (``_style()``), writes a vector PDF + >=300 dpi PNG under
 ``data/figures/``, and returns a summary dict (paths + sanity numbers).
 
+CANONICAL SCHEME (2026-08 binary-classification switch): ``binary`` is now
+THE scheme for the whole paper (``classifier.classify_all_modes``'s own
+default). Consequently the CANONICAL (unsuffixed) figure names below are now
+produced by what used to be the "binary sibling" functions;
+their three-way counterparts are kept fully functional -- not deleted, not
+weakened -- but their outputs moved to ``_threeway``-suffixed names, mirroring
+the pre-existing ``_binary`` suffix convention (now retired since binary is
+no longer the suffixed variant). Every ``plot_*_binary`` function below now
+writes the UNSUFFIXED canonical name; every corresponding non-``_binary``
+three-way function now writes a ``_threeway``-suffixed name. See
+``src/classifier.py``'s ``vib_label_binary``/
+``classify_all_modes(..., scheme="binary")`` for the underlying scheme.
+
 Main-text figures: ``plot_benzene_stress_test`` (fig:benzene),
 ``plot_benzene_emit_counts`` (fig:benzeneemitcounts, overview bar chart of
 how benzene's 36 EMIT modes classify across T/R axes and S/B/SB),
-``plot_confusion_matrix`` (fig:confusion, single-tier non-ideal layout --
-the genuine non-circular validation; thresholds are fixed on the ideal
-population and applied without retuning), ``plot_bond_scores``
+``plot_confusion_matrix_binary`` (fig:confusion, CANONICAL as of the binary
+switch -- single-tier non-ideal layout, the genuine non-circular validation;
+thresholds are fixed on the ideal population and applied without retuning;
+three-way sibling ``plot_confusion_matrix`` now writes
+``fig_confusion_threeway``), ``plot_bond_scores``
 (fig:bondscores), ``plot_boxplots`` (fig:boxplots), ``plot_mode_mixing``
-(fig:modemixing), ``plot_sensitivity`` (fig:sensitivity).
+(fig:modemixing), ``plot_sensitivity`` (fig:sensitivity -- the tau_TR sweep;
+NOT renamed/swapped with ``plot_tau_sb_sensitivity``, a genuinely different
+sweep over a different threshold, see that function's docstring).
 
 SI/standalone figures (no ``fig:`` label): ``plot_benzene_normal_modes``
 (all 36 real normal modes, worked examples called out; companion to
-fig:benzene, does not replace it), ``plot_benzene_internal_confusion``
-(fig:benzeneconfusion, benzene's own 3x3 bend/stretch/SB internal confusion
-matrix, enabled by the literature "SB" relabeling of modes 21/22),
+fig:benzene, does not replace it), ``plot_benzene_internal_confusion_binary``
+(fig:benzeneconfusion, CANONICAL as of the binary switch -- benzene's own
+2x2 bend/stretch internal confusion matrix; three-way sibling
+``plot_benzene_internal_confusion`` now writes ``fig_benzene_confusion_threeway``
+and keeps the genuine 3x3 bend/stretch/SB breakdown enabled by the
+literature "SB" relabeling of modes 21/22),
 ``plot_benzene_confusion_precision_recall`` (the precision/recall numbers
-for that matrix, split into its own figure since a formal-metric panel sits
-awkwardly next to this section's deliberate "mixed by eye is a convention"
-hedging), ``plot_rigorous_tier_check`` (the removed ideal-tier confusion
-panels from fig:confusion -- precision/recall=1.000 there is circular by
-construction, kept only as a self-consistency check, not an accuracy claim),
-``plot_transferability_confusion`` (fig:transferabilityconfusion, PROPOSED --
-the 18-molecule held-out "test" tier's own joint T/R/B/SB/S confusion matrix,
-genuinely non-circular since this tier is excluded from tau_S/tau_B
-calibration and its internal ground truth is independently hand-curated in
+for the three-way matrix, split into its own figure since a formal-metric
+panel sits awkwardly next to this section's deliberate "mixed by eye is a
+convention" hedging), ``plot_rigorous_tier_check`` (the removed ideal-tier
+confusion panels from fig:confusion -- precision/recall=1.000 there is
+circular by construction, kept only as a self-consistency check, not an
+accuracy claim), ``plot_transferability_confusion_binary``
+(fig:transferabilityconfusion, PROPOSED, CANONICAL as of the binary switch --
+the 18-molecule held-out "test" tier's own joint T/R/B/S confusion matrix
+[literal literature "SB" reference rows DROPPED, not bucketed], genuinely
+non-circular since this tier is excluded from tau_S/tau_B calibration and
+its internal ground truth is independently hand-curated in
 ``characterised_modes.csv``; T and R are kept SEPARATE, unlike
-fig:benzeneconfusion's collapsed "T/R"), ``plot_irrep_coupling``
+fig:benzeneconfusion's collapsed "T/R"; three-way sibling
+``plot_transferability_confusion`` now writes
+``fig_transferability_confusion_threeway`` and keeps the 5-way T/R/B/SB/S
+breakdown), ``plot_irrep_coupling``
 (irrep-degeneracy mixing-mechanism figure: mode
 score vs. central-atom displacement amplitude, faceted by same-irrep
 coupling partner; reads ``irrep``/``shape``/``type`` from
@@ -40,21 +65,16 @@ coupling partner; reads ``irrep``/``shape``/``type`` from
 ``mol_type``, and scores from ``library_scores.csv``), ``plot_cpu_time_benchmark``
 (fig:cputime, PROPOSED label not yet wired into the .tex -- empirical CPU-time
 figure for the "Computational cost" section as it is rewritten away from a
-pure Big-O argument; reads ``data/results/cpu_time_benchmark.csv``).
-
-Binary-classification-scheme siblings (net-new, no ``fig:`` label yet, do
-NOT modify their three-way counterparts' inputs or outputs):
-``plot_confusion_matrix_binary`` (binary sibling of ``plot_confusion_matrix``,
-2-way bend/stretch internal categories, single-centre non-ideal tier),
-``plot_transferability_confusion_binary`` (binary sibling of
-``plot_transferability_confusion``, 18-molecule test tier, 4-way T/R/B/S --
-literal literature "SB" reference rows DROPPED rather than bucketed),
+pure Big-O argument; reads ``data/results/cpu_time_benchmark.csv``),
 ``plot_tau_sb_sensitivity`` (error_all/error_test vs. tau_SB line plot,
-mirrors ``plot_sensitivity``'s structure; reads
-``data/results/tau_sb_sensitivity_sweep.csv`` from
-``src.calibrate.run_tau_sb_error_analysis``). See ``src/classifier.py``'s
-``vib_label_binary``/``classify_all_modes(..., scheme="binary")`` for the
-underlying binary classification scheme these figures visualize.
+mirrors ``plot_sensitivity``'s structure but sweeps the single tau_SB cutoff,
+not tau_TR -- reads ``data/results/tau_sb_sensitivity_sweep.csv`` from
+``src.calibrate.run_tau_sb_error_analysis``).
+
+Both schemes' figures are always registered in ``regenerate_all()`` (see its
+``fns`` list) -- ``--figures`` regenerates both the canonical (binary) and
+``_threeway``-suffixed outputs every run, so neither scheme is ever silently
+stale or disabled.
 
 Cross-figure visual consistency: every figure encoding a classification
 category reuses the same ``CATEGORY_COLOR``/``CATEGORY_MARKER``/
@@ -767,14 +787,18 @@ def _confusion_heatmap(ax, fig, tbl, ref_order, label_map=CATEGORY_LABEL,
 def plot_confusion_matrix(
     library_csv="data/results/library_scores.csv",
     out_dir="data/figures",
-    label="fig_confusion",
+    label="fig_confusion_threeway",
 ):
-    """Build fig:confusion as a single-panel JOINT confusion matrix: the
-    non-ideal tier's internal rows (``ideal == 'no'``) plus the external
-    (Tx..Rz) reference rows for those same molecules, in one crosstab.
-    Joint (not internal-only) because it verifies that no internal mode's
-    residual character ever wins an external Step-2 slot or vice versa --
-    the off-diagonal external<->internal blocks are computed and reported
+    """Three-way sibling of ``plot_confusion_matrix_binary`` (which now owns
+    the canonical ``fig_confusion`` name/output, the paper's default scheme
+    as of the 2026-08 binary-classification switch) -- kept fully functional
+    for comparison/on-demand use, not deleted. Builds a single-panel JOINT
+    confusion matrix: the non-ideal tier's internal rows (``ideal == 'no'``)
+    plus the external (Tx..Rz) reference rows for those same molecules, in
+    one crosstab. Joint (not internal-only) because it verifies that no
+    internal mode's residual character ever wins an external Step-2 slot or
+    vice versa -- the off-diagonal external<->internal blocks are computed
+    and reported
     (``crossover_ext_ref_to_internal_pred``/``crossover_internal_ref_to_ext_pred``),
     not assumed zero.
 
@@ -790,15 +814,29 @@ def plot_confusion_matrix(
     ``plot_confusion_retention_migration``. ``filter_single_centre_library``
     is applied explicitly (not left to confusion_matrix_stats's internal
     filter) so internal and external rows share the same molecule scope.
+
+    THREE-WAY RESCHEME: ``library_scores.csv``'s own ``predicted_label`` is
+    built under the global default scheme (binary as of the 2026-08 switch),
+    which never produces "mixed" -- so this figure re-derives every internal
+    row's ``predicted_label`` under ``scheme="threeway"`` from its own
+    ``V_Stretch`` (``classifier.rescheme_internal_label``, cheap, no
+    re-parse/re-run of Step 1-3) before building the confusion table, so the
+    "mixed" column stays genuinely populated regardless of what scheme the
+    cached CSV happens to be built under.
     """
     _style()
     from src.calibrate import confusion_matrix_stats, filter_single_centre_library
+    from src.classifier import rescheme_internal_label
 
     lib_df = pd.read_csv(library_csv)
     lib_df = filter_single_centre_library(lib_df)
     thresholds = Thresholds.calibrated()
 
-    nonideal_df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ideal"] == "no")]
+    nonideal_df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ideal"] == "no")].copy()
+    nonideal_df["predicted_label"] = nonideal_df.apply(
+        lambda row: rescheme_internal_label(row["predicted_label"], row["V_Stretch"],
+                                             thresholds, "threeway"),
+        axis=1)
     stats_n = confusion_matrix_stats(nonideal_df, thresholds)
 
     nonideal_molecules = nonideal_df["molecule"].unique()
@@ -876,10 +914,13 @@ def plot_confusion_matrix(
 def plot_confusion_matrix_binary(
     library_csv="data/results/library_scores.csv",
     out_dir="data/figures",
-    label="fig_confusion_binary",
+    label="fig_confusion",
     tau_SB=None,
 ):
-    """Binary-scheme sibling of plot_confusion_matrix (fig:confusion): same
+    """Binary-scheme sibling of plot_confusion_matrix (fig:confusion,
+    threeway version now at ``fig_confusion_threeway``) -- CANONICAL as of
+    the 2026-08 binary-classification switch (this function now owns the
+    ``fig_confusion`` name/output, the paper's default scheme). Same
     non-ideal single-centre scope (filter_single_centre_library + ideal ==
     'no'), same joint external+internal crosstab machinery
     (_joint_confusion_table/_confusion_heatmap), but every internal row that
@@ -1158,17 +1199,27 @@ def plot_rigorous_tier_check(
 def plot_transferability_confusion(
     library_csv="data/results/library_scores.csv",
     out_dir="data/figures",
-    label="fig_transferability_confusion",
-    matrix_csv_path="data/results/transferability_confusion_matrix.csv",
-    summary_csv_path="data/results/transferability_confusion_summary.csv",
-    misclassified_csv_path="data/results/transferability_confusion_misclassified.csv",
+    label="fig_transferability_confusion_threeway",
+    matrix_csv_path="data/results/transferability_confusion_threeway_matrix.csv",
+    summary_csv_path="data/results/transferability_confusion_threeway_summary.csv",
+    misclassified_csv_path="data/results/transferability_confusion_threeway_misclassified.csv",
 ):
-    """Build fig:transferabilityconfusion: a single 5x5 joint confusion
-    matrix (T, R, B, SB, S) pooling all 18 ``mol_type=='test'`` molecules'
-    modes -- external (Tx..Rz) rows exact by Eckart-Sayvetz construction,
-    internal (B/S/SB) rows from the hand-curated ``ref_label`` column
-    ``src/library_ingest.py::attach_labels()`` joins in from
-    ``data/characterised_modes.csv``.
+    """Three-way sibling of ``plot_transferability_confusion_binary`` (which
+    now owns the canonical ``fig_transferability_confusion`` name/output, the
+    paper's default scheme as of the 2026-08 binary-classification switch)
+    -- kept fully functional for comparison/on-demand use, not deleted.
+    Builds a single 5x5 joint confusion matrix (T, R, B, SB, S) pooling all
+    18 ``mol_type=='test'`` molecules' modes -- external (Tx..Rz) rows exact
+    by Eckart-Sayvetz construction, internal (B/S/SB) rows from the
+    hand-curated ``ref_label`` column ``src/library_ingest.py::attach_labels()``
+    joins in from ``data/characterised_modes.csv``.
+
+    THREE-WAY RESCHEME: like ``plot_confusion_matrix``, this figure
+    re-derives every internal row's ``predicted_label`` under
+    ``scheme="threeway"`` from its own ``V_Stretch``
+    (``classifier.rescheme_internal_label``) before use, since
+    ``library_scores.csv``'s own column is built under the global default
+    scheme (binary) and would otherwise never populate the "SB" prediction.
 
     T/R ground truth: first character of the external row's ``mode_index``
     ("Tx"->"T", "Rz"->"R"). T/R prediction: ``classifier.external_axis()``
@@ -1190,13 +1241,20 @@ def plot_transferability_confusion(
     look at, not just the aggregate counts in ``matrix_csv_path``.
     """
     _style()
-    from src.classifier import classification_bucket, external_axis
+    from src.classifier import classification_bucket, external_axis, rescheme_internal_label
     from src.csv_label_ingest import load_label_csvs
     from src.library_ingest import test_tier_molecules
 
     lib_df = pd.read_csv(library_csv)
     test_mols = test_tier_molecules()
     df = lib_df[lib_df["molecule"].isin(test_mols)].copy()
+
+    thresholds = Thresholds.calibrated()
+    internal_mask = df["kind"] == "internal"
+    df.loc[internal_mask, "predicted_label"] = df.loc[internal_mask].apply(
+        lambda row: rescheme_internal_label(row["predicted_label"], row["V_Stretch"],
+                                             thresholds, "threeway"),
+        axis=1)
 
     ext_mask = df["kind"] == "external"
     ref_internal_map = {"bend": "B", "stretch": "S", "SB": "SB"}
@@ -1290,13 +1348,17 @@ def plot_transferability_confusion_binary(
     library_csv="data/results/library_scores.csv",
     out_dir="data/figures",
     tau_SB=None,
-    label="fig_transferability_confusion_binary",
-    matrix_csv_path="data/results/transferability_confusion_binary_matrix.csv",
-    summary_csv_path="data/results/transferability_confusion_binary_summary.csv",
-    misclassified_csv_path="data/results/transferability_confusion_binary_misclassified.csv",
+    label="fig_transferability_confusion",
+    matrix_csv_path="data/results/transferability_confusion_matrix.csv",
+    summary_csv_path="data/results/transferability_confusion_summary.csv",
+    misclassified_csv_path="data/results/transferability_confusion_misclassified.csv",
 ):
     """Binary-scheme sibling of plot_transferability_confusion
-    (fig:transferabilityconfusion): the same 18-molecule ``mol_type=='test'``
+    (fig:transferabilityconfusion, threeway version now at
+    ``fig_transferability_confusion_threeway``) -- CANONICAL as of the
+    2026-08 binary-classification switch (this function now owns the
+    ``fig_transferability_confusion`` name/output, the paper's default
+    scheme). The same 18-molecule ``mol_type=='test'``
     tier, but a 4x4 joint confusion matrix (T, R, B, S) -- literal literature
     "SB" reference rows are DROPPED entirely (a different question than a
     binary S/B classifier answers -- "is this mode genuinely mixed?" -- not
@@ -1416,29 +1478,39 @@ def plot_transferability_confusion_binary(
 
 def plot_benzene_internal_confusion(
     out_dir="data/figures",
-    label="fig_benzene_confusion",
+    label="fig_benzene_confusion_threeway",
 ):
-    """Build fig:benzeneconfusion: benzene's JOINT confusion matrix -- the
-    6 external (Tx..Rz) normal modes together with the 30 internal modes'
-    reference bend/stretch/SB (literal literature label, modes 21/22) x
-    predicted bend/stretch/mixed bucket, in one crosstab. Joint so the
-    manuscript's "recovered exactly (6/6)" claim is a checked matrix cell,
-    not just a sentence -- off-diagonal external<->internal blocks
+    """Three-way sibling of ``plot_benzene_internal_confusion_binary`` (which
+    now owns the canonical ``fig_benzene_confusion`` name/output, the paper's
+    default scheme as of the 2026-08 binary-classification switch) -- kept
+    fully functional for comparison/on-demand use, not deleted. Builds
+    benzene's JOINT confusion matrix -- the 6 external (Tx..Rz) normal modes
+    together with the 30 internal modes' reference bend/stretch/SB (literal
+    literature label, modes 21/22) x predicted bend/stretch/mixed bucket, in
+    one crosstab. Joint so the manuscript's "recovered exactly (6/6)" claim
+    is a checked matrix cell, not just a sentence -- off-diagonal
+    external<->internal blocks
     (``crossover_ext_ref_to_internal_pred``/``crossover_internal_ref_to_ext_pred``)
     are computed and reported, not assumed zero.
 
-    Data source: ``src.benzene_validation.benzene_normal_reference_detail()``
-    (all 36 rows, not recomputed here). Distinct from fig:confusion, which
-    is the whole-hydride-library validation; this is benzene's own 36 modes
-    with its genuine literature 3-class internal ground truth. Companion
-    per-bond detail for the 21/22 vs. 23/24 contrast lives in
-    ``data/results/benzene_sb_vs_stretch_bond_diagnostic.csv``, not
+    Data source: ``src.benzene_validation.benzene_normal_reference_detail(
+    scheme="threeway")`` (all 36 rows). The explicit ``scheme="threeway"``
+    is required here: that function's own default (``scheme=None``) tracks
+    whatever scheme ``library_scores.csv`` was built under (binary, the
+    global default as of the 2026-08 switch), which never produces "mixed"
+    -- this figure's entire point is a genuine 3-class breakdown, so it
+    must request the three-way re-derivation explicitly (see that function's
+    docstring for the cheap V_Stretch-based rescheme mechanism). Distinct
+    from fig:confusion, which is the whole-hydride-library validation; this
+    is benzene's own 36 modes with its genuine literature 3-class internal
+    ground truth. Companion per-bond detail for the 21/22 vs. 23/24 contrast
+    lives in ``data/results/benzene_sb_vs_stretch_bond_diagnostic.csv``, not
     re-plotted here.
     """
     _style()
     from src.benzene_validation import benzene_normal_reference_detail
 
-    detail = benzene_normal_reference_detail()
+    detail = benzene_normal_reference_detail(scheme="threeway")
 
     # Collapsed to a single "T/R" row/column: per-axis detail is already
     # shown in fig:confusion's non-ideal matrix. "mixed_external" dropped
@@ -1493,11 +1565,15 @@ def plot_benzene_internal_confusion(
 def plot_benzene_internal_confusion_binary(
     library_csv="data/results/library_scores.csv",
     out_dir="data/figures",
-    label="fig_benzene_confusion_binary",
+    label="fig_benzene_confusion",
     tau_SB=None,
 ):
     """Binary-scheme sibling of plot_benzene_internal_confusion
-    (fig:benzeneconfusion): benzene's 6 external (Tx..Rz, collapsed to one
+    (fig:benzeneconfusion, threeway version now at
+    ``fig_benzene_confusion_threeway``) -- CANONICAL as of the 2026-08
+    binary-classification switch (this function now owns the
+    ``fig_benzene_confusion`` name/output, the paper's default scheme).
+    Benzene's 6 external (Tx..Rz, collapsed to one
     T/R row/column) + internal modes, but:
 
     - internal reference rows literally labeled "SB" (modes 21/22) are
@@ -2967,16 +3043,17 @@ def regenerate_all(verbose=True):
     fns = [
         ("fig:benzene", plot_benzene_stress_test),
         ("benzene-normal-modes gallery (no fig: label yet)", plot_benzene_normal_modes),
-        ("fig:confusion", plot_confusion_matrix),
-        ("fig:confusion binary scheme (no fig: label yet)", plot_confusion_matrix_binary),
+        ("fig:confusion (binary scheme, CANONICAL)", plot_confusion_matrix_binary),
+        ("fig:confusion threeway scheme (fig_confusion_threeway)", plot_confusion_matrix),
         ("SI confusion retention/migration (no fig: label yet)", plot_confusion_retention_migration),
         ("SI rigorous-tier consistency check (no fig: label yet)", plot_rigorous_tier_check),
-        ("fig:transferabilityconfusion (proposed, not yet in .tex)", plot_transferability_confusion),
-        ("fig:transferabilityconfusion binary scheme (no fig: label yet)",
+        ("fig:transferabilityconfusion (proposed; binary scheme, CANONICAL)",
          plot_transferability_confusion_binary),
-        ("fig:benzeneconfusion", plot_benzene_internal_confusion),
-        ("fig:benzeneconfusion binary scheme (no fig: label yet)",
-         plot_benzene_internal_confusion_binary),
+        ("fig:transferabilityconfusion threeway scheme (fig_transferability_confusion_threeway)",
+         plot_transferability_confusion),
+        ("fig:benzeneconfusion (binary scheme, CANONICAL)", plot_benzene_internal_confusion_binary),
+        ("fig:benzeneconfusion threeway scheme (fig_benzene_confusion_threeway)",
+         plot_benzene_internal_confusion),
         ("SI benzene precision/recall (no fig: label yet)", plot_benzene_confusion_precision_recall),
         ("fig:benzeneemitcounts", plot_benzene_emit_counts),
         ("fig:bondscores", plot_bond_scores),

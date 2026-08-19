@@ -82,13 +82,24 @@ def stage_library(ctx):
 
 
 def stage_calibrate(ctx):
-    """Freeze tau_TR/tau_S/tau_B off that distribution -> thresholds.json."""
-    from src.calibrate import run_calibration_pipeline
+    """Freeze tau_TR/tau_S/tau_B off that distribution -> thresholds.json,
+    plus the advisory (non-overwriting) tau_SB error-vs-threshold sweep."""
+    from src.calibrate import run_calibration_pipeline, run_tau_sb_error_analysis
     th, _result, sweep, (path_json, path_sweep) = run_calibration_pipeline(
         data_dir=ctx["data_dir"])
     ctx["outputs"] += [path_json, path_sweep]
+
+    sb_sweep, plateau_all, plateau_test, path_sb_sweep = run_tau_sb_error_analysis(
+        data_dir=ctx["data_dir"])
+    ctx["outputs"].append(path_sb_sweep)
+    _lo_all, _hi_all, mid_all, err_all = plateau_all
+    _lo_test, _hi_test, mid_test, err_test = plateau_test
+
     return (f"tau_TR={th.tau_TR} tau_S={th.tau_S} tau_B={th.tau_B} "
-            f"({th.v_weighting}) -> {path_json}; {len(sweep)}-row sweep")
+            f"({th.v_weighting}) -> {path_json}; {len(sweep)}-row sweep; "
+            f"tau_SB sweep ({len(sb_sweep)} rows) -> {path_sb_sweep}; "
+            f"suggested tau_SB (ADVISORY, active default stays {th.tau_SB}): "
+            f"all={mid_all} (err={err_all:.4f}), test={mid_test} (err={err_test:.4f})")
 
 
 def stage_library2(ctx):

@@ -324,6 +324,18 @@ def _run_flag_pipelines(args, thresholds=None):
               f"-> {path_json}")
         print(f"Wrote {len(sweep_df)}-row sensitivity sweep -> {path_sweep}")
 
+        print("Running tau_SB error-vs-threshold sweep "
+              "(src.calibrate.run_tau_sb_error_analysis)...")
+        from src.calibrate import run_tau_sb_error_analysis
+        _sb_sweep_df, plateau_all, plateau_test, path_sb_sweep = run_tau_sb_error_analysis()
+        _lo_all, _hi_all, mid_all, err_all = plateau_all
+        _lo_test, _hi_test, mid_test, err_test = plateau_test
+        print(f"Wrote {len(_sb_sweep_df)}-row tau_SB sensitivity sweep -> {path_sb_sweep}")
+        print(f"Suggested tau_SB (min error, ADVISORY ONLY): "
+              f"all={mid_all} (err={err_all:.4f}), test={mid_test} (err={err_test:.4f}) -- "
+              f"the active default stays tau_SB={calibrated_thresholds.tau_SB}; adopt via "
+              f"--tau-sb <value> or by editing thresholds.json.")
+
     if args.emit_projection or args.ped_merge:
         if not args.molecule:
             print("Error: --emit-projection/--ped-merge require -m/--molecule.")
@@ -453,7 +465,10 @@ def main():
                                  "data/results/library_scores.csv. Global (ignores -m); slow.")
     dev_group.add_argument("--calibrate", action="store_true",
                             help="Calibrate tau_TR/tau_S/tau_B against the ingested library -> "
-                                 "data/results/thresholds.json + tau_sensitivity_sweep.csv. "
+                                 "data/results/thresholds.json + tau_sensitivity_sweep.csv. Also "
+                                 "runs the advisory tau_SB error-vs-threshold sweep -> "
+                                 "tau_sb_sensitivity_sweep.csv (prints a suggested tau_SB; never "
+                                 "overwrites the frozen tau_SB default -- see --tau-sb). "
                                  "Global (ignores -m).")
     dev_group.add_argument("--figures", action="store_true",
                             help="Regenerate all manuscript figures from data/results/*.csv -> "

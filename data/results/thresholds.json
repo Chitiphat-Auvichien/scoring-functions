@@ -16,5 +16,14 @@
     "ideal_bend_max": 0.17326891344050538,
     "ideal_bend_mean": 0.03616810335710249,
     "gap_width": 0.7280179328288594
+  },
+  "tau_SB_error_sweep": {
+    "grid": "0.00-1.00 step 0.01",
+    "optimal_tau_all": 0.42,
+    "min_error_all": 0.02284263959390863,
+    "n_all": 788,
+    "optimal_tau_test": 0.39,
+    "min_error_test": 0.044854881266490766,
+    "n_test": 379
   }
 }

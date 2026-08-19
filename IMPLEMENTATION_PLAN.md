@@ -210,10 +210,14 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   `scripts/compare_weighting.py` diffs the two.
 - **Algorithm 1**: Step1 score → Step2 global one-to-one Hungarian (`linear_sum_assignment(...,
   maximize=True)` over `n_T+n_R` external slots vs. all modes, `Σ|score|`) → Step3 **two-gate purity**:
-  clean iff `|score|≥τ_TR` AND `s[V_S]≤τ_B`, else `MIXED_EXTERNAL_WITH_VIBRATION` (flag + dominant slot +
+  clean iff `|score|≥τ_TR` AND `s[V_S]≤gate2_bar`, else `MIXED_EXTERNAL_WITH_VIBRATION` (flag + dominant slot +
   `s[V_S]`) → Step4 (unassigned modes only) `s[V_S]≥τ_S` stretching / `≤τ_B` bending / else mixed.
-  `n_T=3`, `n_R=2 if linear else 3`. Reuses τ_TR/τ_B; for exact normal-mode externals (`s[V_S]=0`) the gate
-  never fires. Benzene EMIT 34/35 (`s[V_S]=0.667/0.577`) correctly flagged; EMIT 36 is the Decision-X blind
+  `n_T=3`, `n_R=2 if linear else 3`. Gate 1 (`τ_TR`) and Step 2's assignment are scheme-independent; gate
+  2's bar is **scheme-dependent as of 2026-08 (`gate2_bar` in `src/classifier.py`)**: `τ_purity` (fixed,
+  0.05 — decoupled from the three-way split, exploratory like `τ_SB`'s own rollout, not swept) under
+  `scheme="binary"` (paper-standard default); `τ_B` (calibrated) under `scheme="threeway"`, unchanged from
+  before this split existed. For exact normal-mode externals (`s[V_S]=0`) the gate never fires regardless.
+  Benzene EMIT 34/35 (`s[V_S]=0.667/0.577`) correctly flagged under both; EMIT 36 is the Decision-X blind
   spot (see Locked decisions).
 - Conventions: `ε_disp=1e-8`; `unit(0):=0`. `DEGEN_TOL` survives only as a general numeric constant (Phase-3
   degenerate-mode sanity check), not an assignment mechanism. `τ_TR` comes from **calibration**, not

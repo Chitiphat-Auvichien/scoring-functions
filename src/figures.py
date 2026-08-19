@@ -42,6 +42,20 @@ coupling partner; reads ``irrep``/``shape``/``type`` from
 figure for the "Computational cost" section as it is rewritten away from a
 pure Big-O argument; reads ``data/results/cpu_time_benchmark.csv``).
 
+Binary-classification-scheme siblings (net-new, no ``fig:`` label yet, do
+NOT modify their three-way counterparts' inputs or outputs):
+``plot_confusion_matrix_binary`` (binary sibling of ``plot_confusion_matrix``,
+2-way bend/stretch internal categories, single-centre non-ideal tier),
+``plot_transferability_confusion_binary`` (binary sibling of
+``plot_transferability_confusion``, 18-molecule test tier, 4-way T/R/B/S --
+literal literature "SB" reference rows DROPPED rather than bucketed),
+``plot_tau_sb_sensitivity`` (error_all/error_test vs. tau_SB line plot,
+mirrors ``plot_sensitivity``'s structure; reads
+``data/results/tau_sb_sensitivity_sweep.csv`` from
+``src.calibrate.run_tau_sb_error_analysis``). See ``src/classifier.py``'s
+``vib_label_binary``/``classify_all_modes(..., scheme="binary")`` for the
+underlying binary classification scheme these figures visualize.
+
 Cross-figure visual consistency: every figure encoding a classification
 category reuses the same ``CATEGORY_COLOR``/``CATEGORY_MARKER``/
 ``CATEGORY_LABEL`` mapping defined once below, never redefined per-function.
@@ -68,6 +82,7 @@ from scipy.optimize import curve_fit
 from src.classifier import (
     Thresholds, classification_bucket,
     is_clean_external, is_mixed_external, external_axis,
+    vib_label_binary,
 )
 from src.csv_label_ingest import TYPE_TO_REF_LABEL
 
@@ -857,6 +872,114 @@ def plot_confusion_matrix(
     return summary
 
 
+def plot_confusion_matrix_binary(
+    library_csv="data/results/library_scores.csv",
+    out_dir="data/figures",
+    label="fig_confusion_binary",
+    tau_SB=None,
+):
+    """Binary-scheme sibling of plot_confusion_matrix (fig:confusion): same
+    non-ideal single-centre scope (filter_single_centre_library + ideal ==
+    'no'), same joint external+internal crosstab machinery
+    (_joint_confusion_table/_confusion_heatmap), but every internal row that
+    the three-way scheme would classify S/B/SB is RE-LABELED via
+    vib_label_binary(V_Stretch, tau_SB) -- so the internal side of the
+    matrix is 2-way (bend/stretch only, never "mixed"/"SB").
+
+    An internal REFERENCE row whose three-way predicted_label is actually an
+    EXTERNAL slot (a Step-2 crossover -- this mode's residual character won
+    a T/R slot) is left untouched, not re-labeled: scheme only changes the
+    Step-4 internal vocabulary, never Step 2/3's external assignment (see
+    src/classifier.py's classify_all_modes docstring), so overriding it here
+    would corrupt the same crossover accounting plot_confusion_matrix reports.
+
+    tau_SB defaults to Thresholds.calibrated().tau_SB. Reference rows with
+    ref_label=="SB" are dropped (a literal literature "SB" answers "is this
+    genuinely mixed?", a different question than a binary S/B classifier can
+    answer) -- none are expected in this tier, but checked rather than
+    assumed (n_dropped_sb_ref in the summary).
+    """
+    _style()
+    from src.calibrate import filter_single_centre_library
+
+    lib_df = pd.read_csv(library_csv)
+    lib_df = filter_single_centre_library(lib_df)
+    tau_SB = tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB
+
+    nonideal_df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ideal"] == "no")].copy()
+    n_dropped_sb_ref = int((nonideal_df["ref_label"] == "SB").sum())
+    nonideal_df = nonideal_df[nonideal_df["ref_label"] != "SB"]
+
+    def _binarize(row):
+        bucket = classification_bucket(row["predicted_label"])
+        if bucket in ("stretch", "bend", "mixed"):
+            return vib_label_binary(row["V_Stretch"], tau_SB)
+        return row["predicted_label"]  # external crossover -- left untouched
+
+    nonideal_df["predicted_label"] = nonideal_df.apply(_binarize, axis=1)
+
+    nonideal_molecules = nonideal_df["molecule"].unique()
+    nonideal_external_df = lib_df[(lib_df["kind"] == "external") &
+                                   (lib_df["molecule"].isin(nonideal_molecules))]
+    joint_df = pd.concat([nonideal_df, nonideal_external_df], ignore_index=True)
+
+    # 2-way internal: no "mixed" column, unlike plot_confusion_matrix's 3-way.
+    ref_order_n = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "bend", "stretch"]
+    pred_order_n = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "bend", "stretch"]
+    tbl_n = _joint_confusion_table(joint_df, ref_order_n, pred_order_n)
+    n_nonideal = int(tbl_n.values.sum())
+
+    fig, ax_hb = plt.subplots(figsize=(6.2, 4.8))
+    _confusion_heatmap(ax_hb, fig, tbl_n, ref_order_n)
+
+    # Internal-only opposite-category crossing (bend<->stretch) -- n_ref
+    # read directly off the table's own row sums (no "mixed" bucket to
+    # subtract out, unlike confusion_matrix_stats's threeway-specific dict).
+    cats_n = ["bend", "stretch"]
+    opposite_n = []
+    for c in cats_n:
+        opp = "stretch" if c == "bend" else "bend"
+        n_ref = int(tbl_n.loc[c].sum()) if c in tbl_n.index else 0
+        n_opp = int(tbl_n.loc[c, opp]) if opp in tbl_n.columns else 0
+        opposite_n.append(n_opp / n_ref if n_ref else float("nan"))
+
+    ext_rows, int_rows = ref_order_n[:6], ref_order_n[6:]
+    ext_cols, int_cols = pred_order_n[:6], pred_order_n[6:]
+    crossover_ext_ref_to_internal_pred = int(tbl_n.loc[ext_rows, int_cols].values.sum())
+    crossover_internal_ref_to_ext_pred = int(tbl_n.loc[int_rows, ext_cols].values.sum())
+
+    footer_text = (
+        f"Binary-scheme (tau_SB={tau_SB:g}) non-ideal internal + external "
+        f"classification (n={n_nonideal}): 0% of bend or stretch reference-"
+        f"labeled modes crossed to the OPPOSITE category "
+        f"(bend->stretch={opposite_n[0]:.1%}, stretch->bend={opposite_n[1]:.1%}); "
+        f"and {crossover_ext_ref_to_internal_pred} external reference modes were "
+        f"predicted into an internal bucket, {crossover_internal_ref_to_ext_pred} "
+        "internal reference modes were predicted into an external slot. No 'SB' "
+        "column: the binary scheme forces every internal mode to bend or stretch."
+    )
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary = {
+        "pdf": pdf_path, "png": png_path,
+        "tau_SB": tau_SB,
+        "nonideal_footer_text": footer_text,
+        "layout": ("Single panel: joint external (Tx..Rz) + internal "
+                   "(stretch/bend only, binary scheme) confusion matrix. "
+                   "Binary sibling of fig:confusion -- see that figure for "
+                   "the three-way (S/B/SB) version."),
+        "nonideal_n": n_nonideal,
+        "n_dropped_sb_ref": n_dropped_sb_ref,
+        "nonideal_confusion_table": tbl_n.to_dict(),
+        "nonideal_opposite_category_crossing": dict(zip(cats_n, opposite_n)),
+        "crossover_ext_ref_to_internal_pred": crossover_ext_ref_to_internal_pred,
+        "crossover_internal_ref_to_ext_pred": crossover_internal_ref_to_ext_pred,
+    }
+    return summary
+
+
 def plot_confusion_retention_migration(
     library_csv="data/results/library_scores.csv",
     out_dir="data/figures",
@@ -1158,6 +1281,127 @@ def plot_transferability_confusion(
                      "ground truth (data/characterised_modes.csv), not a "
                      "restatement of the calibration population like "
                      "plot_rigorous_tier_check."),
+    }
+    return summary
+
+
+def plot_transferability_confusion_binary(
+    library_csv="data/results/library_scores.csv",
+    out_dir="data/figures",
+    tau_SB=None,
+    label="fig_transferability_confusion_binary",
+    matrix_csv_path="data/results/transferability_confusion_binary_matrix.csv",
+    summary_csv_path="data/results/transferability_confusion_binary_summary.csv",
+    misclassified_csv_path="data/results/transferability_confusion_binary_misclassified.csv",
+):
+    """Binary-scheme sibling of plot_transferability_confusion
+    (fig:transferabilityconfusion): the same 18-molecule ``mol_type=='test'``
+    tier, but a 4x4 joint confusion matrix (T, R, B, S) -- literal literature
+    "SB" reference rows are DROPPED entirely (a different question than a
+    binary S/B classifier answers -- "is this mode genuinely mixed?" -- not
+    folded into a bucket the way the three-way figure's "SB" column does),
+    and every internal prediction goes through
+    ``vib_label_binary(V_Stretch, tau_SB)`` instead of the three-way
+    ``predicted_label``/``classification_bucket`` vocabulary.
+
+    T/R ground truth/prediction: identical to the three-way figure
+    (``external_axis()``, first character). tau_SB defaults to
+    ``Thresholds.calibrated().tau_SB``. Same three output CSVs pattern as
+    the original (matrix/summary/misclassified), suffixed ``_binary``.
+    """
+    _style()
+    from src.csv_label_ingest import load_label_csvs
+    from src.library_ingest import test_tier_molecules
+
+    lib_df = pd.read_csv(library_csv)
+    test_mols = test_tier_molecules()
+    df = lib_df[lib_df["molecule"].isin(test_mols)].copy()
+    tau_SB = tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB
+
+    ext_mask = df["kind"] == "external"
+    # No "SB" entry (unlike the three-way figure's ref_internal_map) -- a
+    # literal literature "SB" row maps to NaN here and is dropped by `keep`
+    # below, not folded into any bucket.
+    ref_internal_map = {"bend": "B", "stretch": "S"}
+    ref_cat = pd.Series(index=df.index, dtype=object)
+    ref_cat[ext_mask] = df.loc[ext_mask, "mode_index"].astype(str).str[0]
+    ref_cat[~ext_mask] = df.loc[~ext_mask, "ref_label"].map(ref_internal_map)
+
+    def _pred_category(row):
+        axis = external_axis(row["predicted_label"])
+        if axis is not None:
+            return axis[0]
+        # vib_label_binary already returns the bare "S"/"B" letter.
+        return vib_label_binary(row["V_Stretch"], tau_SB)
+
+    pred_cat = df.apply(_pred_category, axis=1)
+
+    keep = ref_cat.notna()
+    n_dropped_sb_ref = int((~ext_mask & (df["ref_label"] == "SB")).sum())
+    n_dropped_missing_ground_truth = int((~keep).sum()) - n_dropped_sb_ref
+    n_folded_mixed_external = int(
+        df["predicted_label"].astype(str).str.endswith("*").sum())
+
+    ref_order = ["T", "R", "B", "S"]
+    tbl = pd.crosstab(
+        pd.Series(ref_cat[keep], name="ref"),
+        pd.Series(pred_cat[keep], name="pred"),
+    )
+    tbl = tbl.reindex(index=ref_order, columns=ref_order, fill_value=0)
+    n_total = int(tbl.values.sum())
+
+    fig, ax = plt.subplots(figsize=(4.2, 3.8))
+    _confusion_heatmap(ax, fig, tbl, ref_order)
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    os.makedirs(os.path.dirname(matrix_csv_path), exist_ok=True)
+    tbl.to_csv(matrix_csv_path)
+    rows = _per_category_from_table(tbl, ref_order)
+    pd.DataFrame(rows).to_csv(summary_csv_path, index=False)
+
+    cm = load_label_csvs()["characterised_modes"][
+        ["molecule", "mode", "description", "ref"]].copy()
+    cm["mode"] = pd.to_numeric(cm["mode"], errors="coerce")
+    mis_mask = keep & (ref_cat != pred_cat)
+    mis = df.loc[mis_mask, ["molecule", "mode_index", "kind", "freq",
+                             "irrep", "V_Stretch", "predicted_label"]].copy()
+    mis["ref_category"] = ref_cat[mis_mask]
+    mis["predicted_category"] = pred_cat[mis_mask]
+    mis["mode_index_numeric"] = pd.to_numeric(mis["mode_index"], errors="coerce")
+    mis = mis.merge(
+        cm, how="left", left_on=["molecule", "mode_index_numeric"],
+        right_on=["molecule", "mode"],
+    ).drop(columns=["mode_index_numeric", "mode"])
+    mis = mis.sort_values(
+        ["ref_category", "predicted_category", "molecule", "mode_index"]
+    ).reset_index(drop=True)
+    mis.to_csv(misclassified_csv_path, index=False)
+    n_misclassified = len(mis)
+
+    per_molecule_n = df.groupby("molecule").size().to_dict()
+
+    summary = {
+        "pdf": pdf_path, "png": png_path,
+        "tau_SB": tau_SB,
+        "matrix_csv": matrix_csv_path, "summary_csv": summary_csv_path,
+        "misclassified_csv": misclassified_csv_path,
+        "n_total": n_total,
+        "n_misclassified": n_misclassified,
+        "n_molecules": len(test_mols),
+        "per_molecule_n": per_molecule_n,
+        "n_dropped_sb_ref": n_dropped_sb_ref,
+        "n_dropped_missing_ground_truth": n_dropped_missing_ground_truth,
+        "n_folded_mixed_external": n_folded_mixed_external,
+        "confusion_table": tbl.to_dict(),
+        "precision": {r["category"]: r["precision"] for r in rows},
+        "recall": {r["category"]: r["recall"] for r in rows},
+        "framing": ("Binary sibling of fig:transferabilityconfusion -- same "
+                     "genuinely non-circular 18-molecule test tier, but "
+                     "literal literature 'SB' reference rows are DROPPED "
+                     "(not bucketed) and internal predictions come from "
+                     "vib_label_binary(V_Stretch, tau_SB), never 'SB'."),
     }
     return summary
 
@@ -1974,6 +2218,77 @@ def plot_sensitivity(
     return summary
 
 
+def plot_tau_sb_sensitivity(
+    sweep_csv="data/results/tau_sb_sensitivity_sweep.csv",
+    thresholds_json="data/results/thresholds.json",
+    out_dir="data/figures",
+    label="fig_sensitivity_binary",
+):
+    """Binary-scheme sibling of plot_sensitivity (fig:sensitivity): error_all
+    and error_test vs. tau_SB over src.calibrate.sweep_tau_sb's persisted
+    output (data/results/tau_sb_sensitivity_sweep.csv), marking the active
+    tau_SB default (Thresholds.calibrated().tau_SB) and the two ADVISORY
+    suggested-optimal points (thresholds.json's "tau_SB_error_sweep" block,
+    written by src.calibrate.run_tau_sb_error_analysis -- see that
+    function's docstring for why they are advisory-only and never silently
+    adopted as the new default).
+
+    Unlike plot_sensitivity's twin accuracy/label-change-fraction axes
+    (different natural scales), error_all/error_test share one [0, 1] scale,
+    so this figure uses a single axis.
+    """
+    _style()
+    sweep = pd.read_csv(sweep_csv)
+    thresholds = Thresholds.calibrated(path=thresholds_json)
+    tau_SB_active = thresholds.tau_SB
+
+    with open(thresholds_json) as f:
+        result = json.load(f)
+    sb_sweep_info = result.get("tau_SB_error_sweep", {})
+    opt_all = sb_sweep_info.get("optimal_tau_all")
+    opt_test = sb_sweep_info.get("optimal_tau_test")
+
+    fig, ax1 = plt.subplots(figsize=(5.6, 4.6))
+    ax1.axvline(tau_SB_active, color=COLORS["threshold"], ls="--", lw=1.2, zorder=2,
+                label=r"active $\tau_{\mathrm{SB}}$" + f"={tau_SB_active:g}")
+    if opt_all is not None:
+        ax1.axvline(opt_all, color=COLORS["sens_change"], ls=":", lw=1.0, zorder=2,
+                    label=f"suggested (all)={opt_all:g}")
+    if opt_test is not None:
+        ax1.axvline(opt_test, color=COLORS["sens_accuracy"], ls=":", lw=1.0, zorder=2,
+                    label=f"suggested (test)={opt_test:g}")
+
+    l1, = ax1.plot(sweep["tau_SB"], sweep["error_all"], color=COLORS["sens_change"],
+                   marker="o", markersize=2.5, lw=1.1, zorder=3, label="error (all)")
+    l2, = ax1.plot(sweep["tau_SB"], sweep["error_test"], color=COLORS["sens_accuracy"],
+                   marker="s", markersize=2.5, lw=1.1, zorder=3, label="error (test)")
+    ax1.set_xlabel(r"$\tau_{\mathrm{SB}}$")
+    ax1.set_ylabel("Classification error (binary S/B scheme)")
+    ax1.set_ylim(-0.01, max(0.05, float(sweep[["error_all", "error_test"]].max().max()) * 1.1))
+    ax1.legend(loc="best", frameon=False, fontsize=LEGEND_FONTSIZE,
+               handletextpad=0.5, labelspacing=0.4)
+
+    fig.tight_layout()
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+
+    summary = {
+        "pdf": pdf_path, "png": png_path,
+        "shared_categories": ("no classification-category colors here (tau_SB "
+                               "error curve, not per-mode points); reuses the "
+                               "shared COLORS['threshold'] dashed-line "
+                               "convention for the active-tau marker."),
+        "n_grid_points": len(sweep),
+        "tau_SB_range": (float(sweep["tau_SB"].min()), float(sweep["tau_SB"].max())),
+        "error_all_range": (float(sweep["error_all"].min()), float(sweep["error_all"].max())),
+        "error_test_range": (float(sweep["error_test"].min()), float(sweep["error_test"].max())),
+        "tau_SB_active": tau_SB_active,
+        "suggested_tau_SB_all": opt_all,
+        "suggested_tau_SB_test": opt_test,
+    }
+    return summary
+
+
 # --------------------------------------------------------------------------
 # fig:cputime -- empirical computational-cost figure (replaces/accompanies
 # the purely theoretical Big-O argument in "Computational cost", tab:cost).
@@ -2566,9 +2881,12 @@ def regenerate_all(verbose=True):
         ("fig:benzene", plot_benzene_stress_test),
         ("benzene-normal-modes gallery (no fig: label yet)", plot_benzene_normal_modes),
         ("fig:confusion", plot_confusion_matrix),
+        ("fig:confusion binary scheme (no fig: label yet)", plot_confusion_matrix_binary),
         ("SI confusion retention/migration (no fig: label yet)", plot_confusion_retention_migration),
         ("SI rigorous-tier consistency check (no fig: label yet)", plot_rigorous_tier_check),
         ("fig:transferabilityconfusion (proposed, not yet in .tex)", plot_transferability_confusion),
+        ("fig:transferabilityconfusion binary scheme (no fig: label yet)",
+         plot_transferability_confusion_binary),
         ("fig:benzeneconfusion", plot_benzene_internal_confusion),
         ("SI benzene precision/recall (no fig: label yet)", plot_benzene_confusion_precision_recall),
         ("fig:benzeneemitcounts", plot_benzene_emit_counts),
@@ -2577,6 +2895,7 @@ def regenerate_all(verbose=True):
         ("fig:modemixing", plot_mode_mixing),
         ("SI irrep-degeneracy coupling (no fig: label yet)", plot_irrep_coupling),
         ("fig:sensitivity", plot_sensitivity),
+        ("fig:sensitivity binary scheme (no fig: label yet)", plot_tau_sb_sensitivity),
         ("fig:cputime linear (proposed, not yet in .tex)",
          lambda: plot_cpu_time_benchmark(scale="linear")),
         ("fig:cputime log (proposed, not yet in .tex)",

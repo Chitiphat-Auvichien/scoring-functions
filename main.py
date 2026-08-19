@@ -5,7 +5,7 @@ import pandas as pd
 
 from src.parser import GaussianParser, EMITParser, IntermediateIO
 from src.scoring import ModeScorer, V_WEIGHTINGS, DEFAULT_V_WEIGHTING, set_v_weighting
-from src.classifier import classify_all_modes, classify_to_rows, is_linear
+from src.classifier import classify_all_modes, classify_to_rows, is_linear, Thresholds
 from src.projection import (build_reference_basis, project_emit,
                              build_reference_basis_cartesian, project_emit_cartesian)
 from src.utils import find_file
@@ -159,17 +159,21 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
     return scorer, final
 
 
-def run_scoring_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, write=True):
+def run_scoring_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, write=True,
+                          scheme="threeway"):
     """Headless pipeline: load inputs -> classify_all_modes (Algorithm 1) -> CSV.
 
     This is the single, complete per-molecule result: scores (Tx..Rz,
     V_Stretch), Mu/K/Irrep, and the Steps 2-4 classification (label,
     annotation, s_AB) all in one row per mode -- there is no separate
     scores-only output. Writes data/results/<mol>_{normal,EMIT}.csv.
+
+    `scheme` ("threeway" default or "binary") is passed straight through to
+    classify_all_modes() -- see that function's docstring.
     """
     raw, dirs = load_inputs(mol_name, mode_type, data_dir)
     scorer, final = build_scorer_and_final(raw, mode_type)
-    scored = classify_all_modes(scorer, final, thresholds)
+    scored = classify_all_modes(scorer, final, thresholds, scheme=scheme)
     df = pd.DataFrame(classify_to_rows(scored))
     suffix = "normal" if mode_type == "normal" else "EMIT"
     output_file = os.path.join(dirs["results"], f"{mol_name}_{suffix}.csv")
@@ -261,7 +265,7 @@ def _print_table(df, title):
     print(df.to_string(index=False, float_format="%.4f"))
 
 
-def _run_flag_pipelines(args):
+def _run_flag_pipelines(args, thresholds=None):
     """Handle the developer/maintainer CLI flags (--emit-projection,
     --ped-merge, --ped-merge-all, --library, --calibrate, --figures) by
     wiring up the existing headless pipeline functions. The plain user
@@ -277,9 +281,15 @@ def _run_flag_pipelines(args):
         --emit-projection, --ped-merge, --ped-merge-all, --figures. Fails
         loud on a bad combination rather than silently doing nothing.
 
+    `thresholds` (the effective, possibly CLI-overridden Thresholds built in
+    main()) is passed through to --emit-projection's run_projection_pipeline
+    call; defaults to Thresholds.calibrated() if not given (e.g. a direct
+    caller/test that doesn't build one itself).
+
     Returns True if at least one flag was handled (caller should stop),
     False otherwise (caller falls through to the plain user workflow).
     """
+    thresholds = thresholds if thresholds is not None else Thresholds.calibrated()
     any_flag = (args.library or args.calibrate or args.emit_projection
                 or args.figures or args.ped_merge or args.ped_merge_all)
     if not any_flag:
@@ -304,9 +314,14 @@ def _run_flag_pipelines(args):
             print("Note: --calibrate is global and ignores -m/--molecule.")
         print("Running threshold calibration (src.calibrate.run_calibration_pipeline)...")
         from src.calibrate import run_calibration_pipeline
-        thresholds, result, sweep_df, (path_json, path_sweep) = run_calibration_pipeline()
-        print(f"Frozen thresholds tau_TR={thresholds.tau_TR}, tau_S={thresholds.tau_S}, "
-              f"tau_B={thresholds.tau_B} -> {path_json}")
+        # Named distinctly from this function's own `thresholds` param (the
+        # effective, possibly CLI-overridden Thresholds passed in from
+        # main()) -- this is the freshly-recalibrated result, not to be
+        # confused with or silently substituted for it.
+        calibrated_thresholds, result, sweep_df, (path_json, path_sweep) = run_calibration_pipeline()
+        print(f"Frozen thresholds tau_TR={calibrated_thresholds.tau_TR}, "
+              f"tau_S={calibrated_thresholds.tau_S}, tau_B={calibrated_thresholds.tau_B} "
+              f"-> {path_json}")
         print(f"Wrote {len(sweep_df)}-row sensitivity sweep -> {path_sweep}")
 
     if args.emit_projection or args.ped_merge:
@@ -316,7 +331,8 @@ def _run_flag_pipelines(args):
 
     if args.emit_projection:
         try:
-            df, df_full, (path_emit, path_full, path_full_cart) = run_projection_pipeline(args.molecule)
+            df, df_full, (path_emit, path_full, path_full_cart) = run_projection_pipeline(
+                args.molecule, thresholds=thresholds)
         except FileNotFoundError as e:
             print(f"Error: --emit-projection for '{args.molecule}' needs data/EMIT/, the "
                   f"normal-mode log, AND an existing <mol>_EMIT.csv ({e})")
@@ -381,6 +397,26 @@ def main():
                                   "(mu cancels); they differ only where bond types are mixed. "
                                   "Recorded in data/results/thresholds.json -- scoring and "
                                   "thresholds must be produced under the same setting.")
+    user_group.add_argument("--tau-tr", type=float, default=None, dest="tau_tr",
+                             help="Override tau_TR (Step-3 purity gate) for this run only -- "
+                                  "starts from Thresholds.calibrated() and is never written back "
+                                  "to data/results/thresholds.json. Default: the calibrated value.")
+    user_group.add_argument("--tau-s", type=float, default=None, dest="tau_s",
+                             help="Override tau_S (three-way stretching bar) for this run only -- "
+                                  "see --tau-tr. Only affects scheme=threeway.")
+    user_group.add_argument("--tau-b", type=float, default=None, dest="tau_b",
+                             help="Override tau_B (three-way bending bar / Step-3 gate 2) for "
+                                  "this run only -- see --tau-tr.")
+    user_group.add_argument("--tau-sb", type=float, default=None, dest="tau_sb",
+                             help="Override tau_SB (single-cutoff binary S/B split) for this run "
+                                  "only -- see --tau-tr. Only affects scheme=binary.")
+    user_group.add_argument("--classify-scheme", choices=["threeway", "binary"],
+                             default="threeway", dest="classify_scheme",
+                             help="Step-4 internal classification vocabulary: 'threeway' "
+                                  "(default) may label a mode 'SB' (mixed stretch/bend); "
+                                  "'binary' forces every internal mode to 'S' or 'B' via the "
+                                  "single tau_SB cutoff, never 'SB'. Does not affect Step 2/3 "
+                                  "(external T/R assignment, purity gates).")
 
     dev_group = ap.add_argument_group(
         "Developer / maintainer workflow",
@@ -428,7 +464,25 @@ def main():
     # rather than taking the variant as an argument.
     set_v_weighting(args.v_weighting)
 
-    if _run_flag_pipelines(args):
+    # Effective thresholds: start from the calibrated (frozen) values, apply
+    # any per-run CLI overrides on top. Never written back to
+    # data/results/thresholds.json -- these are per-run only.
+    base = Thresholds.calibrated()
+    thresholds = Thresholds(
+        tau_TR=args.tau_tr if args.tau_tr is not None else base.tau_TR,
+        tau_S=args.tau_s if args.tau_s is not None else base.tau_S,
+        tau_B=args.tau_b if args.tau_b is not None else base.tau_B,
+        tau_SB=args.tau_sb if args.tau_sb is not None else base.tau_SB,
+        v_weighting=base.v_weighting,
+    )
+    if any(v is not None for v in (args.tau_tr, args.tau_s, args.tau_b, args.tau_sb)) \
+            or args.classify_scheme != "threeway":
+        print(f"Note: threshold/scheme override active for this run only (not written to "
+              f"thresholds.json): tau_TR={thresholds.tau_TR} tau_S={thresholds.tau_S} "
+              f"tau_B={thresholds.tau_B} tau_SB={thresholds.tau_SB} "
+              f"scheme={args.classify_scheme}")
+
+    if _run_flag_pipelines(args, thresholds):
         return
 
     if not args.molecule:
@@ -468,7 +522,8 @@ def main():
         raw = IntermediateIO.load(inter)
 
     try:
-        df, output_file = run_scoring_pipeline(mol_name, mode_type)
+        df, output_file = run_scoring_pipeline(mol_name, mode_type, thresholds=thresholds,
+                                                scheme=args.classify_scheme)
     except ValueError as e:
         print(f"Error: {e}")
         return

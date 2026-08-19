@@ -1,0 +1,8 @@
+{
+  "tau_SB": 0.42,
+  "tau_TR": 0.95,
+  "tau_S": 0.9012868462693647,
+  "tau_B": 0.17326891344050538,
+  "v_weighting": "mu",
+  "note": "Active thresholds for this exploratory alternate-tau_SB run. tau_SB is the only value overridden from Thresholds.calibrated(); tau_TR/tau_S/tau_B/v_weighting are unchanged from canonical. The canonical default (tau_SB=0.50) is untouched -- see data/results/thresholds.json."
+}

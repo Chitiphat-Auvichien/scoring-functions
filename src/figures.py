@@ -85,6 +85,7 @@ filled (ideal) vs. hollow (non-ideal) markers/boxes, also centralized here.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 
@@ -543,6 +544,7 @@ def plot_benzene_normal_modes(
     normal_csv="data/results/C6H6_normal.csv",
     out_dir="data/figures",
     label="fig_benzene_normal",
+    tau_SB=None,
 ):
     """Build the benzene normal-mode worked-example gallery: ``s[V_S]`` vs.
     frequency for all 36 real normal modes (6 external T/R + 30 internal),
@@ -558,10 +560,22 @@ def plot_benzene_normal_modes(
     rendered hollow (IDEAL_STYLE["no"], a blanket style choice -- there is
     no ideal/non-ideal axis within one molecule's own normal modes); plain,
     unannotated scatter (no callout boxes for modes 12/19/30).
+
+    ``tau_SB`` defaults to ``Thresholds.calibrated().tau_SB`` (None ->
+    canonical, zero behavior change). When given, the CSV's own baked-in
+    ``label`` column is NOT trusted directly for internal rows -- each row's
+    category is cheaply re-derived from its own ``V_Stretch`` via
+    ``classifier.rescheme_internal_label`` (external T/R rows pass through
+    unchanged, since scheme/tau_SB never touches Step 2/3), and the drawn
+    threshold line/label use the same override. No re-scoring involved.
     """
     _style()
+    from src.classifier import rescheme_internal_label
+
     normal = pd.read_csv(normal_csv)
     thresholds = Thresholds.calibrated()
+    if tau_SB is not None:
+        thresholds = dataclasses.replace(thresholds, tau_SB=tau_SB)
     TAU_SB = thresholds.tau_SB
 
     # Width 7.2in leaves horizontal room to manually composite depicted
@@ -578,7 +592,11 @@ def plot_benzene_normal_modes(
 
     seen_labels = set()
     for _, row in normal.iterrows():
-        cat = classification_bucket(row["label"])
+        row_label = row["label"]
+        if tau_SB is not None:
+            row_label = rescheme_internal_label(row_label, row["V_Stretch"],
+                                                 thresholds, scheme="binary")
+        cat = classification_bucket(row_label)
         leg_key = _LEGEND_MERGE_KEY.get(cat, cat)
         leg_text = _LEGEND_MERGE_TEXT.get(leg_key, CATEGORY_LABEL.get(cat, cat))
         leg_label = leg_text if leg_key not in seen_labels else None
@@ -2020,6 +2038,7 @@ def plot_mode_mixing(
     library_csv="data/results/library_scores.csv",
     out_dir="data/figures",
     label="fig_modemixing",
+    tau_SB=None,
 ):
     """Build fig:modemixing: (a) ideal molecules -- V_Stretch vs.
     mode-averaged |Delta b|/|b|| shows a clean step function; (b) non-ideal
@@ -2040,6 +2059,11 @@ def plot_mode_mixing(
     author decision -- see src.calibrate.SINGLE_CENTRE_ONLY_EXCLUDE /
     plot_bond_scores' identical note); applied right after reading the CSV,
     before the internal-row selection below.
+
+    ``tau_SB`` defaults to ``Thresholds.calibrated().tau_SB`` (None ->
+    canonical, zero behavior change). Only the drawn threshold line/label use
+    the override -- point colors come from ``ref_label`` (literature ground
+    truth), never from tau_SB, so they are untouched either way.
     """
     _style()
     from src.calibrate import filter_single_centre_library
@@ -2051,6 +2075,8 @@ def plot_mode_mixing(
                        lib_df["ideal"].isin(("yes", "no"))].copy()
 
     th = Thresholds.calibrated()
+    if tau_SB is not None:
+        th = dataclasses.replace(th, tau_SB=tau_SB)
     fig, (ax_i, ax_n) = plt.subplots(1, 2, figsize=(7.2, 3.3), sharex=True, sharey=True)
 
     # Bare (a)/(b) labels only -- "Ideal/Non-ideal molecules" is stated in
@@ -3157,6 +3183,7 @@ def plot_ped_vs_vscore(
     mol_list_csv="data/mol_list_method.csv",
     out_dir="data/figures",
     label="fig_ped_vs_vscore",
+    tau_SB=None,
 ):
     """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
     molecule-level stretch score s[V_S] (``V_Stretch``), one point per
@@ -3177,6 +3204,17 @@ def plot_ped_vs_vscore(
     appear here -- joined in via mol_list_csv on
     combined_ped_vs_scores.csv's `Molecule` column (note the capitalization
     mismatch vs. the roster's lowercase `molecule`).
+
+    ``tau_SB`` defaults to ``Thresholds.calibrated().tau_SB`` (None ->
+    canonical, zero behavior change). When given, every row's ``label`` is
+    re-derived from its own (pre-degenerate-averaging) ``V_Stretch`` via
+    ``vib_label_binary`` -- this CSV carries internal (stretch/bend) rows
+    only (VEDA's PED comparison has no external T/R analogue), so the plain
+    binary label is used directly rather than the external-aware
+    ``rescheme_internal_label``. Re-derived before
+    ``_collapse_degenerate_freqs`` so the degenerate-group majority-label
+    vote sees the overridden per-row labels, matching how the canonical path
+    already collapses labels baked in at tau_SB=0.50.
     """
     _style()
     df = pd.read_csv(csv_input)
@@ -3185,6 +3223,9 @@ def plot_ped_vs_vscore(
     df = df[df["Molecule"].isin(test_molecules)]
     df = df.dropna(subset=["PED_Stretch_pct", "V_Stretch"])
     n_raw_modes = len(df)
+    if tau_SB is not None:
+        df = df.copy()
+        df["label"] = df["V_Stretch"].map(lambda v: vib_label_binary(v, tau_SB))
     df = _collapse_degenerate_freqs(
         df, value_cols=["PED_Stretch_pct", "V_Stretch"], label_col="label")
 
@@ -3223,6 +3264,7 @@ def plot_ped_vs_vscore(
         "n_molecules": df["Molecule"].nunique(),
         "linear_fit_slope_intercept": tuple(float(c) for c in coeffs),
         "r2": float(r2),
+        "tau_SB": tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB,
     }
 
 

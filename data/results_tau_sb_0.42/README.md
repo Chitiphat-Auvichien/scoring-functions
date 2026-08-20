@@ -82,56 +82,14 @@ engine, not a V_Stretch-based re-derivation shortcut.
 
 ## Figures (`data/figures_tau_sb_0.42/`)
 
-Unchanged this session -- figures regeneration is a separate, still-open
-follow-up (explicitly out of scope for the 2026-08-20 results-consistency
-fix described above). The figures-folder documentation below is UNCHANGED
-from the prior session and still describes that folder's own state, not
-this one's.
-
-A COMPLETE, self-contained figure set: every tau_SB-sensitive figure is
-regenerated (via a `tau_SB=` override kwarg on the relevant `src.figures`
-plotting function), and every tau_SB-independent figure is copied verbatim
-from `data/figures/`, so this folder is not just the ones that changed.
-
-One figure, `fig_sensitivity_binary` (the tau_SB error-sweep plot itself),
-is a deliberate exception within the "copied unchanged" list: its curve
-does not depend on which tau_SB is "active", and re-annotating its active-
-tau_SB marker at 0.42 would only slide that line onto its own
-already-drawn "suggested (all)" reference line -- so it is copied as-is
-rather than regenerated with a redundant re-annotation.
-
-### Regenerated (tau_SB-sensitive, n=6)
-
-- `fig:confusion (binary scheme, CANONICAL)` -> `fig_confusion.pdf`
-- `fig:transferabilityconfusion (binary scheme, CANONICAL)` -> `fig_transferability_confusion.pdf`
-- `fig:benzeneconfusion (binary scheme, CANONICAL)` -> `fig_benzene_confusion.pdf`
-- `benzene-normal-modes gallery (no fig: label yet)` -> `fig_benzene_normal.pdf`
-- `fig:modemixing` -> `fig_modemixing.pdf`
-- `fig:ped_vs_vscore (proposed, not yet in .tex)` -> `fig_ped_vs_vscore.pdf`
-
-### Copied unchanged (tau_SB-independent, n=20)
-
-- `fig_benzene.pdf` / `fig_benzene.png`
-- `fig_confusion_threeway.pdf` / `fig_confusion_threeway.png`
-- `fig_confusion_retention_migration.pdf` / `fig_confusion_retention_migration.png`
-- `fig_rigorous_tier_check.pdf` / `fig_rigorous_tier_check.png`
-- `fig_transferability_confusion_threeway.pdf` / `fig_transferability_confusion_threeway.png`
-- `fig_benzene_confusion_threeway.pdf` / `fig_benzene_confusion_threeway.png`
-- `fig_benzene_precision_recall.pdf` / `fig_benzene_precision_recall.png`
-- `fig_benzene_emit_counts.pdf` / `fig_benzene_emit_counts.png`
-- `fig_bondscores.pdf` / `fig_bondscores.png`
-- `fig_boxplots.pdf` / `fig_boxplots.png`
-- `fig_irrep_coupling.pdf` / `fig_irrep_coupling.png`
-- `fig_sensitivity.pdf` / `fig_sensitivity.png`
-- `fig_sensitivity_binary.pdf` / `fig_sensitivity_binary.png`
-- `fig_cputime.pdf` / `fig_cputime.png`
-- `fig_cputime_log.pdf` / `fig_cputime_log.png`
-- `fig_cputime_bw.pdf` / `fig_cputime_bw.png`
-- `fig_gaussian_nbasis.pdf` / `fig_gaussian_nbasis.png`
-- `fig_gaussian_nbasis_linear.pdf` / `fig_gaussian_nbasis_linear.png`
-- `fig_cputime_scaling_comparison.pdf` / `fig_cputime_scaling_comparison.png`
-- `fig_ped_vs_bondscore.pdf` / `fig_ped_vs_bondscore.png`
-
-`data/figures/` still reflects the OLD tau_SB=0.50 default for the 6
-tau_SB-sensitive figures listed above and has not been regenerated to
-match -- still the one open follow-up, unchanged by this session's CSV work.
+**Updated later the same day (2026-08-20).** The "still-open follow-up"
+noted earlier in this session is now closed: canonical `data/figures/` has
+been regenerated for real via `py reproduce.py --only figures` against this
+now fully self-consistent canonical `data/results/`, and
+`data/figures_tau_sb_0.42/` has been promoted from a "6 regenerated + 20
+copied-unchanged" set to a full, verbatim mirror of canonical
+`data/figures/` (52 files, PDF + PNG for all 26 stems), exactly mirroring
+what this README's own results-side promotion did earlier the same day.
+See `data/figures_tau_sb_0.42/README.md` for the full account, including the
+old-vs-new diff (the 6 tau_SB-sensitive figures moved far more than the 20
+tau_SB-independent ones, as expected).

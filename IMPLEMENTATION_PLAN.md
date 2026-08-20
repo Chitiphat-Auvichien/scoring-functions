@@ -414,6 +414,35 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 > One line per session, newest first. Full narration for any entry predating 2026-08-10 is in git history:
 > `git log -p -- IMPLEMENTATION_PLAN.md`.
 
+- **2026-08-20 (later same day, figures follow-up)** — Closed the one remaining open item from the
+  entry directly below: canonical `data/figures/` had still not been regenerated after the `tau_SB`
+  0.50→0.42 fix, so it was internally inconsistent with the now fully self-consistent canonical
+  `data/results/`. Ran `py reproduce.py --only figures` (the `sync_manuscript` stage — which copies
+  into `JCC/JCC_man_scoring/images/` — is opt-in and deliberately left untouched; manuscript images
+  stay a hand-synced copy, not live). All 26 figure stems (52 files, PDF+PNG) regenerated. Diffed
+  old-vs-new canonical figures: raw byte/PDF comparison is unreliable here (matplotlib's PDF font
+  subsetting and `bbox_inches="tight"` sizing are not perfectly deterministic between separate
+  `savefig` runs, confirmed by rerunning the figures stage twice back-to-back and finding the
+  *decompressed drawing content streams* identical while the embedded font-subset bytes and file-level
+  MediaBox/CreationDate metadata still varied), so verification instead used decompressed
+  content-stream diffs plus rasterized (PNG) pixel-diff magnitude. Result: the 6 tau_SB-sensitive
+  figures (`fig_confusion`, `fig_transferability_confusion`, `fig_benzene_confusion`,
+  `fig_benzene_normal`, `fig_modemixing`, `fig_ped_vs_vscore`) moved the most (up to ~23% of pixels
+  differing for `fig_benzene_confusion`, where reclassified cells shift categories), while the other
+  20 moved by a smaller amount (~1-4% of pixels) consistent with `data/figures/` simply having gone
+  stale for longer than just the tau_SB switch (e.g. the CPU-time figures reflect a freshly-timed,
+  inherently noisy `cpu_time_benchmark.csv`; `fig_benzene` reflects the same C6H6 EMIT pipeline the
+  H2O EMIT staleness fix touched) — not a regeneration error. `data/figures_tau_sb_0.42/` promoted
+  from its old "6 regenerated + 20 copied-unchanged" set to a full, byte-identical (`filecmp`-verified)
+  mirror of canonical `data/figures/`'s 52 top-level files, mirroring what the results-side entry below
+  already did for `data/results_tau_sb_0.42/`; `archive_threeway/`/`archive_unweighted/` excluded for
+  the same different-axis reason. Both `_tau_sb_0.42/` READMEs updated to match. Bonus consistency fix
+  as a side effect: `data/results/transferability_confusion_misclassified.csv` is written only by the
+  figures stage (`plot_transferability_confusion`'s misclassified-rows dump), not by `--skip figures`,
+  so it had stayed stale at the 0.50 labeling for C10H8 modes 7/13 (`predicted_label` "B") even after
+  the CSV-only pass in the entry below — now correctly "S" at 0.42. `pytest` full suite (`tests/` +
+  `vscore-webapp/tests/`): 285 passed, 20 failed, 30 skipped — identical to the baseline recorded in
+  the entry below; no new test-visible regressions.
 - **2026-08-20 (later same day, follow-up fix)** — The same-day `tau_SB` 0.50→0.42 switch below
   turned out to be two bugs, not one. (1) **Incomplete relabel:** the 9-file cheap relabel missed
   `C6H6_EMIT.csv` and every other per-molecule EMIT/normal CSV — `C6H6_EMIT.csv`'s EMIT 11/32

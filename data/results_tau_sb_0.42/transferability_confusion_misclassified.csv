@@ -1,9 +1,9 @@
 molecule,mode_index,kind,freq,irrep,V_Stretch,predicted_label,ref_category,predicted_category,description,ref
 B3N3H6,9,internal,854.2276,A1',0.6345574703873492,S,B,S,In-plane sym ring deformation,Par2018
-C10H8,13,internal,761.6029,AG,0.4739784302869582,B,B,S,Skeletal distortion,Lip1955
+C10H8,13,internal,761.6029,AG,0.4739784302869582,S,B,S,Skeletal distortion,Lip1955
 C10H8,24,internal,1031.5824,AG,0.5378026765835757,S,B,S,CH bending,Lip1955
 C10H8,27,internal,1209.0796,B2U,0.7066178196727345,S,B,S,CH bending,Lip1955
-C10H8,7,internal,526.5777,AG,0.4485742127460548,B,B,S,Skeletal distortion,Lip1955
+C10H8,7,internal,526.5777,AG,0.4485742127460548,S,B,S,Skeletal distortion,Lip1955
 C2H4,6,internal,1434.0945,AG,0.5729001689644194,S,B,S,CH2 scis,Shi1972
 C3H6,3,internal,856.1975,E',0.5772992614124517,S,B,S,CH2 wagging,Bak1955
 C3H6,4,internal,856.1975,E',0.6630145612343131,S,B,S,CH2 wagging,Bak1955

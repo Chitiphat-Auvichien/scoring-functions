@@ -166,9 +166,26 @@ class Thresholds:
         against the definition that produced it -- classify_all_modes() refuses
         a mismatch rather than silently mislabelling modes.
 
-    Defaults (0.95/0.9/0.2/0.50/0.05) are the provisional pre-calibration
+    Defaults (0.95/0.9/0.2/0.42/0.05) are the provisional pre-calibration
     constants, deliberately NOT auto-overwritten by Phase-3 calibration --
-    use `Thresholds.calibrated()` for the calibrated values instead.
+    use `Thresholds.calibrated()` for the calibrated values instead. tau_SB
+    is a partial exception to that "provisional" framing: unlike tau_TR/
+    tau_S/tau_B, no sweep ever computes a replacement for it (Phase-3
+    calibration leaves it untouched -- see run_calibration_pipeline in
+    src/calibrate.py), so THIS field default is the actual, sole source of
+    truth for the canonical tau_SB value; there is no separate "calibrated"
+    tau_SB to defer to. **2026-08-20: canonical default changed 0.50 -> 0.42**
+    (the all-molecules classification-error-minimizing value from the
+    tau_SB_error_sweep -- see IMPLEMENTATION_PLAN.md's Recent history). An
+    earlier same-day attempt at this change only hand-edited
+    data/results/thresholds.json's "tau_SB" key without changing this field;
+    that was silently wiped by the next real `--calibrate` run because
+    calibrate() (src/calibrate.py) never threads a tau_SB kwarg through to
+    Thresholds(...) -- it relies entirely on this default. Fixed here (this
+    field IS now 0.42) and in calibrate() (now writes "tau_SB" into the
+    thresholds.json it produces, sourced from this same default, so the
+    value is visible in the JSON without being a second, driftable source
+    of truth).
     tests/test_classifier.py pins `Thresholds()` explicitly so its regression
     goldens stay fixed even if thresholds.json is later recalibrated;
     calibrated behavior has its own tests (tests/test_calibrate.py).
@@ -176,7 +193,7 @@ class Thresholds:
     tau_TR: float = 0.95
     tau_S: float = 0.9
     tau_B: float = 0.2
-    tau_SB: float = 0.50
+    tau_SB: float = 0.42
     tau_purity: float = 0.05
     v_weighting: str = DEFAULT_V_WEIGHTING
 
@@ -190,12 +207,15 @@ class Thresholds:
             # carries no stamp, and was by definition calibrated unweighted.
             # A thresholds.json written before tau_SB/tau_purity existed
             # carries no such key either -- fall back to the class default
-            # (0.50 / 0.05 respectively) rather than KeyError. tau_purity is
+            # (0.42 / 0.05 respectively) rather than KeyError. tau_purity is
             # a fixed exploratory constant, not swept by --calibrate, so it
             # is not expected to ever appear in thresholds.json; the
             # data.get() fallback is future-proofing, not the normal path.
+            # tau_SB IS now written by every real --calibrate run (see
+            # calibrate() in src/calibrate.py) -- the fallback here only
+            # matters for a thresholds.json frozen before 2026-08-20.
             return cls(tau_TR=data["tau_TR"], tau_S=data["tau_S"], tau_B=data["tau_B"],
-                       tau_SB=data.get("tau_SB", 0.50),
+                       tau_SB=data.get("tau_SB", 0.42),
                        tau_purity=data.get("tau_purity", 0.05),
                        v_weighting=data.get("v_weighting", "none"))
         return cls()

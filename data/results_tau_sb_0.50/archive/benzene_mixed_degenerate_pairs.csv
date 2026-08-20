@@ -1,0 +1,3 @@
+mode_i,mode_j,freq_i,freq_j,delta_freq,cc_pattern_correlation,complementary
+13,14,1056.3901,1056.3901,0.0,-0.9969525352308605,True
+23,24,1598.8987,1598.8987,0.0,-0.9926469762763651,True

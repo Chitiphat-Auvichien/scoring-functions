@@ -1,0 +1,4 @@
+ref_label,n,n_correct,recall,n_crossed_opposite
+bend,18,16,0.8888888888888888,0
+stretch,10,7,0.7,0
+SB,2,0,0.0,0

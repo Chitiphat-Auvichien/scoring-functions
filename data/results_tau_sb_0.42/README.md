@@ -1,4 +1,4 @@
-# tau_SB=0.42 output set (NOW CANONICAL as of 2026-08-20)
+# tau_SB=0.42 output set (CANONICAL as of 2026-08-20)
 
 This folder was originally built as an EXPLORATORY alternate-threshold
 output set (figures + results), generated at tau_SB=0.42 for comparison
@@ -8,40 +8,85 @@ against the manuscript's then-canonical tau_SB=0.50 default.
 top-level `"tau_SB": 0.42` key in `data/results/thresholds.json` and the
 2026-08-20 entry in `IMPLEMENTATION_PLAN.md`'s "Recent history". The value
 that was "alternate" here is now the default; tau_SB=0.50 is the one that
-is no longer active anywhere.
+is no longer active anywhere (its own retired snapshot lives in
+`data/results_tau_sb_0.50/`).
 
-## Current relationship to `data/results/` and `data/figures/`
+## Results (`data/results_tau_sb_0.42/`) -- now a FULL mirror
 
-- **This folder (`data/results_tau_sb_0.42/`) is now REDUNDANT with
-  `data/results/`** for the 9 tau_SB-sensitive CSVs listed below --
-  `data/results/`'s canonical copies were overwritten with these exact same
-  tau_SB=0.42 values on 2026-08-20. Kept on disk for its self-contained
-  history and the standalone `thresholds_active.json` provenance note, not
-  because it is the only place to find these numbers anymore.
-- **`data/figures_tau_sb_0.42/` has NOT yet been mirrored back into
-  `data/figures/`** -- the 6 tau_SB-sensitive figures listed below
-  (`fig_confusion`, `fig_transferability_confusion`, `fig_benzene_confusion`,
-  `fig_benzene_normal`, `fig_modemixing`, `fig_ped_vs_vscore`) in
-  `data/figures/` still reflect the OLD tau_SB=0.50 default and have not
-  been regenerated. `data/figures_tau_sb_0.42/` is currently the only place
-  holding up-to-date (canonical-threshold) versions of those 6 figures.
-  Regenerating `data/figures/` to match is an open follow-up.
+**Updated 2026-08-20 (was a 9-file subset until this session).** An audit
+this session found that the original 0.42 switch (`3427ff8`,
+"Change canonical tau_SB default 0.50 -> 0.42...") was incomplete in two
+ways: (1) it only hand-edited `data/results/thresholds.json`'s `"tau_SB"`
+key without changing the actual source of truth (`Thresholds.tau_SB`'s
+dataclass default in `src/classifier.py`, still 0.50), so that JSON edit was
+silently wiped by the very next real `--calibrate` run (`calibrate()` in
+`src/calibrate.py` never threaded a `tau_SB` kwarg through, so it always
+fell back to the 0.50 class default and overwrote the whole file); and
+(2) even setting aside that bug, only 9 of the tau_SB-sensitive CSVs had
+ever been relabeled -- `C6H6_EMIT.csv` and every other per-molecule
+EMIT/normal CSV were untouched, so canonical `data/results/` was internally
+inconsistent (`thresholds.json` claimed 0.42, most files still reflected
+0.50 or worse, H2O's EMIT CSVs were stale from *before* the 2026-08 binary-
+scheme-default switch entirely). Both bugs are now fixed at the source
+(`src/classifier.py`'s `Thresholds.tau_SB` default is genuinely 0.42;
+`calibrate()` now writes `"tau_SB"` into every `thresholds.json` it
+produces) and canonical `data/results/` was regenerated end-to-end via
+`py reproduce.py --skip figures` (figures deliberately out of scope this
+session), so it and this folder are once again in sync.
+
+This folder is now a **complete, self-contained copy of every top-level
+file in `data/results/`** (73 files: every roster molecule's `*_normal.csv`,
+`*_full_ped_table.csv`, the EMIT CSVs for C6H6 and H2O
+(`*_EMIT.csv`/`*_EMIT_full.csv`/`*_EMIT_full_cartesian.csv`),
+`library_scores.csv`, the benzene diagnostic/reference CSVs, transferability
+confusion tables, `thresholds.json`, `cpu_time_benchmark.csv`, the
+sensitivity-sweep CSVs, `_run_manifest.json`, etc.) -- copied verbatim
+(byte-for-byte identical, confirmed via `filecmp`), not just the
+tau_SB-sensitive subset as before.
+
+**Not included:** `data/results/archive/`, `data/results/archive_threeway/`,
+`data/results/archive_unweighted/` -- these are frozen historical snapshots
+along a *different* axis (scheme/weighting changes, not tau_SB) that predate
+and are unrelated to this switch; mirroring them here would just duplicate
+already-archived, unrelated history. If a tau_SB=0.50 comparison point is
+ever needed for one of those, `data/results_tau_sb_0.50/` (the retired
+snapshot, frozen at commit `7c18326`) is the place to look, not here.
+
+`thresholds_active.json` (the old provenance note for this folder, back when
+it held an "override" not the canonical value) has been removed -- it was
+identical in substance to what's now in the mirrored `thresholds.json`, so
+keeping both was redundant.
 
 ## Why this value
 
 the all-molecules classification-error-minimizing value from data/results/thresholds.json's tau_SB_error_sweep block (optimal_tau_all, min_error_all ~= 2.28%, n=788 -- over all single-centre + test molecules, excluding only benzene/C6H6).
 
-## How this was built
+## How this was built (2026-08-20 remirror)
 
-`V_Stretch` (s[V_S]) does not depend on tau_SB at all -- tau_SB only
-decides which side of an already-computed score a mode falls on. Every
-tau_SB-sensitive output below (figures and results CSVs alike) was
-therefore regenerated via the cheap V_Stretch-based re-labeling path
-(`src.classifier.vib_label_binary` / `rescheme_internal_label` /
-`vib_label`) -- **not** by re-running `reproduce.py`, `--library`,
-`-m <mol>`, or any Gaussian-log/geometry parsing.
+1. Fixed the root cause: `src/classifier.py`'s `Thresholds.tau_SB` dataclass
+   default 0.50 -> 0.42 (the actual, sole source of truth for this constant
+   -- no sweep ever computes a replacement for it, unlike tau_TR/tau_S/tau_B);
+   `src/calibrate.py`'s `calibrate()` now writes `"tau_SB"` into the
+   `thresholds.json` it produces (previously omitted entirely).
+2. Ran `py reproduce.py --skip figures` (full pipeline: library ingest,
+   calibration, per-molecule scoring, EMIT scoring + projection for C6H6 AND
+   H2O (H2O added to `reproduce.py`'s `EMIT_MOLECULES` this session --
+   previously hardcoded to `["C6H6"]` only, which is exactly how H2O's EMIT
+   CSVs went stale), PED merge, benzene diagnostics, CPU benchmark) against
+   canonical `data/results/`.
+3. Copied every resulting top-level file in `data/results/` into this folder
+   verbatim.
+
+No manual relabeling this time -- every number here came from the real
+engine, not a V_Stretch-based re-derivation shortcut.
 
 ## Figures (`data/figures_tau_sb_0.42/`)
+
+Unchanged this session -- figures regeneration is a separate, still-open
+follow-up (explicitly out of scope for the 2026-08-20 results-consistency
+fix described above). The figures-folder documentation below is UNCHANGED
+from the prior session and still describes that folder's own state, not
+this one's.
 
 A COMPLETE, self-contained figure set: every tau_SB-sensitive figure is
 regenerated (via a `tau_SB=` override kwarg on the relevant `src.figures`
@@ -87,33 +132,6 @@ rather than regenerated with a redundant re-annotation.
 - `fig_cputime_scaling_comparison.pdf` / `fig_cputime_scaling_comparison.png`
 - `fig_ped_vs_bondscore.pdf` / `fig_ped_vs_bondscore.png`
 
-## Results (`data/results_tau_sb_0.42/`)
-
-Unlike the figures folder above, the results folder is a SUBSET of
-`data/results/`, not a full mirror: only outputs that carry a tau_SB-
-derived column are regenerated here, clearly named to match their
-canonical counterparts. A full mirror of `data/results/` (which also holds
-per-molecule geometry/PED dumps, CPU benchmarks, and other tau_SB-
-independent files) would just duplicate untouched files and bloat the repo
-for no benefit.
-
-Only `C6H6_normal.csv` is regenerated among the 26 roster molecules' `<mol>_normal.csv` files -- it is the only one read by a tau_SB-sensitive figure (`plot_benzene_normal_modes`). The other 25 `_normal.csv` files are per-molecule diagnostic dumps not consumed by anything tau_SB-sensitive; regenerating all 26 would add 25 files nothing here actually reads (see `data/results/` for the canonical originals, all built at tau_SB=0.50).
-
-### Regenerated (tau_SB-sensitive, n=7)
-
-- `library_scores.csv` -- master table: predicted_label/predicted_annotation re-derived
-- `C6H6_normal.csv` -- only roster molecule regenerated -- see scope note below
-- `combined_ped_vs_scores.csv` -- PED-vs-V_Stretch comparison, full canonical row scope
-- `benzene_normal_reference_detail.csv` -- per-mode reference-vs-predicted detail
-- `benzene_normal_reference_summary.csv` -- per-category recall summary
-- `benzene_worked_examples.csv` -- worked-example gallery mode picks (inherits reschemed lib_df)
-- `thresholds_active.json` -- provenance note (tau_SB override only; not a mirror of thresholds.json)
-
-### Not included here (tau_SB-independent -- see `data/results/` for the canonical files)
-
-- benzene_internal_confusion_matrix.csv / benzene_internal_confusion_summary.csv (built under scheme="threeway" -- tau_S/tau_B, unrelated to tau_SB)
-- benzene_mixed_bond_diagnostic.csv / benzene_mixed_degenerate_pairs.csv (scheme="threeway"; inherently three-way-only -- MIXED_STRETCH_BEND never occurs under binary)
-- benzene_sb_vs_stretch_bond_diagnostic.csv (scheme="threeway", same reasoning)
-- rigorous_tier_consistency_table.csv (tau_S/tau_B, unrelated to tau_SB)
-- transferability_confusion_threeway_{matrix,summary,misclassified}.csv (the THREEWAY sibling figure's own companion CSVs -- tau_S/tau_B scheme)
-- every other data/results/ file (per-molecule *_normal.csv for the other 25 roster molecules, *_full_ped_table.csv, cpu_time_benchmark.csv, tau_sb_sensitivity_sweep.csv, tau_sensitivity_sweep.csv, the EMIT CSVs, thresholds.json itself, etc.) -- no tau_SB-derived column at all
+`data/figures/` still reflects the OLD tau_SB=0.50 default for the 6
+tau_SB-sensitive figures listed above and has not been regenerated to
+match -- still the one open follow-up, unchanged by this session's CSV work.

@@ -249,6 +249,15 @@ def calibrate(lib_df, data_dir="data", tau_grid=DEFAULT_TAU_GRID, preferred_tau_
                             v_weighting=weighting)
     result = {
         "tau_TR": tau_TR, "tau_S": tau_S, "tau_B": tau_B,
+        # tau_SB is NOT computed by this sweep (see Thresholds' docstring) --
+        # it is carried through from the Thresholds dataclass default (the
+        # sole source of truth for it) purely so thresholds.json stays a
+        # complete, self-documenting record of what a run was classified
+        # under. 2026-08-20: previously omitted here entirely, which meant
+        # any hand-edit of thresholds.json's "tau_SB" key was silently wiped
+        # by the next real --calibrate run (this dict fully overwrites the
+        # file) -- see Thresholds' docstring for the full incident writeup.
+        "tau_SB": thresholds.tau_SB,
         # Which eq:vscore definition these cut points were read off. Scoring
         # runs under a different weighting are refused, not silently relabelled.
         "v_weighting": weighting,

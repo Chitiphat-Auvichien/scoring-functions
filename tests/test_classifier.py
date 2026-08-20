@@ -218,7 +218,12 @@ def test_classify_all_modes_binary_scheme_never_produces_sb():
     """
     raw, _ = load_inputs("C6H6", "normal", os.path.join(ROOT, "data"))
     scorer, final = build_scorer_and_final(raw, "normal")
-    thresholds = Thresholds()  # provisional tau_S=0.9, tau_B=0.2, tau_SB=0.5
+    # tau_SB pinned explicitly at 0.5 (not the bare Thresholds() default,
+    # which became 0.42 on 2026-08-20 -- see Thresholds' docstring). This
+    # test is about scheme-divergence mechanics on a straddling pair, not
+    # about the current canonical tau_SB value, so it stays independent of
+    # that constant rather than being repinned every time tau_SB moves.
+    thresholds = Thresholds(tau_SB=0.5)  # provisional tau_S=0.9, tau_B=0.2, tau_SB=0.5
 
     scored_3 = {m["name"]: m for m in classify_all_modes(scorer, final, thresholds, scheme="threeway")}
     scored_b = {m["name"]: m for m in classify_all_modes(scorer, final, thresholds, scheme="binary")}

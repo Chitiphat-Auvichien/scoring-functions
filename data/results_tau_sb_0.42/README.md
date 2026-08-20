@@ -1,12 +1,31 @@
-# Alternate-tau_SB output set (tau_SB=0.42)
+# tau_SB=0.42 output set (NOW CANONICAL as of 2026-08-20)
 
-This is an EXPLORATORY alternate-threshold output set (figures + results),
-generated at tau_SB=0.42 instead of the manuscript's canonical
-default, for comparison only.
+This folder was originally built as an EXPLORATORY alternate-threshold
+output set (figures + results), generated at tau_SB=0.42 for comparison
+against the manuscript's then-canonical tau_SB=0.50 default.
 
-**The canonical default remains tau_SB=0.50, unchanged** -- see
-`data/figures/`, `data/results/`, and `data/results/thresholds.json`.
-Nothing under those paths was touched by generating this output.
+**As of 2026-08-20, tau_SB=0.42 IS the canonical default** -- see the
+top-level `"tau_SB": 0.42` key in `data/results/thresholds.json` and the
+2026-08-20 entry in `IMPLEMENTATION_PLAN.md`'s "Recent history". The value
+that was "alternate" here is now the default; tau_SB=0.50 is the one that
+is no longer active anywhere.
+
+## Current relationship to `data/results/` and `data/figures/`
+
+- **This folder (`data/results_tau_sb_0.42/`) is now REDUNDANT with
+  `data/results/`** for the 9 tau_SB-sensitive CSVs listed below --
+  `data/results/`'s canonical copies were overwritten with these exact same
+  tau_SB=0.42 values on 2026-08-20. Kept on disk for its self-contained
+  history and the standalone `thresholds_active.json` provenance note, not
+  because it is the only place to find these numbers anymore.
+- **`data/figures_tau_sb_0.42/` has NOT yet been mirrored back into
+  `data/figures/`** -- the 6 tau_SB-sensitive figures listed below
+  (`fig_confusion`, `fig_transferability_confusion`, `fig_benzene_confusion`,
+  `fig_benzene_normal`, `fig_modemixing`, `fig_ped_vs_vscore`) in
+  `data/figures/` still reflect the OLD tau_SB=0.50 default and have not
+  been regenerated. `data/figures_tau_sb_0.42/` is currently the only place
+  holding up-to-date (canonical-threshold) versions of those 6 figures.
+  Regenerating `data/figures/` to match is an open follow-up.
 
 ## Why this value
 

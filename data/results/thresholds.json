@@ -2,6 +2,7 @@
   "tau_TR": 0.95,
   "tau_S": 0.9012868462693647,
   "tau_B": 0.17326891344050538,
+  "tau_SB": 0.42,
   "v_weighting": "mu",
   "plateau_tau_TR_range": [
     0.34,

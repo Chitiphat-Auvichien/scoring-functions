@@ -17,7 +17,7 @@ Rz,external,0.0,rotation,Rz,rotation,True,False,False
 10,internal,931.2417,bend,B,bend,True,False,False
 11,internal,933.5249,bend,B,bend,True,False,False
 12,internal,992.583,stretch,S,stretch,True,False,False
-13,internal,1056.3901,bend,B,bend,True,False,False
+13,internal,1056.3901,bend,S,stretch,False,True,False
 14,internal,1056.3901,bend,S,stretch,False,True,False
 15,internal,1067.465,bend,B,bend,True,False,False
 16,internal,1237.2931,bend,B,bend,True,False,False

@@ -426,31 +426,53 @@ def test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket():
     below are UNCHANGED at 39/48 -- see
     test_confusion_matrix_ideal_nonideal_recall_split) -- not investigated
     further here since it predates and is orthogonal to this session's work.
-    """
+
+    **Re-derived again 2026-08-20 (canonical tau_SB default changed
+    0.50->0.42)**: lowering the S/B cutoff pushes borderline internal modes
+    from bend into stretch, which is exactly what happens here. `stretch`
+    tp/n_pred rise 194/194 -> 201/202 (7 previously-missed non-ideal
+    literature-stretch modes now clear the lower cutoff and are correctly
+    recovered -- NBr3 mode 4, OCl4 modes 7/9, OBr4 modes 8/9, and SBr4
+    modes 8/9, all with V_Stretch in [0.42, 0.50) -- so stretch recall goes
+    to a perfect 201/201=1.0), but ONE of those same 7 modes' molecule,
+    NBr3, also has a genuine literature-bend mode (mode 3, V_Stretch
+    0.486361) that crosses the same lower cutoff the wrong way, so `stretch`
+    n_pred outruns tp by exactly 1 (202 vs 201) and stretch PRECISION drops
+    below 1.0 for the first time (201/202=0.995049504950495) -- the
+    tradeoff is the mirror image of `bend`'s: bend tp/n_pred fall 208/215
+    -> 207/207 (NBr3 mode 3 is bend's one true miss, recall 207/208=
+    0.9951923076923077, just under 1.0 now) but bend PRECISION rises to a
+    perfect 1.0 (every one of the 215->207 modes still predicted bend is
+    still genuinely bend, since the modes that left bend's predicted set
+    were the ones that used to be false positives for the OTHER category
+    under the higher, threeway-adjacent 0.50 cutoff). Net: the
+    precision/recall imperfection has moved from bend's precision to
+    stretch's precision, floor_met is unaffected (both categories still
+    comfortably clear 0.95 either way)."""
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
     res = confusion_matrix_stats(lib_df, calibrated, acceptance_floor=0.95)
 
     assert res["per_category"]["translation"]["precision"] == 1.0
     assert res["per_category"]["rotation"]["precision"] == 1.0
-    assert res["per_category"]["stretch"]["precision"] == 1.0
+    assert abs(res["per_category"]["stretch"]["precision"] - 0.995049504950495) < 1e-9
 
     assert res["per_category"]["translation"]["recall"] == 1.0
     assert res["per_category"]["rotation"]["recall"] == 1.0
 
     stretch = res["per_category"]["stretch"]
-    assert stretch["tp"] == 194
-    assert stretch["n_pred"] == 194
+    assert stretch["tp"] == 201
+    assert stretch["n_pred"] == 202
     assert stretch["n_ref"] == 201
-    assert abs(stretch["recall"] - 0.9651741293532339) < 1e-6
+    assert stretch["recall"] == 1.0
     assert stretch["mixed_fraction"] == 0.0
 
     bend = res["per_category"]["bend"]
-    assert bend["tp"] == 208
-    assert bend["n_pred"] == 215
+    assert bend["tp"] == 207
+    assert bend["n_pred"] == 207
     assert bend["n_ref"] == 208
-    assert bend["recall"] == 1.0
-    assert abs(bend["precision"] - 0.9674418604651163) < 1e-6
+    assert abs(bend["recall"] - 0.9951923076923077) < 1e-6
+    assert bend["precision"] == 1.0
     assert bend["mixed_fraction"] == 0.0
 
     # The floor (0.95) IS now met -- unlike the threeway scheme's pooled
@@ -531,6 +553,29 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     `recall_nonideal` rises for both categories since the former
     "mixed"-bucket modes now get a forced, mostly-correct S/B verdict
     instead of escaping into a third bucket.
+
+    **Re-derived again 2026-08-20 (canonical tau_SB default changed
+    0.50->0.42)**: see the sibling test's docstring for the full mechanism
+    (7 non-ideal literature-stretch modes -- NBr3 mode 4, OCl4 modes 7/9,
+    OBr4 modes 8/9, SBr4 modes 8/9 -- newly clear the lower tau_SB cutoff;
+    one non-ideal literature-bend mode, NBr3 mode 3, crosses the same
+    lower cutoff the wrong way). All 8 of these are non-ideal (`ideal`=='no'
+    in `library_scores.csv`), so `n_ref_ideal`/`recall_ideal` for both
+    categories are UNCHANGED (39/48, both still EXACTLY 1.0, by the same
+    tau_S/tau_B-is-this-population's-own-min/max construction argument as
+    always -- tau_SB is an independent, S-vs-B split point that plays no
+    role in that boundary). `n_ref_nonideal` is likewise UNCHANGED (162
+    stretch, 160 bend -- these 8 modes only change which SIDE of the
+    predicted split they land on, not which tier they belong to).
+    `recall_nonideal` moves: stretch's 7 recovered modes push it to a
+    perfect 162/162=1.0 (up from 0.9567901234567902); bend's 1 lost mode
+    (NBr3 mode 3) pulls it down to 159/160=0.99375 (down from an exact
+    1.0, which was itself a coincidence of the old cutoff rather than a
+    structural guarantee -- unlike recall_ideal, recall_nonideal has no
+    construction argument protecting it). Pooled `stretch` recall becomes
+    a perfect 1.0 (201/201, up from 0.9651741293532339); pooled `bend`
+    recall is no longer exactly 1.0 (207/208=0.9951923076923077, down from
+    exactly 1.0) since it is now dragged down by the one non-ideal miss.
     """
     lib_df = pd.read_csv(LIB_CSV)
     calibrated = Thresholds.calibrated()
@@ -541,8 +586,8 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     assert res["per_category"]["stretch"]["n_ref_ideal"] == 39
     assert res["per_category"]["bend"]["n_ref_ideal"] == 48
 
-    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 1.0) < 1e-6
-    assert abs(res["per_category"]["stretch"]["recall_nonideal"] - 0.9567901234567902) < 1e-6
+    assert abs(res["per_category"]["bend"]["recall_nonideal"] - 0.99375) < 1e-6
+    assert res["per_category"]["stretch"]["recall_nonideal"] == 1.0
     assert res["per_category"]["bend"]["n_ref_nonideal"] == 160
     assert res["per_category"]["stretch"]["n_ref_nonideal"] == 162
 
@@ -565,8 +610,14 @@ def test_confusion_matrix_ideal_nonideal_recall_split():
     # 0.6019900497512438 -> 0.9651741293532339, bend recall stays 1.0
     # (already exactly 1.0 under threeway too -- bend's own loss under
     # binary shows up as reduced PRECISION, not recall, see sibling test).
-    assert abs(res["per_category"]["stretch"]["recall"] - 0.9651741293532339) < 1e-6
-    assert res["per_category"]["bend"]["recall"] == 1.0
+    # 2026-08-20 canonical tau_SB default changed 0.50->0.42: see the
+    # sibling test's docstring for the mechanism. stretch recall rises to
+    # a perfect 1.0 (up from 0.9651741293532339, all 7 non-ideal
+    # literature-stretch misses recovered); bend recall is no longer
+    # exactly 1.0 -- it now carries the one non-ideal miss (NBr3 mode 3)
+    # that used to be absorbed by bend's PRECISION loss instead.
+    assert res["per_category"]["stretch"]["recall"] == 1.0
+    assert abs(res["per_category"]["bend"]["recall"] - 0.9951923076923077) < 1e-6
 
 
 # --------------------------------------------------------------------------

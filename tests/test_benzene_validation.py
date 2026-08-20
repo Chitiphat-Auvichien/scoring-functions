@@ -76,7 +76,26 @@ def test_benzene_normal_summary_matches_ad_hoc_session_numbers():
     binary-forced call is a different question, not a threeway "miss".
     n_migrated_to_mixed is 0 across every category under binary by
     construction (binary never produces a "mixed" predicted bucket at
-    all)."""
+    all).
+
+    **Re-derived again 2026-08-20 (canonical tau_SB default changed
+    0.50->0.42)**: `data/results/thresholds.json`'s top-level `tau_SB` key
+    (read by `Thresholds.calibrated()`, which `library_scores.csv`'s own
+    `predicted_label` column was regenerated against) moved down from 0.50
+    to 0.42, so more borderline internal modes now clear the stretch
+    cutoff. Benzene's near-degenerate bend pair at 1056.3901 cm-1 (modes 13
+    and 14, V_Stretch 0.451177 and 0.508777) is the exact mechanism: mode
+    14 (0.508777) was already above the old 0.50 cutoff and crossed
+    bend->stretch before this change; mode 13 (0.451177) sat between the
+    two cutoffs (0.42 < 0.451177 < 0.50) and now crosses too. So bend
+    n_crossed_opposite rises from 1 to 2 and bend n_correct falls from 17
+    to 16 (recall 17/18 -> 16/18 = 0.888889). Nothing else in this table
+    moves: stretch stays 10/10 (every literature-stretch mode's V_Stretch
+    already cleared even the old, higher 0.50 cutoff, so lowering it
+    further changes nothing there), and SB stays 0/2 by the same
+    binary-scheme construction argument as the 2026-08-19 paragraph above
+    (predicted "mixed" is structurally unreachable under binary,
+    independent of where the S/B cutoff itself sits)."""
     detail = benzene_normal_reference_detail(_lib())
     summary = benzene_normal_reference_summary(detail)
     by_ref = summary.set_index("ref_label")
@@ -95,10 +114,10 @@ def test_benzene_normal_summary_matches_ad_hoc_session_numbers():
     assert int(by_ref.loc["stretch", "n_migrated_to_mixed"]) == 0
 
     assert int(by_ref.loc["bend", "n"]) == 18
-    assert int(by_ref.loc["bend", "n_correct"]) == 17
-    assert abs(by_ref.loc["bend", "recall"] - 17 / 18) < 1e-9
+    assert int(by_ref.loc["bend", "n_correct"]) == 16
+    assert abs(by_ref.loc["bend", "recall"] - 16 / 18) < 1e-9
     assert int(by_ref.loc["bend", "n_migrated_to_mixed"]) == 0
-    assert int(by_ref.loc["bend", "n_crossed_opposite"]) == 1
+    assert int(by_ref.loc["bend", "n_crossed_opposite"]) == 2
 
     assert int(by_ref.loc["SB", "n"]) == 2
     assert int(by_ref.loc["SB", "n_correct"]) == 0

@@ -414,6 +414,22 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 > One line per session, newest first. Full narration for any entry predating 2026-08-10 is in git history:
 > `git log -p -- IMPLEMENTATION_PLAN.md`.
 
+- **2026-08-20** — Canonical `tau_SB` (binary-scheme stretch/bend cutoff) changed 0.50 → 0.42:
+  `data/results/thresholds.json` gained a top-level `"tau_SB": 0.42` key (`Thresholds.calibrated()`
+  now reads it instead of falling back to 0.50); 9 canonical `data/results/` CSVs (`library_scores.csv`,
+  `C6H6_normal.csv`, `combined_ped_vs_scores.csv`, `benzene_normal_reference_detail.csv`,
+  `benzene_normal_reference_summary.csv`, `benzene_worked_examples.csv`,
+  `transferability_confusion_matrix.csv`, `transferability_confusion_summary.csv`,
+  `transferability_confusion_misclassified.csv`) relabeled at the new cutoff (no re-scoring needed —
+  `V_Stretch` doesn't depend on `tau_SB`). Figures NOT regenerated this session (CSV-only task). 3
+  golden-value tests repinned (`test_benzene_normal_summary_matches_ad_hoc_session_numbers`,
+  `test_confusion_matrix_precision_perfect_recall_explained_by_mixed_bucket`,
+  `test_confusion_matrix_ideal_nonideal_recall_split`) — mechanism: benzene's near-degenerate bend pair
+  at 1056.3901 cm⁻¹ (modes 13/14) both now cross bend→stretch; library-wide, 7 non-ideal
+  literature-stretch modes (NBr3 mode 4, OCl4 modes 7/9, OBr4 modes 8/9, SBr4 modes 8/9) are recovered
+  while NBr3 mode 3 (literature bend) crosses the wrong way, so stretch recall reaches a perfect 1.0
+  while bend absorbs one non-ideal miss. `pytest` unaffected elsewhere (same ~20 pre-existing failures
+  in `vscore-webapp/tests/` and `test_veda_fmt_regression.py`).
 - **2026-08-18 (Cartesian-overlap comparison pathway, corrected same day)** — `src/projection.py`
   gained `build_reference_basis_cartesian`/`project_emit_cartesian`, an explicitly non-orthonormal
   counterpart to the locked mass-weighted `build_reference_basis`/`project_emit` (same T/R/vibrational

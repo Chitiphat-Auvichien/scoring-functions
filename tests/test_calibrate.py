@@ -668,27 +668,33 @@ def test_sweep_tau_sb_scopes_and_exclusions():
         assert (sweep["n_all"] == 4).all()
         # 'test' = M3's internal stretch/bend rows only.
         assert (sweep["n_test"] == 2).all()
+        # 'single_centre' = 'all' minus 'test' = M1's stretch/bend rows only.
+        assert (sweep["n_single_centre"] == 2).all()
 
         row = sweep[sweep["tau_SB"] == 0.5].iloc[0]
         # At tau=0.5: M1 stretch(0.90)->stretch OK, M1 bend(0.10)->bend OK,
         # M3 stretch(0.80)->stretch OK, M3 bend(0.20)->bend OK -- 0 error
-        # both scopes (M3's stretch/bend also satisfy 'test').
+        # all three scopes (M3's stretch/bend also satisfy 'test').
         assert row["error_all"] == 0.0
         assert row["accuracy_all"] == 1.0
         assert row["error_test"] == 0.0
         assert row["accuracy_test"] == 1.0
+        assert row["error_single_centre"] == 0.0
+        assert row["accuracy_single_centre"] == 1.0
 
         row0 = sweep[sweep["tau_SB"] == 0.0].iloc[0]
-        # At tau=0.0 everything predicts 'stretch': both scopes' bend rows
-        # (1 of 2 in 'all', 1 of 2 in 'test') are now wrong.
+        # At tau=0.0 everything predicts 'stretch': every scope's bend rows
+        # (1 of 2 in each of 'all'/'test'/'single_centre') are now wrong.
         assert row0["error_all"] == 0.5
         assert row0["error_test"] == 0.5
+        assert row0["error_single_centre"] == 0.5
 
         row1 = sweep[sweep["tau_SB"] == 1.0].iloc[0]
-        # At tau=1.0 everything predicts 'bend': both scopes' stretch rows
+        # At tau=1.0 everything predicts 'bend': every scope's stretch rows
         # are now wrong, same 0.5 fraction (2 stretch/2 bend in each scope).
         assert row1["error_all"] == 0.5
         assert row1["error_test"] == 0.5
+        assert row1["error_single_centre"] == 0.5
 
 
 def test_error_plateau_finds_the_flat_minimum_region():
@@ -709,6 +715,11 @@ def test_error_plateau_finds_the_flat_minimum_region():
         assert min_error_t == 0.0
         assert lo_t == 0.3 and hi_t == 0.7
         assert mid_t == 0.5
+
+        lo_sc, hi_sc, mid_sc, min_error_sc = _error_plateau(sweep, "error_single_centre")
+        assert min_error_sc == 0.0
+        assert lo_sc == 0.3 and hi_sc == 0.7
+        assert mid_sc == 0.5
 
 
 if __name__ == "__main__":

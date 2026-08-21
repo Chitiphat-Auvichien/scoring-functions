@@ -428,7 +428,11 @@ def sweep_tau_sb(lib_df, tau_grid=DEFAULT_TAU_SB_GRID, data_dir="data"):
     pass over the already-computed library_scores.csv column.
 
     Returns a DataFrame with columns tau_SB, error_all, accuracy_all, n_all,
-    error_test, accuracy_test, n_test.
+    error_test, accuracy_test, n_test, error_single_centre,
+    accuracy_single_centre, n_single_centre. The "single_centre" scope is
+    "all" minus the test tier -- i.e. exactly filter_single_centre_library's
+    scope (mol_type in {'ideal', 'non-ideal'}), the calibration-only
+    population with no held-out transferability molecules mixed in.
     """
     df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ref_label"].isin(("stretch", "bend")))]
 
@@ -436,13 +440,17 @@ def sweep_tau_sb(lib_df, tau_grid=DEFAULT_TAU_SB_GRID, data_dir="data"):
     test_mols = test_tier_molecules(data_dir)
     all_df = df[~df["molecule"].isin(multi_centre)]
     test_df = df[df["molecule"].isin(test_mols)]
+    single_centre_df = all_df[~all_df["molecule"].isin(test_mols)]
 
     n_all = len(all_df)
     n_test = len(test_df)
+    n_single_centre = len(single_centre_df)
     ref_all = all_df["ref_label"].to_numpy()
     v_all = all_df["V_Stretch"].to_numpy(dtype=float)
     ref_test = test_df["ref_label"].to_numpy()
     v_test = test_df["V_Stretch"].to_numpy(dtype=float)
+    ref_sc = single_centre_df["ref_label"].to_numpy()
+    v_sc = single_centre_df["V_Stretch"].to_numpy(dtype=float)
 
     records = []
     for tau in tau_grid:
@@ -450,12 +458,17 @@ def sweep_tau_sb(lib_df, tau_grid=DEFAULT_TAU_SB_GRID, data_dir="data"):
         error_all = float((pred_all != ref_all).mean()) if n_all else float("nan")
         pred_test = np.where(v_test >= tau, "stretch", "bend")
         error_test = float((pred_test != ref_test).mean()) if n_test else float("nan")
+        pred_sc = np.where(v_sc >= tau, "stretch", "bend")
+        error_sc = float((pred_sc != ref_sc).mean()) if n_single_centre else float("nan")
         records.append({
             "tau_SB": tau,
             "error_all": error_all, "accuracy_all": 1 - error_all if n_all else float("nan"),
             "n_all": n_all,
             "error_test": error_test, "accuracy_test": 1 - error_test if n_test else float("nan"),
             "n_test": n_test,
+            "error_single_centre": error_sc,
+            "accuracy_single_centre": 1 - error_sc if n_single_centre else float("nan"),
+            "n_single_centre": n_single_centre,
         })
     return pd.DataFrame(records)
 
@@ -498,14 +511,16 @@ def run_tau_sb_error_analysis(data_dir="data", tau_grid=DEFAULT_TAU_SB_GRID, wri
     this analysis only reports where the error is minimized, it does not
     silently adopt that value).
 
-    Returns (sweep_df, plateau_all, plateau_test, path_sweep), where
-    plateau_all/plateau_test are (tau_lo, tau_hi, midpoint, min_error) tuples
+    Returns (sweep_df, plateau_all, plateau_test, path_sweep,
+    plateau_single_centre), where plateau_all/plateau_test/
+    plateau_single_centre are (tau_lo, tau_hi, midpoint, min_error) tuples
     from _error_plateau.
     """
     lib_df = build_library_scores(data_dir)
     sweep_df = sweep_tau_sb(lib_df, tau_grid, data_dir)
     plateau_all = _error_plateau(sweep_df, "error_all")
     plateau_test = _error_plateau(sweep_df, "error_test")
+    plateau_single_centre = _error_plateau(sweep_df, "error_single_centre")
 
     path_sweep = os.path.join(data_dir, "results", "tau_sb_sensitivity_sweep.csv")
     path_json = os.path.join(data_dir, "results", "thresholds.json")
@@ -518,13 +533,16 @@ def run_tau_sb_error_analysis(data_dir="data", tau_grid=DEFAULT_TAU_SB_GRID, wri
                 result = json.load(f)
         lo_all, hi_all, mid_all, err_all = plateau_all
         lo_test, hi_test, mid_test, err_test = plateau_test
+        lo_sc, hi_sc, mid_sc, err_sc = plateau_single_centre
         result["tau_SB_error_sweep"] = {
             "grid": "0.00-1.00 step 0.01",
             "optimal_tau_all": mid_all, "min_error_all": err_all,
             "n_all": int(sweep_df["n_all"].iloc[0]) if len(sweep_df) else 0,
             "optimal_tau_test": mid_test, "min_error_test": err_test,
             "n_test": int(sweep_df["n_test"].iloc[0]) if len(sweep_df) else 0,
+            "optimal_tau_single_centre": mid_sc, "min_error_single_centre": err_sc,
+            "n_single_centre": int(sweep_df["n_single_centre"].iloc[0]) if len(sweep_df) else 0,
         }
         with open(path_json, "w") as f:
             json.dump(result, f, indent=2)
-    return sweep_df, plateau_all, plateau_test, path_sweep
+    return sweep_df, plateau_all, plateau_test, path_sweep, plateau_single_centre

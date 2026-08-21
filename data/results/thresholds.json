@@ -25,6 +25,9 @@
     "n_all": 788,
     "optimal_tau_test": 0.39,
     "min_error_test": 0.044854881266490766,
-    "n_test": 379
+    "n_test": 379,
+    "optimal_tau_single_centre": 0.425,
+    "min_error_single_centre": 0.0024449877750611247,
+    "n_single_centre": 409
   }
 }

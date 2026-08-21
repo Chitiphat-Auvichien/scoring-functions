@@ -66,9 +66,10 @@ coupling partner; reads ``irrep``/``shape``/``type`` from
 (fig:cputime, PROPOSED label not yet wired into the .tex -- empirical CPU-time
 figure for the "Computational cost" section as it is rewritten away from a
 pure Big-O argument; reads ``data/results/cpu_time_benchmark.csv``),
-``plot_tau_sb_sensitivity`` (error_all/error_test vs. tau_SB line plot,
-mirrors ``plot_sensitivity``'s structure but sweeps the single tau_SB cutoff,
-not tau_TR -- reads ``data/results/tau_sb_sensitivity_sweep.csv`` from
+``plot_tau_sb_sensitivity`` (error_all/error_test/error_single_centre vs.
+tau_SB line plot, mirrors ``plot_sensitivity``'s structure but sweeps the
+single tau_SB cutoff, not tau_TR -- reads
+``data/results/tau_sb_sensitivity_sweep.csv`` from
 ``src.calibrate.run_tau_sb_error_analysis``).
 
 Both schemes' figures are always registered in ``regenerate_all()`` (see its
@@ -131,6 +132,7 @@ COLORS = {
     "threshold": "#555555",  # dark gray -- tau reference lines (all figures)
     "sens_accuracy": "#56B4E9",   # sky blue  -- accuracy curve, fig:sensitivity
     "sens_change": "#000000",     # black     -- label-change-fraction curve, fig:sensitivity
+    "sens_single_centre": "#009E73",  # Okabe-Ito bluish green -- single-centre error curve, fig:sensitivity_binary
     "plateau_band": "#56B4E9",    # sky blue @ low alpha -- tau_TR plateau shading, fig:sensitivity
     # Sequential, colorblind-safe -- fig:confusion/fig:benzeneconfusion
     # heatmap. NOTE: YlGnBu's high-value end is blue-ish, a known collision
@@ -2406,18 +2408,20 @@ def plot_tau_sb_sensitivity(
     out_dir="data/figures",
     label="fig_sensitivity_binary",
 ):
-    """Binary-scheme sibling of plot_sensitivity (fig:sensitivity): error_all
-    and error_test vs. tau_SB over src.calibrate.sweep_tau_sb's persisted
-    output (data/results/tau_sb_sensitivity_sweep.csv), marking the active
-    tau_SB default (Thresholds.calibrated().tau_SB) and the two ADVISORY
-    suggested-optimal points (thresholds.json's "tau_SB_error_sweep" block,
-    written by src.calibrate.run_tau_sb_error_analysis -- see that
-    function's docstring for why they are advisory-only and never silently
-    adopted as the new default).
+    """Binary-scheme sibling of plot_sensitivity (fig:sensitivity): error_all,
+    error_test, and error_single_centre vs. tau_SB over
+    src.calibrate.sweep_tau_sb's persisted output
+    (data/results/tau_sb_sensitivity_sweep.csv), marking the active tau_SB
+    default (Thresholds.calibrated().tau_SB), the fixed tau_SB=0.5 reference
+    line (the naive midpoint cutoff), and the three ADVISORY optimal points
+    (thresholds.json's "tau_SB_error_sweep" block, written by
+    src.calibrate.run_tau_sb_error_analysis -- see that function's docstring
+    for why they are advisory-only and never silently adopted as the new
+    default).
 
     Unlike plot_sensitivity's twin accuracy/label-change-fraction axes
-    (different natural scales), error_all/error_test share one [0, 1] scale,
-    so this figure uses a single axis.
+    (different natural scales), error_all/error_test/error_single_centre
+    share one [0, 1] scale, so this figure uses a single axis.
     """
     _style()
     sweep = pd.read_csv(sweep_csv)
@@ -2429,25 +2433,36 @@ def plot_tau_sb_sensitivity(
     sb_sweep_info = result.get("tau_SB_error_sweep", {})
     opt_all = sb_sweep_info.get("optimal_tau_all")
     opt_test = sb_sweep_info.get("optimal_tau_test")
+    opt_sc = sb_sweep_info.get("optimal_tau_single_centre")
 
     fig, ax1 = plt.subplots(figsize=(5.6, 4.6))
     ax1.axvline(tau_SB_active, color=COLORS["threshold"], ls="--", lw=1.2, zorder=2,
                 label=r"active $\tau_{\mathrm{SB}}$" + f"={tau_SB_active:g}")
+    ax1.axvline(0.5, color=COLORS["threshold"], ls="-.", lw=1.0, zorder=2,
+                label=r"$\tau_{\mathrm{SB}}$=0.5")
     if opt_all is not None:
         ax1.axvline(opt_all, color=COLORS["sens_change"], ls=":", lw=1.0, zorder=2,
-                    label=f"suggested (all)={opt_all:g}")
+                    label=f"optimal (all)={opt_all:g}")
     if opt_test is not None:
         ax1.axvline(opt_test, color=COLORS["sens_accuracy"], ls=":", lw=1.0, zorder=2,
-                    label=f"suggested (test)={opt_test:g}")
+                    label=f"optimal (test)={opt_test:g}")
+    if opt_sc is not None:
+        ax1.axvline(opt_sc, color=COLORS["sens_single_centre"], ls=":", lw=1.0, zorder=2,
+                    label=f"optimal (single-centre)={opt_sc:g}")
 
     l1, = ax1.plot(sweep["tau_SB"], sweep["error_all"], color=COLORS["sens_change"],
                    marker="o", markersize=2.5, lw=1.1, zorder=3, label="error (all)")
     l2, = ax1.plot(sweep["tau_SB"], sweep["error_test"], color=COLORS["sens_accuracy"],
                    marker="s", markersize=2.5, lw=1.1, zorder=3, label="error (test)")
+    l3, = ax1.plot(sweep["tau_SB"], sweep["error_single_centre"],
+                   color=COLORS["sens_single_centre"],
+                   marker="^", markersize=2.5, lw=1.1, zorder=3,
+                   label="error (single-centre)")
     ax1.set_xlabel(r"$\tau_{\mathrm{SB}}$")
     ax1.set_ylabel("Classification error")
     ax1.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
-    ax1.set_ylim(-0.01, max(0.05, float(sweep[["error_all", "error_test"]].max().max()) * 1.1))
+    error_cols = ["error_all", "error_test", "error_single_centre"]
+    ax1.set_ylim(-0.01, max(0.05, float(sweep[error_cols].max().max()) * 1.1))
     ax1.legend(loc="best", frameon=False, fontsize=LEGEND_FONTSIZE,
                handletextpad=0.5, labelspacing=0.4)
 
@@ -2458,16 +2473,21 @@ def plot_tau_sb_sensitivity(
     summary = {
         "pdf": pdf_path, "png": png_path,
         "shared_categories": ("no classification-category colors here (tau_SB "
-                               "error curve, not per-mode points); reuses the "
-                               "shared COLORS['threshold'] dashed-line "
-                               "convention for the active-tau marker."),
+                               "error curves, not per-mode points); reuses the "
+                               "shared COLORS['threshold'] dashed/dash-dot-line "
+                               "convention for the active-tau and fixed-0.5 "
+                               "markers."),
         "n_grid_points": len(sweep),
         "tau_SB_range": (float(sweep["tau_SB"].min()), float(sweep["tau_SB"].max())),
         "error_all_range": (float(sweep["error_all"].min()), float(sweep["error_all"].max())),
         "error_test_range": (float(sweep["error_test"].min()), float(sweep["error_test"].max())),
+        "error_single_centre_range": (float(sweep["error_single_centre"].min()),
+                                       float(sweep["error_single_centre"].max())),
         "tau_SB_active": tau_SB_active,
-        "suggested_tau_SB_all": opt_all,
-        "suggested_tau_SB_test": opt_test,
+        "tau_SB_fixed_reference": 0.5,
+        "optimal_tau_SB_all": opt_all,
+        "optimal_tau_SB_test": opt_test,
+        "optimal_tau_SB_single_centre": opt_sc,
     }
     return summary
 

@@ -83,7 +83,7 @@ SENSITIVE = [
 # does not depend on which tau_SB happens to be "active" -- only the
 # dashed "active tau_SB" vertical line's position would move. Re-annotating
 # it at tau_SB=0.42 would just slide that line on top of the plot's own
-# already-drawn "suggested (all)=0.42" dotted reference line (opt_all is
+# already-drawn "optimal (all)=0.42" dotted reference line (opt_all is
 # read from thresholds.json's frozen tau_SB_error_sweep block regardless of
 # this script's argument), which is redundant, not more informative -- so
 # it is copied unchanged, not regenerated. See README below.
@@ -396,7 +396,7 @@ One figure, `fig_sensitivity_binary` (the tau_SB error-sweep plot itself),
 is a deliberate exception within the "copied unchanged" list: its curve
 does not depend on which tau_SB is "active", and re-annotating its active-
 tau_SB marker at {tau_sb:g} would only slide that line onto its own
-already-drawn "suggested (all)" reference line -- so it is copied as-is
+already-drawn "optimal (all)" reference line -- so it is copied as-is
 rather than regenerated with a redundant re-annotation.
 
 ### Regenerated (tau_SB-sensitive, n={n_fig_regenerated})

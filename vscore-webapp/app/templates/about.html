@@ -31,18 +31,18 @@
     is linear) are assigned across the whole mode pool by a one-to-one Hungarian
     assignment maximising Σ|score|. An assigned mode is "clean" only if it passes
     <em>both</em> gates: |slot score| ≥ τ<sub>TR</sub> and
-    s[V<sub>S</sub>] ≤ τ<sub>B</sub>; otherwise it carries a trailing
-    <code>*</code>. Everything unassigned is labelled from s[V<sub>S</sub>] alone:
-    <b class="lab S">S</b> stretching (≥ τ<sub>S</sub>),
-    <b class="lab B">B</b> bending (≤ τ<sub>B</sub>),
-    <b class="lab SB">SB</b> mixed in between.
+    s[V<sub>S</sub>] ≤ τ<sub>purity</sub>; otherwise it carries a trailing
+    <code>*</code>. Everything unassigned is labelled from s[V<sub>S</sub>] alone,
+    on a single cut point: <b class="lab S">S</b> stretching (≥ τ<sub>SB</sub>),
+    <b class="lab B">B</b> bending (below it). This is the binary scheme the
+    paper standardised on; every internal mode gets one or the other, so
+    <b class="lab SB">SB</b> (mixed) no longer appears.
   </p>
   <p>
     In practice the six slots are always won by the ideal T/R reference modes,
     which score exactly 1.000 — across the 26 reference molecules, none of their
     463 real vibrations ever took an external slot. So for an uploaded frequency
-    job, expect <b class="lab S">S</b>/<b class="lab B">B</b>/<b class="lab SB">SB</b>
-    throughout. The reference rows are shown (toggle "reference modes") as a
+    job, expect <b class="lab S">S</b>/<b class="lab B">B</b> throughout. The reference rows are shown (toggle "reference modes") as a
     sanity check on the alignment, not as results.
   </p>
 

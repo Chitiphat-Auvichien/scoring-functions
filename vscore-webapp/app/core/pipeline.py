@@ -240,6 +240,11 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
             "tau_TR": thresholds.tau_TR,
             "tau_S": thresholds.tau_S,
             "tau_B": thresholds.tau_B,
+            # The operative cut points under the binary scheme the classifier
+            # now runs: tau_SB splits S from B in Step 4, tau_purity is Step
+            # 3's gate 2. tau_S/tau_B are kept for the three-way scheme.
+            "tau_SB": thresholds.tau_SB,
+            "tau_purity": thresholds.tau_purity,
             "v_weighting": thresholds.v_weighting,
         },
         "precision_dp": dp,

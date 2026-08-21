@@ -10,9 +10,8 @@
     <span><b>{{ p.bonds|length }}</b> bonds</span>
     <span>{{ "linear" if p.linear else "non-linear" }}</span>
     <span title="V-score bond weighting">w = <b>{{ p.thresholds.v_weighting }}</b></span>
-    <span title="stretching / bending cut points on s[V_S]">
-      τ<sub>S</sub> {{ "%.3f"|format(p.thresholds.tau_S) }} ·
-      τ<sub>B</sub> {{ "%.3f"|format(p.thresholds.tau_B) }}</span>
+    <span title="single stretch/bend cut point on s[V_S]: at or above is S, below is B">
+      τ<sub>SB</sub> {{ "%.2f"|format(p.thresholds.tau_SB) }}</span>
     <span title="displacement decimal places">{{ p.precision_dp }} dp</span>
     <span title="Detected from the mode count. 3N = the complete set, so the six external modes were found among yours. 3N-6 (3N-5 linear) = vibrations only, so the ideal T/R references were constructed and added.">
       {% if p.mode_set == "3n" %}<b>3N</b> set{% else %}<b>3N&minus;{{ 3 * p.n_atoms - p.n_modes }}</b> set{% endif %}</span>

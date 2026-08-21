@@ -10,6 +10,7 @@ results by tests/test_regression.py.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
@@ -17,6 +18,12 @@ STATIC_DIR = APP_DIR / "static"
 TEMPLATES_DIR = APP_DIR / "templates"
 
 VERSION = "1.0"
+
+# Direct paste-in is a local convenience: it lets you try a few numbers without
+# writing a file. It is not offered on the public deployment, where an
+# open-ended textarea is a bigger surface than an upload for no gain. Vercel
+# sets VERCEL=1 in the function environment.
+IS_LOCAL = not os.environ.get("VERCEL")
 
 
 def asset_version():

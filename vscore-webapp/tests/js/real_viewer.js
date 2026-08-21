@@ -4,7 +4,7 @@
  * rendering is stubbed. */
 var CALLS = { vibrate:null, animate:null, style:null, viewer:null,
               animateCount:0, stopCount:0, live:0, zooms:0, frame:null,
-              arrows:[], labels:[] };
+              arrows:[], labels:[], cylinders:[] };
 var REAL = $3Dmol;
 $3Dmol = {
   GLModel: REAL.GLModel,
@@ -14,7 +14,7 @@ $3Dmol = {
       models: [],
       getModelOpt: function (o) { return o || {}; },
       removeAllModels: function () { this.models = []; },
-      removeAllShapes: function () {},
+      removeAllShapes: function () { CALLS.cylinders = []; CALLS.arrows = []; },
       addModel: function (data, fmt, opts) {
         var m = new REAL.GLModel(this.models.length, opts || {}, null);
         m.addMolData(data, fmt, opts || {});
@@ -26,14 +26,20 @@ $3Dmol = {
         this.models.push(m); return m;
       },
       addArrow: function (spec) { CALLS.arrows.push(spec); },
+      addCylinder: function (spec) { CALLS.cylinders.push(spec); },
       addLabel: function (t, spec) { CALLS.labels.push({text: t, spec: spec}); },
       removeAllLabels: function () { CALLS.labels = []; CALLS.arrows = []; },
+      resize: function () { CALLS.resizes = (CALLS.resizes||0) + 1; },
+      linkedViewers: [],
+      linkViewer: function (o) { this.linkedViewers.push(o); return this; },
+      getView: function () { return this._view || [0,0,0,1,0,0,0,1]; },
+      setView: function (v) { CALLS.setViews = (CALLS.setViews||0)+1; this._view = v; },
       zoomTo: function () { CALLS.zooms++; }, render: function () {},
       // count loops started vs stopped, and model frame index
       animate: function (o) { CALLS.animate = o; CALLS.animateCount++; CALLS.live++; },
       stopAnimate: function () { CALLS.stopCount++; CALLS.live = 0; },
       setFrame: function (n) { CALLS.frame = n; return { then: function (f) { f(); } }; }
     };
-    CALLS.viewer = v; return v;
+    CALLS.viewer = v; (CALLS.viewers = CALLS.viewers || []).push(v); return v;
   }
 };

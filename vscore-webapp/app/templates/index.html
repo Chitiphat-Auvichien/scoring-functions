@@ -22,6 +22,9 @@
     <div class="tabs" role="tablist">
       <button type="button" class="tab on" data-mode="log" role="tab">Gaussian .log + .com</button>
       <button type="button" class="tab" data-mode="vsc" role="tab">Single .vsc file</button>
+      {% if is_local %}
+      <button type="button" class="tab" data-mode="paste" role="tab">Arbitrary vibrations</button>
+      {% endif %}
     </div>
     <input type="hidden" name="mode" id="mode" value="log">
 
@@ -67,6 +70,56 @@
         <a href="/format">Format spec →</a>
       </p>
     </section>
+
+    {% if is_local %}
+    <section class="panel" id="p-paste">
+      <p class="assume">
+        <b>Every mode on this page is taken to be a vibration</b> &mdash; not a
+        translation or rotation. Any number of them is fine: the six ideal T/R
+        references are constructed and fill the external slots, so none of your
+        modes can be claimed as one, and each is classified on its own
+        s[V<sub>S</sub>]. A count that happens to equal 3N or 3N&minus;6 is still
+        treated this way here; use the tabs above to have that detected instead.
+      </p>
+
+      <label class="drop wide">
+        <span class="k">Upload a .vsc &mdash; any number of modes</span>
+        <input type="file" name="arbfile" accept=".vsc,.txt">
+        <span class="hint">geometry + connectivity + however many modes you have</span>
+      </label>
+
+      <div class="orbar"><span>or type them in</span></div>
+
+      <div id="builder">
+        <div class="bctl">
+          <label>atoms <input type="number" id="b-atoms" min="2" max="200" value="3"></label>
+          <label>modes <input type="number" id="b-modes" min="1" max="400" value="1"></label>
+          <button type="button" id="b-build" class="mini go-mini">build form</button>
+        </div>
+
+        <div class="bsec bsplit">
+          <div>
+            <span class="bk">geometry</span><div id="b-geom"></div>
+            <span class="bk" style="margin-top:16px">connectivity</span><div id="b-bonds"></div>
+          </div>
+          <div class="bpreview">
+            <div class="vhead"><span>preview</span><span id="b-vstat" class="muted">—</span></div>
+            <div id="b-view"></div>
+            <p class="hint">Updates as you type. Sticks are drawn from the bonds
+              you entered, not guessed from distances &mdash; so a wrong bond shows
+              up here before it reaches s[V_S].</p>
+          </div>
+        </div>
+        <div class="bsec"><span class="bk">displacement vectors</span><div id="b-modes-box"></div></div>
+      </div>
+      <textarea name="pasted" id="pasted" hidden></textarea>
+
+      <p class="note local">
+        Local instance only. Blank number fields are read as 0. If a file is
+        uploaded it takes precedence over anything typed.
+      </p>
+    </section>
+    {% endif %}
 
     <button type="submit" class="go">Score modes</button>
   </form>
@@ -114,4 +167,11 @@
     });
   });
 </script>
+{% endblock %}
+
+{% block page_scripts %}
+{% if is_local %}
+<script src="/static/3Dmol-min.js"></script>
+<script src="/static/builder.js?v={{ asset_v() }}"></script>
+{% endif %}
 {% endblock %}

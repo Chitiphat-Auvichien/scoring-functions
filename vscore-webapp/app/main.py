@@ -22,8 +22,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .config import (MAX_UPLOAD_BYTES, SCORE_KEYS, SITE_NOTE, STATIC_DIR,
-                     TEMPLATES_DIR, VERSION, asset_version)
+from .config import (IS_LOCAL, MAX_UPLOAD_BYTES, SCORE_KEYS, SITE_NOTE,
+                     STATIC_DIR, TEMPLATES_DIR, VERSION, asset_version)
 from .core.parsers import (ParseError, parse_connectivity, parse_gaussian_log,
                            parse_vsc, write_vsc)
 from .core.pipeline import analyse, to_csv_rows
@@ -39,6 +39,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.globals["version"] = VERSION
 templates.env.globals["asset_v"] = asset_version
+templates.env.globals["is_local"] = IS_LOCAL
 templates.env.globals["site_note"] = SITE_NOTE
 templates.env.globals["score_keys"] = SCORE_KEYS
 
@@ -68,7 +69,8 @@ async def _read(upload: UploadFile | None, what: str) -> str | None:
         raise ParseError(f"{what} could not be read as text.")
 
 
-def _build(mode, log_text, com_text, vsc_text, log_name, com_name, vsc_name):
+def _build(mode, log_text, com_text, vsc_text, log_name, com_name, vsc_name,
+           pasted=None, arb_text=None, arb_name=None):
     """Route the three input paths onto one payload.
 
     Returns ``(payload, raw)``. ``raw`` keeps the geometry and displacements
@@ -79,6 +81,29 @@ def _build(mode, log_text, com_text, vsc_text, log_name, com_name, vsc_name):
     flip axes and invert the T/R scores. Writing the original frame means a
     downloaded .vsc re-scores to the same numbers as the files it came from.
     """
+    if mode == "paste":
+        if not IS_LOCAL:
+            raise ParseError(
+                "This page is available on a local instance only. Use the "
+                ".vsc upload above instead.")
+        # Two ways in, one meaning: whatever arrives here is DECLARED to be a
+        # selection of vibrations. mode_set is forced rather than detected, so
+        # a count that happens to equal 3N or 3N-6 is still treated as a
+        # selection and the ideal T/R references are still constructed to fill
+        # the external slots.
+        text = arb_text if (arb_text or "").strip() else pasted
+        if not (text or "").strip():
+            raise ParseError("No modes were entered or uploaded.")
+        if len(text) > MAX_UPLOAD_BYTES:
+            raise ParseError("That is too large; upload it as a file.")
+        v = parse_vsc(text)
+        raw = {"atoms": v["atoms"], "coords": v["coords"],
+               "bonds": v["bonds"], "modes": v["modes"]}
+        return analyse(v["atoms"], v["coords"], v["bonds"], v["modes"],
+                       title=v["title"] or "arbitrary modes",
+                       source=(arb_name or "typed in"),
+                       mode_set="arbitrary"), raw
+
     if mode == "vsc":
         if not vsc_text:
             raise ParseError("No .vsc file was uploaded.")
@@ -155,6 +180,8 @@ async def score(
     logfile: UploadFile | None = File(None),
     comfile: UploadFile | None = File(None),
     vscfile: UploadFile | None = File(None),
+    pasted: str = Form(""),
+    arbfile: UploadFile | None = File(None),
 ):
     try:
         payload, raw = _build(
@@ -165,6 +192,9 @@ async def score(
             logfile.filename if logfile else None,
             comfile.filename if comfile else None,
             vscfile.filename if vscfile else None,
+            pasted=pasted,
+            arb_text=await _read(arbfile, "The .vsc file"),
+            arb_name=arbfile.filename if arbfile else None,
         )
     except ParseError as exc:
         return templates.TemplateResponse(
@@ -220,6 +250,8 @@ async def api_score(
     logfile: UploadFile | None = File(None),
     comfile: UploadFile | None = File(None),
     vscfile: UploadFile | None = File(None),
+    pasted: str = Form(""),
+    arbfile: UploadFile | None = File(None),
 ):
     try:
         payload, _raw = _build(
@@ -230,6 +262,9 @@ async def api_score(
             logfile.filename if logfile else None,
             comfile.filename if comfile else None,
             vscfile.filename if vscfile else None,
+            pasted=pasted,
+            arb_text=await _read(arbfile, "The .vsc file"),
+            arb_name=arbfile.filename if arbfile else None,
         )
     except ParseError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

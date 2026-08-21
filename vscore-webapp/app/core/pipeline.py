@@ -48,27 +48,25 @@ def _rotation_between(a, b):
 
 
 def _detect_mode_set(n_modes, n_atoms, n_ext, linear):
-    """Work out from the counts alone whether a file holds 3N or 3N-6 modes.
+    """Work out from the counts alone what kind of mode set this is.
 
-    The two are never ambiguous -- 3N and 3N-n_ext differ by 5 or 6 -- so the
-    user does not need to declare it. Anything else is refused rather than
-    guessed at: a count that matches neither means the file is incomplete or
-    holds something other than one molecule's modes, and either way the six
-    external slots would be filled from the wrong pool.
+    "3n"         every mode, translations and rotations included.
+    "3n-6"       vibrations only (3N-5 when linear) -- a complete set.
+    "arbitrary"  any other count: a hand-picked selection of modes. Treated as
+                 vibrations, with the ideal T/R references still constructed so
+                 the external slots are filled by them and none of the supplied
+                 modes can be claimed for one.
+
+    The first two are exact and unambiguous; anything else falls to the third
+    rather than being refused, because scoring a few modes of interest is a
+    legitimate thing to want.
     """
     full = 3 * n_atoms
-    vib_only = full - n_ext
     if n_modes == full:
         return "3n"
-    if n_modes == vib_only:
+    if n_modes == full - n_ext:
         return "3n-6"
-    shape = "3N-5" if linear else "3N-6"
-    raise ParseError(
-        f"The file has {n_modes} modes, which is neither 3N = {full} (every mode, "
-        f"translations and rotations included) nor {shape} = {vib_only} "
-        f"(vibrations only) for {n_atoms} atoms. Modes cannot be classified from "
-        "a partial set: the six external slots would be filled from whatever was "
-        "supplied.")
+    return "arbitrary"
 
 
 def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
@@ -95,9 +93,9 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
     """
     warnings = list(warnings or [])
     notes = []                      # informational; not a problem with the input
-    if mode_set not in ("auto", "3n", "3n-6"):
-        raise ValueError(
-            f"mode_set must be 'auto', '3n' or '3n-6', got {mode_set!r}")
+    if mode_set not in ("auto", "3n", "3n-6", "arbitrary"):
+        raise ValueError("mode_set must be 'auto', '3n', '3n-6' or "
+                         f"'arbitrary', got {mode_set!r}")
 
     if not bonds:
         # Belt and braces: every reader already refuses this, because an empty
@@ -138,6 +136,12 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
     detected = _detect_mode_set(len(modes), len(atoms), n_ext, linear)
     if mode_set == "auto":
         mode_set = detected
+    elif mode_set == "arbitrary":
+        # A declaration, not a detection: the caller is asserting these are
+        # vibrations. Honoured whatever the count, so a selection that happens
+        # to number 3N or 3N-6 is still given the constructed T/R references
+        # rather than being read as a complete set.
+        pass
     elif mode_set != detected:
         raise ParseError(
             f"This file holds {len(modes)} modes, i.e. {detected}, "
@@ -167,6 +171,26 @@ def analyse(atoms, coords, bonds, modes, title="", source="", warnings=None,
                  is_emit=is_emit)
             for i, (m, vec) in enumerate(zip(scored, final))]
     references, vibrations = rows[:n_ref], rows[n_ref:]
+
+    # An arbitrary selection is declared to be vibrations, so the constructed
+    # T/R modes are pure machinery here: they exist to occupy the six external
+    # slots and stop a supplied mode being claimed for one. They are not
+    # results, so they are not reported and the page offers no toggle for them.
+    # They stay in the pool above -- dropping them from the CLASSIFICATION is
+    # what would break it (on H2O that labelled a 0.997 O-H stretch "Tx*").
+    if mode_set == "arbitrary":
+        references = []
+
+    if mode_set == "arbitrary":
+        shape = "3N-5" if linear else "3N-6"
+        how = ("taken as vibrations" if detected == "arbitrary"
+               else f"treated as vibrations even though the count is {detected}")
+        notes.append(
+            f"{len(vibrations)} mode{'s' if len(vibrations) != 1 else ''} "
+            f"{how} (3N = {3 * len(atoms)}, {shape} = {3 * len(atoms) - n_ext}). "
+            "The ideal T/R references were constructed and fill every external "
+            "slot, so none of your modes can be claimed as a translation or "
+            "rotation — each is classified on its own s[V_S].")
 
     if mode_set == "3n":
         starred = [r for r in vibrations if r["label"].endswith("*")]

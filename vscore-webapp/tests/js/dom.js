@@ -14,3 +14,5 @@ function TextDecoder(){ this.decode=function(b){ var s=""; for(var i=0;i<b.lengt
 function XMLHttpRequest(){ this.open=function(){}; this.send=function(){}; this.addEventListener=function(){}; }
 var location = { href:"http://localhost/", protocol:"http:" };
 var console = { log:function(){}, warn:function(){}, error:function(){}, info:function(){}, debug:function(){} };
+
+var requestAnimationFrame = function(f){ f(); return 1; };

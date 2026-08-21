@@ -65,6 +65,7 @@
       <span class="sep"></span>
       <button type="button" id="all">all</button>
       <button type="button" id="none">none</button>
+      <span class="tip">tick <b>cmp</b> on 2&ndash;3 rows to compare them side by side</span>
       <span class="count" id="count"></span>
     </div>
 
@@ -72,12 +73,12 @@
       <table id="tbl">
         <thead>
           <tr>
-            <th class="c"><input type="checkbox" id="chk-all" checked title="select all shown"></th>
-            <th>mode</th>
-            <th class="n">{% if p.is_emit %}eigenvalue{% else %}ν / cm⁻¹{% endif %}</th>
-            {% for k in score_keys %}<th class="n">{{ k }}</th>{% endfor %}
-            <th>label</th>
-            <th>irrep</th>
+            <th class="c" title="Tick up to 3 modes to compare them">cmp</th>
+            <th data-sort="name">mode</th>
+            <th class="n" data-sort="freq">{% if p.is_emit %}eigenvalue{% else %}ν / cm⁻¹{% endif %}</th>
+            {% for k in score_keys %}<th class="n" data-sort="{{ k }}">{{ k }}</th>{% endfor %}
+            <th data-sort="label">label</th>
+            <th data-sort="irrep">irrep</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -95,7 +96,17 @@
       highlights <b>V_S</b>; a starred label (<code>Tx*</code>) is part external and
       part vibration, so both <b>V_S</b> and its largest T/R score are highlighted,
       and its vibrational character is shown as a second chip. Click any row to
-      animate it.
+      animate it, or tick its <b>cmp</b> box.
+    </p>
+    <p class="legend">
+      <b>Comparing modes.</b> Tick <b>cmp</b> on two or three rows and a panel
+      opens below with one animated viewer per mode, their cameras tied together
+      so rotating or zooming any one moves the others. Underneath it sets the
+      seven scores side by side and gives the per-bond
+      s<sub>AB</sub> for each mode on a shared scale &mdash; which is how two
+      modes that share a label, both <b class="lab S">S</b> say, are told apart:
+      the label says <em>stretching</em>, the per-bond values say <em>which
+      bond</em>. Sort any column by clicking its header.
     </p>
   </section>
 
@@ -107,19 +118,42 @@
     </div>
     <div id="mol"></div>
     <div class="vctl">
-      <label>amplitude <input type="range" id="amp" min="0.2" max="3" step="0.1" value="1"></label>
-      <label>frames <input type="range" id="frm" min="4" max="20" step="1" value="10"></label>
-      <label class="f"><input type="checkbox" id="bonds" checked> bonds</label>
-      <label class="f"><input type="checkbox" id="axes" checked> axes</label>
-      <label class="f"><input type="checkbox" id="arrows" checked> arrows</label>
-      <label class="f"><input type="checkbox" id="play" checked> animate</label>
+      <div class="vrow">
+        <label>amplitude <input type="range" id="amp" min="0.2" max="3" step="0.1" value="1"></label>
+        <label>frames <input type="range" id="frm" min="4" max="20" step="1" value="10"></label>
+      </div>
+      <div class="vrow">
+        <label class="f"><input type="checkbox" id="bonds" checked> bonds</label>
+        <label class="f"><input type="checkbox" id="axes" checked> axes</label>
+        <label class="f"><input type="checkbox" id="arrows" checked> arrows</label>
+        <label class="f"><input type="checkbox" id="labels"> numbers</label>
+        <label class="f"><input type="checkbox" id="play" checked> animate</label>
+      </div>
     </div>
     <div class="bondtab">
       <div class="bk">per-bond s<sub>AB</sub> for this mode</div>
+      <div class="bhead">
+        <span class="bsort" data-bsort="pair">bond</span>
+        <span></span>
+        <span class="bsort" data-bsort="val">s<sub>AB</sub></span>
+      </div>
       <div id="bondlist" class="blist"><span class="muted">—</span></div>
     </div>
   </aside>
 </div>
+
+<section id="compare" class="compare" hidden>
+  <div class="chead">
+    <b>Comparing <span id="cmp-n">0</span> modes</b>
+    <span class="muted">tick up to 3 in the table</span>
+    <button type="button" id="cmp-clear" class="mini">clear</button>
+  </div>
+  <div id="cmp-views" class="cviews"></div>
+  <div class="cbody">
+    <div class="cscores"><span class="bk">scores</span><div id="cmp-scores"></div></div>
+    <div class="cbonds"><span class="bk">per-bond s<sub>AB</sub></span><div id="cmp-bonds"></div></div>
+  </div>
+</section>
 
 <script id="payload" type="application/json">{{ payload_json | safe }}</script>
 <script id="downloads" type="application/json">{{ downloads_json | safe }}</script>

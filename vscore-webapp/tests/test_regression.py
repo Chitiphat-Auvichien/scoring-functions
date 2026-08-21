@@ -573,13 +573,20 @@ def test_mode_set_is_detected_from_the_counts():
     assert full["references"] == []
 
 
-def test_a_count_matching_neither_is_refused():
-    """A partial set cannot be classified: the external slots would be filled
-    from whatever happened to be supplied."""
+def test_a_count_matching_neither_becomes_a_selection():
+    """Superseded behaviour: such a count used to be refused.
+
+    It is now scored as an arbitrary selection, because picking out a few modes
+    of interest is legitimate and the constructed T/R references still stop any
+    of them being claimed for an external slot.
+    """
     g, bonds = _molecule()                      # 5 atoms -> 3N=15, 3N-6=9
-    for n in (1, 5, 8, 10, 14, 16):
-        with pytest.raises(ParseError, match="neither 3N"):
-            analyse(g["atoms"], g["coords"], bonds, g["modes"][:1] * n)
+    for n in (1, 5, 8, 10, 14):
+        p = analyse(g["atoms"], g["coords"], bonds, (g["modes"] * 3)[:n])
+        assert p["mode_set"] == "arbitrary"
+        assert p["references"] == []
+        # the constructed references are hidden but still hold every slot
+        assert all(r["label"] in ("S", "B", "SB") for r in p["vibrations"])
 
 
 def test_declared_mode_set_must_match_the_counts():
@@ -774,3 +781,174 @@ def test_csv_column_is_uniform_when_only_some_modes_are_tagged():
     w.writeheader()
     w.writerows(rows)                                     # must not raise
     assert "Eigenvalue" in buf.getvalue().splitlines()[0]
+
+
+# ----------------------------------------------------------------------
+# Third path: an arbitrary selection of modes.
+# ----------------------------------------------------------------------
+@pytest.mark.parametrize("n", [1, 2, 5, 8, 12, 20])
+def test_arbitrary_counts_are_scored_not_refused(n):
+    """Any count that is neither 3N nor 3N-6 is a selection, not an error.
+
+    The ideal T/R references are still constructed, so they fill every external
+    slot and none of the supplied modes can be claimed as a translation or
+    rotation -- which is the whole risk of scoring a partial set.
+    """
+    g, bonds = _molecule()                     # HCOOH: 3N=15, 3N-6=9
+    pool = (g["modes"] * 3)[:n]
+    p = analyse(g["atoms"], g["coords"], bonds, pool)
+    assert p["mode_set"] == "arbitrary"
+    # not reported -- they are machinery on this page, not results
+    assert p["references"] == []
+    assert p["n_modes"] == n
+    assert all(r["label"] in ("S", "B", "SB") for r in p["vibrations"]), \
+        [r["label"] for r in p["vibrations"]]
+    assert any("taken as vibrations" in note for note in p["notes"])
+
+
+def test_a_selection_scores_the_same_as_the_full_set():
+    """Picking modes out must not change how they score."""
+    g, bonds = _molecule()
+    full = analyse(g["atoms"], g["coords"], bonds, g["modes"])
+    pick = [0, 2, 5]
+    sub = analyse(g["atoms"], g["coords"], bonds, [g["modes"][i] for i in pick])
+    assert sub["mode_set"] == "arbitrary"
+    for out, i in zip(sub["vibrations"], pick):
+        ref = full["vibrations"][i]
+        assert out["label"] == ref["label"]
+        assert out["frequency"] == pytest.approx(ref["frequency"])
+        for k in ref["scores"]:
+            assert out["scores"][k] == pytest.approx(ref["scores"][k], abs=1e-9)
+
+
+def test_complete_sets_are_not_called_arbitrary():
+    g, bonds = _molecule()
+    assert analyse(g["atoms"], g["coords"], bonds, g["modes"])["mode_set"] == "3n-6"
+    coords, modes = _complete_3n(g, bonds)
+    assert analyse(g["atoms"], coords, bonds, modes)["mode_set"] == "3n"
+
+
+# ----------------------------------------------------------------------
+# Direct entry, local instances only.
+# ----------------------------------------------------------------------
+_PASTE = """[GEOMETRY]
+O   0.038069   1.197522   0.000000
+H  -0.951724   1.378354   0.000000
+Cl  0.038069  -0.644619   0.000000
+[CONNECTIVITY]
+1  2  3
+[MODES]
+mode 1  freq=667.64
+ 0.00088   0.85015  -0.00000
+-0.16190   0.30478  -0.00000
+ 0.00426  -0.39765   0.00000
+"""
+
+
+def test_pasted_modes_are_scored():
+    from app.main import _build
+    payload, raw = _build("paste", None, None, None, None, None, None,
+                          pasted=_PASTE)
+    assert payload["n_atoms"] == 3
+    assert payload["n_modes"] == 1
+    assert payload["mode_set"] == "arbitrary"
+    assert payload["vibrations"][0]["label"] == "S"
+    assert payload["source"] == "typed in"
+
+
+def test_pasted_modes_are_refused_off_a_local_instance(monkeypatch):
+    """The textarea is a local convenience; the public deployment takes files."""
+    import app.main as main
+    monkeypatch.setattr(main, "IS_LOCAL", False)
+    with pytest.raises(ParseError, match="local instance only"):
+        main._build("paste", None, None, None, None, None, None, pasted=_PASTE)
+
+
+def test_empty_paste_is_refused():
+    from app.main import _build
+    with pytest.raises(ParseError, match="No modes were entered or uploaded"):
+        _build("paste", None, None, None, None, None, None, pasted="   \n ")
+
+
+def test_paste_tab_is_local_only():
+    tpl = (ROOT / "app/templates/index.html").read_text()
+    i = tpl.index('data-mode="paste"')
+    assert "{% if is_local %}" in tpl[:i][-200:], \
+        "the paste tab must be guarded by {% if is_local %}"
+    j = tpl.index('id="p-paste"')
+    assert "{% if is_local %}" in tpl[:j][-300:], \
+        "the paste panel must be guarded by {% if is_local %}"
+
+
+# ----------------------------------------------------------------------
+# The arbitrary-vibrations page: upload or typed, always a declaration.
+# ----------------------------------------------------------------------
+def test_arbitrary_page_accepts_an_upload():
+    from app.main import _build
+    payload, _ = _build("paste", None, None, None, None, None, None,
+                        arb_text=_PASTE, arb_name="picked.vsc")
+    assert payload["mode_set"] == "arbitrary"
+    assert payload["source"] == "picked.vsc"
+    assert payload["n_modes"] == 1
+
+
+def test_arbitrary_is_a_declaration_that_overrides_the_counts():
+    """Uploading a complete set here still treats it as a selection.
+
+    The page states every mode on it is a vibration, so the T/R references are
+    constructed whatever the count -- otherwise a set that happened to number
+    3N would have its external slots filled from the user's own modes.
+    """
+    g, bonds = _molecule()
+    for modes, detected in ((g["modes"], "3n-6"),
+                            (_complete_3n(g, bonds)[1], "3n")):
+        coords = g["coords"] if detected == "3n-6" else _complete_3n(g, bonds)[0]
+        auto = analyse(g["atoms"], coords, bonds, modes)
+        assert auto["mode_set"] == detected
+
+        declared = analyse(g["atoms"], coords, bonds, modes, mode_set="arbitrary")
+        assert declared["mode_set"] == "arbitrary"
+        assert declared["references"] == []
+        assert all(r["label"] in ("S", "B", "SB") for r in declared["vibrations"]), \
+            "no supplied mode may take an external slot on this page"
+        assert any("even though the count is" in n for n in declared["notes"])
+
+
+def test_uploaded_file_wins_over_typed_text():
+    from app.main import _build
+    other = _PASTE.replace("freq=667.64", "freq=1234.56")
+    payload, _ = _build("paste", None, None, None, None, None, None,
+                        pasted=_PASTE, arb_text=other, arb_name="up.vsc")
+    assert payload["vibrations"][0]["frequency"] == pytest.approx(1234.56)
+
+
+def test_arbitrary_page_needs_something():
+    from app.main import _build
+    with pytest.raises(ParseError, match="No modes were entered or uploaded"):
+        _build("paste", None, None, None, None, None, None, pasted="", arb_text="")
+
+
+def test_arbitrary_reports_no_reference_rows():
+    """The constructed T/R modes are machinery on this page, not results.
+
+    They must still be in the classification pool -- removing them lets the
+    assignment claim a supplied mode for an external slot, which on H2O
+    labelled a 0.997 O-H stretch "Tx*" -- but they are not reported, so the
+    results page offers no toggle for them.
+    """
+    g, bonds = _molecule()
+    auto = analyse(g["atoms"], g["coords"], bonds, g["modes"])
+    arb = analyse(g["atoms"], g["coords"], bonds, g["modes"], mode_set="arbitrary")
+
+    assert len(auto["references"]) == 6
+    assert arb["references"] == []
+
+    # hiding them must not change a single classification
+    assert len(auto["vibrations"]) == len(arb["vibrations"])
+    for x, y in zip(auto["vibrations"], arb["vibrations"]):
+        assert x["label"] == y["label"]
+        assert x["highlights"] == y["highlights"]
+        for k in x["scores"]:
+            assert x["scores"][k] == pytest.approx(y["scores"][k], abs=1e-12)
+    # and no supplied mode may hold an external slot
+    assert all(r["label"] in ("S", "B", "SB") for r in arb["vibrations"])

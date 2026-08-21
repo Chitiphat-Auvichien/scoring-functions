@@ -249,6 +249,18 @@ def stage_sync_manuscript(ctx):
     return msg
 
 
+def stage_si_tables(ctx):
+    """Generate JCC Supporting-Information longtable fragments (score tables
+    + Cartesian coordinates) -- writes outside data/, into JCC/JCC_SI/tables/
+    for lead-author's JCC_SI_main.tex to \\input{}."""
+    from src.si_tables import run_all as run_score_tables
+    from src.si_geometry_export import run_all as run_geometry_tables
+    paths = run_score_tables(data_dir=ctx["data_dir"])
+    paths += run_geometry_tables(data_dir=ctx["data_dir"])
+    ctx["outputs"] += [str(p) for p in paths]
+    return f"{len(paths)} SI table fragments -> {os.path.dirname(paths[0])}"
+
+
 def stage_benchmark(ctx):
     """CPU-time benchmark -> cpu_time_benchmark.csv (four figures read it)."""
     from scripts.benchmark_cpu_time import main as benchmark_main
@@ -286,6 +298,7 @@ STAGES = [
 # Opt-in: writes outside data/, so never part of a default run.
 OPTIONAL_STAGES = [
     ("sync_manuscript", stage_sync_manuscript),
+    ("si_tables", stage_si_tables),
 ]
 OPTIONAL_NAMES = {name for name, _ in OPTIONAL_STAGES}
 ALL_STAGES = STAGES + OPTIONAL_STAGES

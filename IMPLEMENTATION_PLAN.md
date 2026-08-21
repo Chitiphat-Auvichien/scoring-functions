@@ -329,8 +329,18 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
       benchmark must precede the figures (four read it, and it times *our* classifier).
       `src/benzene_validation.py` is a named stage because it has no `main.py` flag and two
       figures read only its CSVs — skipping it leaves them silently stale.
-- [ ] **SI Cartesian-geometry export** (optimized coords for water/benzene/CO₂/gramicidin from logs, +
-      library if retrievable) — B7/B14 reproducibility requirement.
+- [x] **SI Cartesian-geometry export, water/benzene** — **DONE 2026-08-21.** `src/si_geometry_export.py`
+      reuses `GaussianParser`'s already-parsed Standard-orientation geometry (no new parsing logic) to
+      write `longtable` fragments to `JCC/JCC_SI/tables/tab_cartesian_water.tex`
+      (`tab:cartwater`) and `tab_cartesian_benzene.tex` (`tab:cartbenzene`). Alongside it,
+      `src/si_tables.py` generates the four full score-table fragments (`tab_water_scores.tex`
+      `tab:waterscores`, `tab_library_scores.tex` `tab:libraryscores`, `tab_benzene_normal.tex`
+      `tab:benzenenormalscores`, `tab_benzene_emit_full.tex` `tab:benzeneemitscores`) for the SI's
+      "Full score tables" section. Both wired as the opt-in `si_tables` stage in `reproduce.py`'s
+      `OPTIONAL_STAGES` (writes outside `data/`, same reasoning as `sync_manuscript`).
+- [ ] **SI Cartesian-geometry export, CO₂/gramicidin/library** — deferred; same `cartesian_table()`
+      helper in `src/si_geometry_export.py` extends directly once those logs are in scope
+      (gramicidin is companion-paper scope per Decision 5). B7/B14 reproducibility requirement.
 - [ ] **Graphical-TOC image** (B4, submission-required): 50×50 mm, per the structure-doc concept.
 - [x] Fill the **Gaussian revision/year** `TODO-DATA` and fix the inconsistent citation — resolved by the
       2026-08-10 G16 promotion (see Locked decisions): canonical revision is **Gaussian 16, Revision

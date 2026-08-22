@@ -156,7 +156,7 @@ def water_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
         ])
 
     caption = ("Full scoring table for the normal modes of H$_2$O -- extends the "
-               "abbreviated Table~\\ref{tab:water} in the main text with per-bond "
+               "abbreviated Table~3 in the main text with per-bond "
                "$s^{AB}$ scores, reduced masses, and force constants.")
     return _write_longtable(rows, headers, col_spec, caption, "tab:waterscores",
                              os.path.join(out_dir, "tab_water_scores.tex"),
@@ -256,12 +256,50 @@ def benzene_emit_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR)
                              landscape=True)
 
 
+def transferability_misclassified_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
+    """transferability_confusion_misclassified.csv -> tab_transferability_misclassified.tex
+    (tab:transfermisclassified). Full mode-by-mode listing of the 17 modes
+    off the diagonal of Figure~\\ref{fig:transferability_confusion}'s S/B
+    confusion matrix, with the literature description and source tag that
+    justify the reference label. `ref` values (e.g. "Lip1955") are NOT yet
+    entries in MolecularMotion.bib -- bibtex confirmed they're undefined --
+    so they're emitted as escaped plain text, not `\\cite{}`, to avoid an
+    undefined-citation warning and fabricated bibliography entries. Promote
+    to `\\cite{}` once real entries exist for these keys."""
+    df = pd.read_csv(os.path.join(data_dir, "results",
+                                   "transferability_confusion_misclassified.csv"))
+
+    headers = ["Molecule", "Mode", "Freq (cm$^{-1}$)", "Irrep", "$s[V_S]$",
+               "Ref. category", "Predicted", "Description", "Ref."]
+    col_spec = "llrlrllll"
+
+    rows = []
+    for _, row in df.iterrows():
+        rows.append([
+            _esc(row["molecule"]), _esc(row["mode_index"]),
+            _fmt(row["freq"], 2), _esc(row["irrep"]), _fmt(row["V_Stretch"]),
+            _esc(row["ref_category"]), _esc(row["predicted_label"]),
+            _esc(row["description"]), _esc(row["ref"]),
+        ])
+
+    caption = (f"Mode-by-mode listing of the {len(df)} modes misclassified against "
+               "literature reference labels in the 18-molecule transferability test "
+               "set (off-diagonal entries of the main text's Figure~6, "
+               "\\texttt{fig:transferability\\_confusion}, stretch/bend confusion "
+               "matrix), with the literature description and source justifying each "
+               "reference label.")
+    return _write_longtable(rows, headers, col_spec, caption, "tab:transfermisclassified",
+                             os.path.join(out_dir, "tab_transferability_misclassified.tex"),
+                             footnote=_RAW_DATA_FOOTNOTE)
+
+
 def run_all(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
     return [
         water_table(data_dir, out_dir),
         library_table(data_dir, out_dir),
         benzene_normal_table(data_dir, out_dir),
         benzene_emit_table(data_dir, out_dir),
+        transferability_misclassified_table(data_dir, out_dir),
     ]
 
 

@@ -3207,6 +3207,7 @@ def plot_ped_vs_vscore(
     tau_SB=None,
     fit_degree=1,
     ylabel=r"$s[\mathrm{V_S}]$",
+    label_source_csv=None,
 ):
     """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
     molecule-level stretch score s[V_S] (``V_Stretch``), one point per
@@ -3248,6 +3249,17 @@ def plot_ped_vs_vscore(
     math label; e.g. archive_unweighted callers pass a label that says
     "Unweighted" to distinguish this from the canonical mu-weighted figure
     of the same name).
+
+    ``label_source_csv``, if given, points at a DIFFERENT combined_ped_vs_
+    scores.csv (matched to this one's rows by Molecule+Mode) whose own
+    V_Stretch column is used to derive the S/B coloring via
+    ``vib_label_binary(v, tau_SB)`` -- ``tau_SB`` still applies here (falls
+    back to ``Thresholds.calibrated().tau_SB`` the same as the no-override
+    path). The plotted x/y (``PED_Stretch_pct``/``V_Stretch``) and the
+    fitted curve always come from ``csv_input`` -- this only swaps which
+    definition's classification colors the points, e.g. coloring an
+    unweighted-definition scatter by the canonical mu-weighted S/B split.
+    Raises ValueError if any row fails to find a Molecule+Mode match.
     """
     _style()
     df = pd.read_csv(csv_input)
@@ -3256,7 +3268,19 @@ def plot_ped_vs_vscore(
     df = df[df["Molecule"].isin(test_molecules)]
     df = df.dropna(subset=["PED_Stretch_pct", "V_Stretch"])
     n_raw_modes = len(df)
-    if tau_SB is not None:
+    if label_source_csv is not None:
+        df = df.copy()
+        src_tau_SB = tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB
+        src = pd.read_csv(label_source_csv).dropna(subset=["V_Stretch"])
+        src = src.assign(label=src["V_Stretch"].map(lambda v: vib_label_binary(v, src_tau_SB)))
+        df = df.drop(columns=["label"]).merge(
+            src[["Molecule", "Mode", "label"]], on=["Molecule", "Mode"], how="left")
+        if df["label"].isna().any():
+            missing = df.loc[df["label"].isna(), ["Molecule", "Mode"]]
+            raise ValueError(
+                f"label_source_csv={label_source_csv!r} has no Molecule+Mode "
+                f"match for {len(missing)} row(s), e.g. {missing.iloc[0].to_dict()}")
+    elif tau_SB is not None:
         df = df.copy()
         df["label"] = df["V_Stretch"].map(lambda v: vib_label_binary(v, tau_SB))
     df = _collapse_degenerate_freqs(

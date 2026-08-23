@@ -3184,15 +3184,16 @@ def _collapse_degenerate_freqs(df, value_cols, freq_col="Freq", label_col=None,
     return out.drop(columns=["_gid"])
 
 
-def _linear_fit_r2(x, y):
-    """Ordinary least-squares straight-line fit y ~ slope*x + intercept;
-    return ((slope, intercept), r2), matching the np.polyfit + manual-R^2
-    pattern used throughout this module (see plot_gaussian_nbasis_scaling).
+def _linear_fit_r2(x, y, degree=1):
+    """Ordinary least-squares polynomial fit (default degree 1, a straight
+    line y ~ slope*x + intercept); return (coeffs, r2), matching the
+    np.polyfit + manual-R^2 pattern used throughout this module (see
+    plot_gaussian_nbasis_scaling).
 
     Returned in np.polyfit/np.polyval coefficient order (highest power
     first), so callers plot it with np.polyval exactly as before.
     """
-    coeffs = np.polyfit(x, y, 1)
+    coeffs = np.polyfit(x, y, degree)
     pred = np.polyval(coeffs, x)
     r2 = 1 - np.sum((y - pred) ** 2) / np.sum((y - y.mean()) ** 2)
     return coeffs, r2
@@ -3204,6 +3205,7 @@ def plot_ped_vs_vscore(
     out_dir="data/figures",
     label="fig_ped_vs_vscore",
     tau_SB=None,
+    fit_degree=1,
 ):
     """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
     molecule-level stretch score s[V_S] (``V_Stretch``), one point per
@@ -3235,6 +3237,11 @@ def plot_ped_vs_vscore(
     ``_collapse_degenerate_freqs`` so the degenerate-group majority-label
     vote sees the overridden per-row labels, matching how the canonical path
     already collapses labels baked in at tau_SB=0.50.
+
+    ``fit_degree`` selects the OLS polynomial order for the summary curve
+    (default 1, matching the canonical figure exactly -- zero behavior
+    change). 2 fits a quadratic instead; the legend label switches from
+    "linear fit" to "quadratic fit" accordingly.
     """
     _style()
     df = pd.read_csv(csv_input)
@@ -3260,11 +3267,12 @@ def plot_ped_vs_vscore(
 
     x = df["PED_Stretch_pct"].to_numpy(float)
     y = df["V_Stretch"].to_numpy(float)
-    coeffs, r2 = _linear_fit_r2(x, y)
+    coeffs, r2 = _linear_fit_r2(x, y, degree=fit_degree)
+    fit_name = {1: "linear", 2: "quadratic"}.get(fit_degree, f"degree-{fit_degree}")
     xx = np.linspace(x.min(), x.max(), 200)
     ax.plot(xx, np.polyval(coeffs, xx), ls="--", lw=1.2,
             color=COLORS["threshold"], zorder=4,
-            label=f"linear fit ($R^2$={r2:.2f})")
+            label=f"{fit_name} fit ($R^2$={r2:.2f})")
 
     ax.set_xlabel(r"$\%\nu$")
     ax.set_ylabel(r"$s[\mathrm{V_S}]$")
@@ -3282,7 +3290,8 @@ def plot_ped_vs_vscore(
         "n_frequency_points": len(df),
         "n_raw_modes_before_degenerate_averaging": n_raw_modes,
         "n_molecules": df["Molecule"].nunique(),
-        "linear_fit_slope_intercept": tuple(float(c) for c in coeffs),
+        "fit_degree": fit_degree,
+        "fit_coeffs": tuple(float(c) for c in coeffs),
         "r2": float(r2),
         "tau_SB": tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB,
     }

@@ -3332,6 +3332,10 @@ def plot_ped_vs_bondscore_by_type(
     mol_list_csv="data/mol_list_method.csv",
     out_dir="data/figures",
     label="fig_ped_vs_bondscore",
+    ylabel=r"$|s^{AB}|$",
+    label_source_csv=None,
+    tau_SB=None,
+    show_fit=True,
 ):
     """Exploratory per-bond-type grid: VEDA4's ``PED_S_<T>_pct`` (%nu^AB) vs.
     this framework's own raw ``BondScore_<T>`` (s^AB), one panel per bond
@@ -3341,13 +3345,31 @@ def plot_ped_vs_bondscore_by_type(
     Each panel gets its own straight-line OLS fit + R^2 (same pattern as
     plot_ped_vs_vscore), for spotting which bond types/molecules diverge
     from the molecule-level trend. Exploratory, not a manuscript figure:
-    one plain marker color, no S/B/SB faceting. One point per physical
+    by default one plain marker color, no S/B/SB faceting (see
+    ``label_source_csv`` below to turn that on). One point per physical
     frequency -- degenerate modes are averaged together first (see
     _collapse_degenerate_freqs), same as plot_ped_vs_vscore.
 
     Scoped to mol_type=='test' molecules only -- see plot_ped_vs_vscore's
     docstring for why (excludes C6H6, joined in via mol_list_csv on
     combined_ped_vs_scores.csv's `Molecule` column).
+
+    ``ylabel`` overrides the shared y-axis label (default the canonical
+    |s^AB| math label).
+
+    ``label_source_csv``, if given, points at a DIFFERENT combined_ped_vs_
+    scores.csv (matched to this one's rows by Molecule+Mode) whose own
+    V_Stretch column is used to derive a per-MODE S/B split via
+    ``vib_label_binary(v, tau_SB)`` (``tau_SB`` falls back to
+    ``Thresholds.calibrated().tau_SB`` same as plot_ped_vs_vscore) --
+    every bond of a given mode is colored by that mode's own S/B, same
+    convention as plot_ped_vs_vscore's coloring. Default None keeps the
+    original plain-black scheme (zero behavior change).
+
+    ``show_fit`` (default True, zero behavior change) draws each panel's
+    OLS fit line + R^2 annotation ("insufficient data" for n<3 panels).
+    False skips the fit entirely -- just the raw scatter, every panel,
+    regardless of point count.
     """
     _style()
     df = pd.read_csv(csv_input)
@@ -3355,11 +3377,26 @@ def plot_ped_vs_bondscore_by_type(
     test_molecules = set(roster.loc[roster["mol_type"] == "test", "molecule"])
     df = df[df["Molecule"].isin(test_molecules)]
 
+    color_by_label = label_source_csv is not None
+    if color_by_label:
+        df = df.copy()
+        src_tau_SB = tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB
+        src = pd.read_csv(label_source_csv).dropna(subset=["V_Stretch"])
+        src = src.assign(label=src["V_Stretch"].map(lambda v: vib_label_binary(v, src_tau_SB)))
+        df = df.drop(columns=["label"], errors="ignore").merge(
+            src[["Molecule", "Mode", "label"]], on=["Molecule", "Mode"], how="left")
+        if df["label"].isna().any():
+            missing = df.loc[df["label"].isna(), ["Molecule", "Mode"]]
+            raise ValueError(
+                f"label_source_csv={label_source_csv!r} has no Molecule+Mode "
+                f"match for {len(missing)} row(s), e.g. {missing.iloc[0].to_dict()}")
+
     bond_types = [c[len("BondScore_"):] for c in df.columns
                   if c.startswith("BondScore_") and not c.endswith("_pct")]
     value_cols = [f"PED_S_{bt}_pct" for bt in bond_types] + \
                  [f"BondScore_{bt}" for bt in bond_types]
-    df = _collapse_degenerate_freqs(df, value_cols=value_cols)
+    df = _collapse_degenerate_freqs(
+        df, value_cols=value_cols, label_col="label" if color_by_label else None)
 
     n = len(bond_types)
     ncols = 3
@@ -3367,31 +3404,46 @@ def plot_ped_vs_bondscore_by_type(
     fig, axes = plt.subplots(nrows, ncols, figsize=(3.2 * ncols, 2.8 * nrows),
                               squeeze=False)
 
+    legend_handles = {}
     per_bond_type = {}
     for i, bt in enumerate(bond_types):
         ax = axes.flat[i]
         x_col, y_col = f"PED_S_{bt}_pct", f"BondScore_{bt}"
-        sub = df[[x_col, y_col]].dropna()
+        cols = [x_col, y_col] + (["label"] if color_by_label else [])
+        sub = df[cols].dropna(subset=[x_col, y_col])
         x = sub[x_col].to_numpy(float)
         y = sub[y_col].to_numpy(float)
 
-        ax.scatter(x, y, s=14, marker="o", facecolors="black",
-                   edgecolors="black", alpha=0.75, zorder=3)
-
-        # >=3, not >=2: two points define a line exactly, so R^2 would be a
-        # meaningless 1.0.
-        if len(sub) >= 3:
-            coeffs, r2 = _linear_fit_r2(x, y)
-            xx = np.linspace(x.min(), x.max(), 100)
-            ax.plot(xx, np.polyval(coeffs, xx), ls="--", lw=1.1,
-                    color=COLORS["threshold"], zorder=4)
-            ax.text(0.05, 0.92, f"$R^2$={r2:.2f}", transform=ax.transAxes,
-                    fontsize=ANNOTATION_FONTSIZE, va="top")
-            per_bond_type[bt] = {"n": len(sub), "r2": float(r2)}
+        if color_by_label:
+            for code, cat in _LABEL_CODE_TO_CATEGORY.items():
+                mask = sub["label"] == code
+                if not mask.any():
+                    continue
+                kw = _marker_kwargs(cat, marker="o")
+                h = ax.scatter(sub.loc[mask, x_col], sub.loc[mask, y_col], s=14,
+                               zorder=3, label=CATEGORY_LABEL[cat], **kw)
+                legend_handles.setdefault(cat, h)
         else:
-            ax.text(0.5, 0.5, "insufficient data", transform=ax.transAxes,
-                    ha="center", va="center", fontsize=ANNOTATION_FONTSIZE,
-                    color=COLORS["threshold"])
+            ax.scatter(x, y, s=14, marker="o", facecolors="black",
+                       edgecolors="black", alpha=0.75, zorder=3)
+
+        if show_fit:
+            # >=3, not >=2: two points define a line exactly, so R^2 would
+            # be a meaningless 1.0.
+            if len(sub) >= 3:
+                coeffs, r2 = _linear_fit_r2(x, y)
+                xx = np.linspace(x.min(), x.max(), 100)
+                ax.plot(xx, np.polyval(coeffs, xx), ls="--", lw=1.1,
+                        color=COLORS["threshold"], zorder=4)
+                ax.text(0.05, 0.92, f"$R^2$={r2:.2f}", transform=ax.transAxes,
+                        fontsize=ANNOTATION_FONTSIZE, va="top")
+                per_bond_type[bt] = {"n": len(sub), "r2": float(r2)}
+            else:
+                ax.text(0.5, 0.5, "insufficient data", transform=ax.transAxes,
+                        ha="center", va="center", fontsize=ANNOTATION_FONTSIZE,
+                        color=COLORS["threshold"])
+                per_bond_type[bt] = {"n": len(sub), "r2": None}
+        else:
             per_bond_type[bt] = {"n": len(sub), "r2": None}
 
         ax.set_title(bt.replace("-", "–"), fontsize=11)
@@ -3400,7 +3452,10 @@ def plot_ped_vs_bondscore_by_type(
         axes.flat[j].axis("off")
 
     fig.supxlabel(r"$\%\nu^{AB}$")
-    fig.supylabel(r"$|s^{AB}|$")
+    fig.supylabel(ylabel)
+    if color_by_label and legend_handles:
+        fig.legend(legend_handles.values(), [h.get_label() for h in legend_handles.values()],
+                   loc="upper right", frameon=False, fontsize=LEGEND_FONTSIZE)
     fig.tight_layout(rect=(0.02, 0.02, 1, 1))
     pdf_path, png_path = _savefig(fig, out_dir, label)
     plt.close(fig)

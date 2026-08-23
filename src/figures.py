@@ -3206,6 +3206,7 @@ def plot_ped_vs_vscore(
     label="fig_ped_vs_vscore",
     tau_SB=None,
     fit_degree=1,
+    ylabel=r"$s[\mathrm{V_S}]$",
 ):
     """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
     molecule-level stretch score s[V_S] (``V_Stretch``), one point per
@@ -3242,6 +3243,11 @@ def plot_ped_vs_vscore(
     (default 1, matching the canonical figure exactly -- zero behavior
     change). 2 fits a quadratic instead; the legend label switches from
     "linear fit" to "quadratic fit" accordingly.
+
+    ``ylabel`` overrides the y-axis label (default the canonical s[V_S]
+    math label; e.g. archive_unweighted callers pass a label that says
+    "Unweighted" to distinguish this from the canonical mu-weighted figure
+    of the same name).
     """
     _style()
     df = pd.read_csv(csv_input)
@@ -3275,7 +3281,7 @@ def plot_ped_vs_vscore(
             label=f"{fit_name} fit ($R^2$={r2:.2f})")
 
     ax.set_xlabel(r"$\%\nu$")
-    ax.set_ylabel(r"$s[\mathrm{V_S}]$")
+    ax.set_ylabel(ylabel)
     ax.set_xlim(-3, 103)
     ax.set_ylim(-0.03, 1.05)
     ax.legend(loc="upper left", frameon=False, handletextpad=0.4,

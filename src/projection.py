@@ -24,22 +24,40 @@ split of a real normal mode's contribution reuses Step-4's classification
 defined in exactly one place (classifier.py), not duplicated here.
 
 Second, explicitly non-orthonormal pathway (build_reference_basis_cartesian /
-project_emit_cartesian, "Ocart_*" columns): the plain-Cartesian overlap this
-module's own docstring above says is NOT mutually orthogonal (off-diagonals up
-to 0.80). Kept only as an explicit point of comparison against the physically
-correct mass-weighted pathway -- e.g. to show a referee/reader what skipping
-the mass weighting would have produced -- not as an alternative to use on its
-own. Deliberately NOT squared, unlike the C2_* columns above: squaring Q^T
-Theta is only a meaningful "fraction of character" when Q is orthonormal
-(Parseval), which this basis is not, so "Ocart_*" is the raw signed overlap
-<q_ref, theta_emit> itself (a cosine similarity between mode shapes), and
-"Ocart_Sum" reports its sum across all 9 group columns as a diagnostic with
-no expected target value -- not a fraction, and not asserted to sum to 1.
+project_emit_cartesian, "Ocart_*" columns): kept in plain Cartesian (NOT
+mass-weighted) coordinates deliberately, so it stays directly comparable to
+the scores themselves (Tscore/Rscore/Vscore in scoring.py all act on raw,
+unweighted Cartesian displacements) rather than to the mass-weighted C2_*
+Parseval fractions. The basis Q is NOT mutually orthogonal (off-diagonals up
+to 0.80), so "Ocart_Tx".."Ocart_Rz" are left as the raw signed overlap
+<q_ref, theta_emit> itself (a cosine similarity between mode shapes,
+unsquared -- squaring would only mean "fraction of character" if Q were
+orthonormal, which it isn't) -- the same signed, unnormalized form as
+Tscore/Rscore.
+
+"Ocart_VS"/"Ocart_VB", by contrast, ARE normalized -- same mechanism Vscore
+itself uses (magnitude-weighted total, not Parseval): each is the sum of
+|overlap| over that group's reference modes, divided by the S+B total
+|overlap| (Mix excluded from the denominator -- classify_all_modes()'s
+default scheme="binary" never produces a MIXED_STRETCH_BEND reference mode,
+so under normal use totals[Mix] is 0 anyway). This forces Ocart_VS +
+Ocart_VB == 1 exactly and each term into [0,1], the same range as Vscore's
+V_Stretch, without touching Q's geometry (no orthogonalization/rotation) --
+consistent with Vscore's own non-orthogonal per-bond basis never being
+orthogonalized either, just magnitude-normalized. "Ocart_VMix" is the same
+group's |overlap| total divided by that same S+B-only denominator (so it is
+NOT itself bounded by the VS/VB normalization -- it's 0 under the binary
+scheme, and only nonzero at all if project_emit_cartesian is ever called
+against a scheme="threeway" reference basis). "Ocart_Sum" reports the sum of
+Ocart_Tx..Rz (raw signed) plus Ocart_VS/VB/VMix (now S+B-normalized) as a
+diagnostic with no expected target value -- not a Parseval fraction, and not
+asserted to sum to 1 (contrast C2_*'s own Sum, which is).
 """
 
 import numpy as np
 
 from .classifier import Thresholds, vib_label, STRETCHING, BENDING, MIXED_STRETCH_BEND
+from .scoring import EPS_DENOM
 
 # The 6 possible ideal external reference labels. A linear molecule's pool
 # omits "Rx" (n_R=2); handled by simply never finding "Rx" in the labels.
@@ -232,19 +250,26 @@ def project_emit_cartesian(ref, final_emit):
     orthonormal there, so the squared coefficients have a Parseval
     ("fraction of mode character") interpretation. That basis property does
     not hold here (module docstring: off-diagonals up to 0.80), so squaring
-    would not carry the same meaning -- this pathway instead reports the raw
-    signed overlap <q_ref, theta_emit> itself (each unit-normalized in plain
-    Cartesian coordinates), same as a cosine similarity between the two mode
-    shapes.
+    would not carry the same meaning -- "Ocart_Tx".."Ocart_Rz" instead report
+    the raw signed overlap <q_ref, theta_emit> itself (each unit-normalized
+    in plain Cartesian coordinates), same as a cosine similarity between the
+    two mode shapes -- and the same signed, unnormalized form as Tscore/Rscore.
 
-    Consequently "Ocart_VS"/"Ocart_VB"/"Ocart_VMix" are plain sums of signed
-    overlaps over the reference modes in that group, not sums of positive
-    fractions -- they CAN partially cancel (a large positive overlap with one
-    stretching mode and a large negative overlap with another can net near
-    zero even though both individually indicate real character), so treat
-    them as a coarse diagnostic, not a rigorous decomposition. "Ocart_Sum" is
-    the sum of all 9 group columns, likewise a diagnostic with no expected
-    target value (contrast project_emit()'s Parseval-motivated sum~1 check).
+    "Ocart_VS"/"Ocart_VB" ARE normalized, though, via the same mechanism
+    Vscore itself uses (magnitude-weighted total, not Parseval/squaring):
+    |overlap| is summed per group, then divided by the S+B total |overlap|
+    (Mix excluded from the denominator -- classify_all_modes()'s default
+    scheme="binary" never produces a Mix reference mode, so totals[Mix] is 0
+    under normal use). This forces Ocart_VS + Ocart_VB == 1 exactly, each
+    in [0,1] -- the same range as V_Stretch, directly comparable to it,
+    without cancellation and without touching Q's geometry. "Ocart_VMix" is
+    that same group's |overlap| total divided by the same S+B-only
+    denominator, so it is NOT covered by the VS/VB normalization (only
+    nonzero if project_emit_cartesian is ever called against a
+    scheme="threeway" reference basis). "Ocart_Sum" is the sum of all 9
+    group columns (Tx..Rz raw signed + VS/VB/VMix now S+B-normalized),
+    still just a diagnostic with no expected target value (contrast
+    project_emit()'s Parseval-motivated sum~1 check).
 
     Parameters
     ----------
@@ -253,9 +278,9 @@ def project_emit_cartesian(ref, final_emit):
 
     Returns
     -------
-    (rows, full_rows) : same shape as project_emit(), with "Ocart_Tx".."Ocart_Rz",
-        "Ocart_VS"/"Ocart_VB"/"Ocart_VMix", and "Ocart_Sum" -- all raw (signed,
-        unsquared) overlaps, not fractions.
+    (rows, full_rows) : same shape as project_emit(), with "Ocart_Tx".."Ocart_Rz"
+        (raw signed overlaps) and "Ocart_VS"/"Ocart_VB"/"Ocart_VMix" (S+B-
+        normalized fractions) plus "Ocart_Sum".
     """
     Q, labels, groups = ref["Q"], ref["labels"], ref["groups"]
     Theta = _cartesian_unit_columns(final_emit)
@@ -274,14 +299,23 @@ def project_emit_cartesian(ref, final_emit):
         for slot in EXTERNAL_LABELS:
             row[f"Ocart_{slot}"] = float(Overlap[idx_of[slot], j]) if slot in idx_of else 0.0
 
+        # VS/VB/VMix: |overlap| summed per group, normalized by the S+B
+        # total only (Mix excluded from the denominator -- see docstring)
+        # so Ocart_VS + Ocart_VB == 1 exactly, same [0,1] range as Vscore.
         totals = {g: 0.0 for g in _VIB_GROUPS}
         for lbl in labels:
             if lbl in EXTERNAL_LABELS:
                 continue
-            totals[groups[lbl]] += Overlap[idx_of[lbl], j]
-        row["Ocart_VS"] = totals[STRETCHING]
-        row["Ocart_VB"] = totals[BENDING]
-        row["Ocart_VMix"] = totals[MIXED_STRETCH_BEND]
+            totals[groups[lbl]] += abs(Overlap[idx_of[lbl], j])
+        denom = totals[STRETCHING] + totals[BENDING]
+        if denom > EPS_DENOM:
+            row["Ocart_VS"] = totals[STRETCHING] / denom
+            row["Ocart_VB"] = totals[BENDING] / denom
+            row["Ocart_VMix"] = totals[MIXED_STRETCH_BEND] / denom
+        else:
+            row["Ocart_VS"] = 0.0
+            row["Ocart_VB"] = 0.0
+            row["Ocart_VMix"] = 0.0
         row["Ocart_Sum"] = sum(v for k, v in row.items() if k not in ("Mode", "Eigenvalue"))
         rows.append(row)
 

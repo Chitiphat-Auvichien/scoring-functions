@@ -536,6 +536,31 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   (repinned to the corrected values); full suite 141/143 (2 pre-existing unrelated
   `test_veda_fmt_regression.py` failures from a concurrent session's C6H6.log rerun, not this change).
 
+- **2026-08-24 (Ocart_VS/VB normalized, S+B-only denominator)** — `Ocart_VS`/`Ocart_VB` (`project_emit_cartesian`,
+  `src/projection.py`) changed from a plain *signed* sum over each group's reference-mode overlaps (could
+  partially cancel, and wasn't bounded to any particular range — benzene `Ocart_Sum` already ran up to ~2.67)
+  to `sum(|overlap|) / (S_total + B_total)`, i.e. the same magnitude-weighted-total mechanism `Vscore` itself
+  uses (`scoring.py`), not Parseval/squaring. Denominator is **S+B only** — `Mix` is deliberately excluded,
+  since `classify_all_modes()`'s default `scheme="binary"` (the 2026-08 binary-classification decision) never
+  produces a `MIXED_STRETCH_BEND` reference mode, so `totals[Mix]` is 0 under normal use anyway; `Ocart_VMix`
+  itself is still reported (divided by the same S+B-only denominator) for the `scheme="threeway"` case, just
+  not part of what the S/B split is normalized against. Result: `Ocart_VS + Ocart_VB == 1` exactly and each
+  term ∈[0,1] — same range as `V_Stretch` — for every mode with any internal character; both are 0 (EPS_DENOM
+  guard) for a mode that's pure external (no S/B activity to normalize against, e.g. H2O EMIT 1/Ry, EMIT 4/Rx).
+  `Ocart_Tx..Ocart_Rz` (raw signed overlap against the external T/R reference axes) are unchanged — already the
+  same signed, unnormalized form as `Tscore`/`Rscore`, so already directly comparable. Motivation: `Ocart_*`
+  is deliberately kept in plain Cartesian (non-mass-weighted) coordinates specifically so it stays comparable
+  to the scores themselves (`Tscore`/`Rscore`/`Vscore` all act on raw Cartesian displacements, not mass-weighted
+  ones like `C2_*`'s reference basis) — but the un-normalized signed sum wasn't actually comparable to
+  `V_Stretch`'s bounded [0,1] range, which this fixes without touching `Q`'s geometry (no orthogonalization/
+  rotation of the non-orthonormal Cartesian basis — that was considered and rejected in favor of this simpler,
+  `Vscore`-consistent normalization). Regenerated `C6H6_EMIT.csv`/`H2O_EMIT.csv` (`Ocart_VS`/`VB`/`VMix`/`Sum`
+  columns only — `_EMIT_full_cartesian.csv` unchanged, since it stores raw per-reference-mode overlaps).
+  `tests/test_projection.py::test_cartesian_overlap_pathway_is_raw_and_not_orthonormal` repinned
+  (`Ocart_Sum` for benzene EMIT 34: 1.893708 → 1.875991); new
+  `test_ocart_vs_vb_sum_to_one` regression test added. Full suite 156/158 (same 2 pre-existing unrelated
+  `test_veda_fmt_regression.py` failures noted above, not this change).
+
 - **2026-08-14 (roster expansion)** — `test`-category transferability set 9 → 18: H2O retagged
   `non-ideal` → `test` (rerun at mp2/3-21g*, new `%mem`/`%nprocshared` header) and 8 new molecules added
   (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) with their own `.log`/`.gjf`/`.fchk` under

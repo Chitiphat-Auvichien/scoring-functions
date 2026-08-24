@@ -85,26 +85,43 @@ def test_full_projection_file_has_per_mode_detail():
 
 
 def test_cartesian_overlap_pathway_is_raw_and_not_orthonormal():
-    """The plain-Cartesian overlap pathway is deliberately NOT squared (unlike
-    the mass-weighted C2_* columns, whose squaring is only meaningful because
+    """Ocart_Tx.."Ocart_Rz" are deliberately NOT squared (unlike the
+    mass-weighted C2_* columns, whose squaring is only meaningful because
     that basis is near-orthonormal -- Parseval). EMIT 34's Ocart_Tx should
     equal the raw signed overlap, i.e. +sqrt of the old squared value (both
-    Q and Theta are positively aligned on this pure-translation mode); the
-    basis being non-orthonormal (off-diagonals up to 0.80) also means
-    Ocart_Sum is not expected to be anywhere near 1, in contrast to the
-    mass-weighted C2_* fractions' ~1 (Parseval) for that same mode -- pinned
-    regression values from a live run, demonstrating why the mass-weighted
-    pathway is the one to trust."""
+    Q and Theta are positively aligned on this pure-translation mode).
+
+    Ocart_VS/Ocart_VB, by contrast, ARE normalized (S+B-only |overlap|
+    total, same magnitude-weighted mechanism as Vscore -- see
+    project_emit_cartesian's docstring), so they sum to exactly 1 and stay
+    in [0,1] like V_Stretch even though this basis is non-orthonormal.
+    Ocart_Sum (raw Tx..Rz + the now-normalized VS/VB/VMix) is still not
+    expected to be anywhere near 1, in contrast to the mass-weighted C2_*
+    fractions' ~1 (Parseval) for that same mode -- pinned regression values
+    from a live run, demonstrating why the mass-weighted pathway is the one
+    to trust for T/R character specifically."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
     assert abs(rows["EMIT 34"]["Ocart_Tx"] - 0.875991) < TOL
-    assert abs(rows["EMIT 34"]["Ocart_Sum"] - 1.893708) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_Sum"] - 1.875991) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_VS"] + rows["EMIT 34"]["Ocart_VB"] - 1.0) < TOL
     mass_weighted_cols = ["C2_Tx", "C2_Ty", "C2_Tz", "C2_Rx", "C2_Ry", "C2_Rz",
                            "C2_VS", "C2_VB", "C2_VMix"]
     assert abs(sum(rows["EMIT 34"][c] for c in mass_weighted_cols) - 1.0) < 0.01
     # sanity: unsquared overlap re-squared recovers what C2_Tx would have been
     # under this (non-orthonormal) basis had it been squared like C2_ is.
     assert abs(rows["EMIT 34"]["Ocart_Tx"] ** 2 - 0.767360) < TOL
+
+
+def test_ocart_vs_vb_sum_to_one():
+    """Ocart_VS + Ocart_VB == 1 exactly for every EMIT mode (S+B-only
+    normalization, Mix excluded from the denominator per the 2026-08
+    binary-classification decision -- Ocart_VMix is 0 under the default
+    scheme="binary" reference basis)."""
+    df, _, _ = run_projection_pipeline("C6H6", write=False)
+    totals = df["Ocart_VS"] + df["Ocart_VB"]
+    assert (totals - 1.0).abs().max() < TOL
+    assert (df["Ocart_VMix"].abs() < TOL).all()
 
 
 def test_full_cartesian_projection_has_per_mode_detail():

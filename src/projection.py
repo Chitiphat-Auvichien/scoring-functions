@@ -67,6 +67,19 @@ EXTERNAL_LABELS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 # into; imported from classifier.py rather than hardcoded to stay in sync.
 _VIB_GROUPS = (STRETCHING, BENDING, MIXED_STRETCH_BEND)
 
+# Ocart_VS/VB only (build_reference_basis_cartesian/project_emit_cartesian):
+# a REFERENCE normal mode whose own s[V_S] falls in this "medium"/ambiguous
+# band is excluded entirely from the S/B group totals and denominator --
+# under scheme="binary" every reference mode still gets forced to S or B by
+# tau_SB regardless of how close its own V is to that cutoff, so a mode at
+# e.g. V=0.45 is labeled STRETCHING but isn't a trustworthy stand-in for
+# "pure stretch" when used as a comparison axis. Deliberately separate
+# constants from Thresholds.tau_S/tau_B (0.9/0.2, the three-way per-EMIT-mode
+# split) -- this is a purity filter on the CARTESIAN REFERENCE BASIS itself,
+# a different use, hence its own literal bounds rather than reusing those.
+REF_PURITY_LO = 0.20
+REF_PURITY_HI = 0.80
+
 
 def mass_weights_from_scorer(scorer):
     """sqrt(mass_A) per atom, repeated x3 (length 3N, atom order), read from
@@ -226,13 +239,17 @@ def build_reference_basis_cartesian(scorer, final_normal, thresholds=None):
     point of comparison, not a replacement for the mass-weighted pathway.
 
     Parameters / Returns: mirror build_reference_basis(), minus "weights"
-    (there are none to reuse on the EMIT side under this convention).
+    (there are none to reuse on the EMIT side under this convention), plus
+    "v_scores": dict label -> s[V_S] for every internal (non-EXTERNAL) label,
+    so project_emit_cartesian can apply the REF_PURITY_LO/HI exclusion band
+    to Ocart_VS/VB without recomputing scores.
     """
     thresholds = thresholds or Thresholds(v_weighting="*")
     Q = _cartesian_unit_columns(final_normal)
 
     labels = []
     groups = {}
+    v_scores = {}
     for mode in final_normal:
         label = mode.get("label")
         labels.append(label)
@@ -241,7 +258,8 @@ def build_reference_basis_cartesian(scorer, final_normal, thresholds=None):
         else:
             sc = scorer.calculate_scores(mode["vector"])
             groups[label] = vib_label(sc["V"], thresholds)
-    return {"Q": Q, "labels": labels, "groups": groups}
+            v_scores[label] = sc["V"]
+    return {"Q": Q, "labels": labels, "groups": groups, "v_scores": v_scores}
 
 
 def project_emit_cartesian(ref, final_emit):
@@ -262,14 +280,21 @@ def project_emit_cartesian(ref, final_emit):
     scheme="binary" never produces a Mix reference mode, so totals[Mix] is 0
     under normal use). This forces Ocart_VS + Ocart_VB == 1 exactly, each
     in [0,1] -- the same range as V_Stretch, directly comparable to it,
-    without cancellation and without touching Q's geometry. "Ocart_VMix" is
-    that same group's |overlap| total divided by the same S+B-only
-    denominator, so it is NOT covered by the VS/VB normalization (only
-    nonzero if project_emit_cartesian is ever called against a
-    scheme="threeway" reference basis). "Ocart_Sum" is the sum of all 9
-    group columns (Tx..Rz raw signed + VS/VB/VMix now S+B-normalized),
-    still just a diagnostic with no expected target value (contrast
-    project_emit()'s Parseval-motivated sum~1 check).
+    without cancellation and without touching Q's geometry. A reference
+    normal mode is additionally dropped from the S/B totals (and so from the
+    denominator too) if ITS OWN s[V_S] falls in [REF_PURITY_LO, REF_PURITY_HI]
+    (0.20-0.80): scheme="binary" still force-labels every such mode S or B
+    via tau_SB regardless of how ambiguous its own V is, so a "medium" V
+    reference mode is not a trustworthy stand-in for pure stretch/bend
+    character and its overlap with the EMIT mode is excluded rather than
+    counted toward either bucket. "Ocart_VMix" is that same (purity-filtered)
+    group's |overlap| total divided by the same S+B-only denominator, so it
+    is NOT covered by the VS/VB normalization (only nonzero if
+    project_emit_cartesian is ever called against a scheme="threeway"
+    reference basis). "Ocart_Sum" is the sum of all 9 group columns (Tx..Rz
+    raw signed + VS/VB/VMix now S+B-normalized), still just a diagnostic
+    with no expected target value (contrast project_emit()'s
+    Parseval-motivated sum~1 check).
 
     Parameters
     ----------
@@ -283,6 +308,7 @@ def project_emit_cartesian(ref, final_emit):
         normalized fractions) plus "Ocart_Sum".
     """
     Q, labels, groups = ref["Q"], ref["labels"], ref["groups"]
+    v_scores = ref.get("v_scores", {})
     Theta = _cartesian_unit_columns(final_emit)
 
     Overlap = Q.T @ Theta  # raw signed overlap, NOT squared -- see docstring
@@ -300,11 +326,18 @@ def project_emit_cartesian(ref, final_emit):
             row[f"Ocart_{slot}"] = float(Overlap[idx_of[slot], j]) if slot in idx_of else 0.0
 
         # VS/VB/VMix: |overlap| summed per group, normalized by the S+B
-        # total only (Mix excluded from the denominator -- see docstring)
-        # so Ocart_VS + Ocart_VB == 1 exactly, same [0,1] range as Vscore.
+        # total only (Mix excluded from the denominator -- see docstring),
+        # and a reference mode is skipped entirely if ITS OWN s[V_S] falls
+        # in the medium/ambiguous [REF_PURITY_LO, REF_PURITY_HI] band -- not
+        # a trustworthy stand-in for pure stretch/bend despite scheme="binary"
+        # still forcing it to an S/B label. Ocart_VS + Ocart_VB == 1 exactly,
+        # same [0,1] range as Vscore, over the surviving (purer) reference modes.
         totals = {g: 0.0 for g in _VIB_GROUPS}
         for lbl in labels:
             if lbl in EXTERNAL_LABELS:
+                continue
+            v = v_scores.get(lbl)
+            if v is not None and REF_PURITY_LO <= v <= REF_PURITY_HI:
                 continue
             totals[groups[lbl]] += abs(Overlap[idx_of[lbl], j])
         denom = totals[STRETCHING] + totals[BENDING]

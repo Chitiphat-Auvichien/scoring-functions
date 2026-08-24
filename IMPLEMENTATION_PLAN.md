@@ -561,6 +561,27 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   `test_ocart_vs_vb_sum_to_one` regression test added. Full suite 156/158 (same 2 pre-existing unrelated
   `test_veda_fmt_regression.py` failures noted above, not this change).
 
+- **2026-08-24 (Ocart_VS/VB: exclude medium-V reference modes)** — refinement on top of the S+B-only
+  normalization above: `build_reference_basis_cartesian`/`project_emit_cartesian` (`src/projection.py`)
+  now also drops a reference normal mode from the `Ocart_VS`/`Ocart_VB` group totals (and denominator)
+  entirely if THAT mode's own `s[V_S]` falls in the "medium"/ambiguous band `[REF_PURITY_LO, REF_PURITY_HI]
+  = [0.20, 0.80]` (new module constants, deliberately separate from `Thresholds.tau_S`/`tau_B` = 0.9/0.2 --
+  those drive the three-way per-EMIT-mode split, this is a purity filter on the reference basis itself).
+  Motivation: `scheme="binary"`'s single `tau_SB=0.42` cutoff still force-labels every reference mode S or
+  B no matter how close to the boundary, so a mode at e.g. V=0.45 was previously counted as full-weight
+  "stretch" evidence despite being genuinely mixed. `build_reference_basis_cartesian` now also returns
+  `"v_scores"` (label -> s[V_S] for every internal reference mode) so the filter can be applied without
+  re-scoring. Effect on benzene: 10/30 real normal modes (V in [0.28, 0.70]) excluded, leaving only the
+  near-0/near-1 "pure" modes to define the S/B axes -- sharpens most `Ocart_VS`/`Ocart_VB` values toward
+  0/1 (e.g. EMIT 34 Ocart_VS: 0.597 → 1.000), though genuinely mixed EMIT modes (e.g. EMIT 24-33, the
+  ring in-plane set) still land at real intermediate values (EMIT 24: Ocart_VS=0.7357). `Ocart_VS +
+  Ocart_VB == 1` invariant is unaffected by the filter (still holds whenever any un-excluded reference
+  mode contributes). Regenerated `C6H6_EMIT.csv` (H2O unaffected -- none of its 3 real normal modes fall
+  in the excluded band). New `tests/test_projection.py::test_ocart_reference_purity_band_excludes_medium_v_modes`
+  pins the exclusion count (10) and a non-degenerate EMIT 24 value; all prior pinned values unchanged
+  (Ocart_Tx/Ocart_Sum for EMIT 34 depend only on the VS+VB=1 invariant, not which modes fed it). Full
+  suite 158 tests, 156/158 (same 2 pre-existing unrelated `test_veda_fmt_regression.py` failures).
+
 - **2026-08-14 (roster expansion)** — `test`-category transferability set 9 → 18: H2O retagged
   `non-ideal` → `test` (rerun at mp2/3-21g*, new `%mem`/`%nprocshared` header) and 8 new molecules added
   (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) with their own `.log`/`.gjf`/`.fchk` under

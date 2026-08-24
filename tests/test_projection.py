@@ -124,6 +124,26 @@ def test_ocart_vs_vb_sum_to_one():
     assert (df["Ocart_VMix"].abs() < TOL).all()
 
 
+def test_ocart_reference_purity_band_excludes_medium_v_modes():
+    """Reference normal modes with their own s[V_S] in [0.20, 0.80] are
+    dropped from the Ocart_VS/VB group totals entirely -- benzene has 10/30
+    real normal modes in that band (V in [0.28, 0.70], all binary-labeled S
+    or B despite the ambiguity), leaving only the ~0/~1 "pure" modes to
+    define the S/B axes. Pinned regression value for EMIT 24, a mode with
+    real mixed character post-filtering (not a degenerate 0/1 split)."""
+    from src.projection import REF_PURITY_LO, REF_PURITY_HI, build_reference_basis_cartesian
+    raw_n, _ = load_inputs("C6H6", "normal")
+    scorer_n, final_n = build_scorer_and_final(raw_n, "normal")
+    ref = build_reference_basis_cartesian(scorer_n, final_n)
+    n_excluded = sum(1 for v in ref["v_scores"].values() if REF_PURITY_LO <= v <= REF_PURITY_HI)
+    assert n_excluded == 10
+
+    df, _, _ = run_projection_pipeline("C6H6", write=False)
+    rows = _rows_by_mode(df)
+    assert abs(rows["EMIT 24"]["Ocart_VS"] - 0.735660) < TOL
+    assert abs(rows["EMIT 24"]["Ocart_VB"] - 0.264340) < TOL
+
+
 def test_full_cartesian_projection_has_per_mode_detail():
     """The Cartesian-overlap 'full' output has the same per-individual-
     reference-mode shape as the mass-weighted one (build_reference_basis_cartesian

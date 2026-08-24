@@ -91,15 +91,16 @@ def test_cartesian_overlap_pathway_is_raw_and_not_orthonormal():
     equal the raw signed overlap, i.e. +sqrt of the old squared value (both
     Q and Theta are positively aligned on this pure-translation mode).
 
-    Ocart_VS/Ocart_VB, by contrast, ARE normalized (S+B-only |overlap|
-    total, same magnitude-weighted mechanism as Vscore -- see
-    project_emit_cartesian's docstring), so they sum to exactly 1 and stay
-    in [0,1] like V_Stretch even though this basis is non-orthonormal.
-    Ocart_Sum (raw Tx..Rz + the now-normalized VS/VB/VMix) is still not
-    expected to be anywhere near 1, in contrast to the mass-weighted C2_*
-    fractions' ~1 (Parseval) for that same mode -- pinned regression values
-    from a live run, demonstrating why the mass-weighted pathway is the one
-    to trust for T/R character specifically."""
+    Ocart_VS/Ocart_VB, by contrast, ARE normalized (each internal reference
+    mode's |overlap| split continuously by its own s[V_S], same
+    magnitude-weighted mechanism as Vscore -- see project_emit_cartesian's
+    docstring), so they sum to exactly 1 and stay in [0,1] like V_Stretch
+    even though this basis is non-orthonormal. Ocart_Sum (raw Tx..Rz + the
+    now-normalized VS/VB) is still not expected to be anywhere near 1, in
+    contrast to the mass-weighted C2_* fractions' ~1 (Parseval) for that
+    same mode -- pinned regression values from a live run, demonstrating
+    why the mass-weighted pathway is the one to trust for T/R character
+    specifically."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
     assert abs(rows["EMIT 34"]["Ocart_Tx"] - 0.875991) < TOL
@@ -114,34 +115,36 @@ def test_cartesian_overlap_pathway_is_raw_and_not_orthonormal():
 
 
 def test_ocart_vs_vb_sum_to_one():
-    """Ocart_VS + Ocart_VB == 1 exactly for every EMIT mode (S+B-only
-    normalization, Mix excluded from the denominator per the 2026-08
-    binary-classification decision -- Ocart_VMix is 0 under the default
-    scheme="binary" reference basis)."""
+    """Ocart_VS + Ocart_VB == 1 exactly for every EMIT mode -- each internal
+    reference mode's |overlap| is split by its own continuous s[V_S] weight
+    (v_m to S, 1-v_m to B), so the two totals always partition the full
+    internal |overlap| sum with nothing dropped or double-counted."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     totals = df["Ocart_VS"] + df["Ocart_VB"]
     assert (totals - 1.0).abs().max() < TOL
-    assert (df["Ocart_VMix"].abs() < TOL).all()
 
 
-def test_ocart_reference_purity_band_excludes_medium_v_modes():
-    """Reference normal modes with their own s[V_S] in [0.20, 0.80] are
-    dropped from the Ocart_VS/VB group totals entirely -- benzene has 10/30
-    real normal modes in that band (V in [0.28, 0.70], all binary-labeled S
-    or B despite the ambiguity), leaving only the ~0/~1 "pure" modes to
-    define the S/B axes. Pinned regression value for EMIT 24, a mode with
-    real mixed character post-filtering (not a degenerate 0/1 split)."""
-    from src.projection import REF_PURITY_LO, REF_PURITY_HI, build_reference_basis_cartesian
+def test_ocart_vs_vb_continuous_weighting_no_exclusion():
+    """No reference normal mode is ever dropped from Ocart_VS/VB (contrast
+    an earlier, discarded revision that excluded reference modes with
+    "medium" s[V_S] entirely, which pushed EMIT modes dominated by mixed
+    normal modes toward artifact 0/1 values). Benzene has 10/30 real normal
+    modes with s[V_S] in [0.20, 0.80] (the previously-excluded band) --
+    confirm they still carry nonzero weight in v_scores, and pin EMIT 34's
+    now-continuous (non-degenerate) Ocart_VS, which was exactly 1.0 under
+    the exclusion-based version and ~0.60 under the original signed-sum
+    version -- this weighting lands at a genuinely different intermediate
+    value, reflecting real contribution from the mixed reference modes."""
     raw_n, _ = load_inputs("C6H6", "normal")
     scorer_n, final_n = build_scorer_and_final(raw_n, "normal")
     ref = build_reference_basis_cartesian(scorer_n, final_n)
-    n_excluded = sum(1 for v in ref["v_scores"].values() if REF_PURITY_LO <= v <= REF_PURITY_HI)
-    assert n_excluded == 10
+    n_medium = sum(1 for v in ref["v_scores"].values() if 0.20 <= v <= 0.80)
+    assert n_medium == 10
 
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
-    assert abs(rows["EMIT 24"]["Ocart_VS"] - 0.735660) < TOL
-    assert abs(rows["EMIT 24"]["Ocart_VB"] - 0.264340) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_VS"] - 0.567985) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_VB"] - 0.432015) < TOL
 
 
 def test_full_cartesian_projection_has_per_mode_detail():
@@ -160,7 +163,7 @@ def test_full_cartesian_projection_has_per_mode_detail():
     assert len(rows) == len(full_rows) == 36
     expected_row_cols = {"Mode", "Eigenvalue", "Ocart_Tx", "Ocart_Ty", "Ocart_Tz",
                           "Ocart_Rx", "Ocart_Ry", "Ocart_Rz", "Ocart_VS",
-                          "Ocart_VB", "Ocart_VMix", "Ocart_Sum"}
+                          "Ocart_VB", "Ocart_Sum"}
     assert expected_row_cols <= set(rows[0].keys())
     expected_ref_cols = {"Mode", "Eigenvalue", "Tx", "Ty", "Tz", "Rx", "Ry", "Rz"}
     assert expected_ref_cols <= set(full_rows[0].keys())

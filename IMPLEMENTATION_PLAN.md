@@ -582,6 +582,35 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   (Ocart_Tx/Ocart_Sum for EMIT 34 depend only on the VS+VB=1 invariant, not which modes fed it). Full
   suite 158 tests, 156/158 (same 2 pre-existing unrelated `test_veda_fmt_regression.py` failures).
 
+- **2026-08-24 (Ocart_VS/VB: continuous v_m weighting, replaces medium-V exclusion)** — the
+  medium-V exclusion band above turned out to have the same failure mode as the signed-sum version it
+  replaced, from the opposite direction: excluding a reference mode with "medium" `s[V_S]` discards
+  exactly the evidence needed to explain an EMIT mode that is itself a genuine combination of mixed-
+  character normal modes, pushing such EMIT modes toward artifact `Ocart_VS`/`Ocart_VB` values near 0
+  or 1 (observed: benzene EMIT 34's `Ocart_VS` jumped 0.597 → 1.000 under exclusion — not because its
+  vibrational character changed, but because the mixed reference modes that used to contribute
+  disappeared from the basis). Fix: replace the hard classification (bucket + optional exclusion)
+  with a CONTINUOUS weight -- each internal reference mode's `|overlap|` is split between the S and B
+  totals in proportion to that mode's own `s[V_S] = v_m` (`v_m` to S, `1-v_m` to B) instead of being
+  assigned whole to a classifier.vib_label() bucket:
+  `Ocart_VS = Σ_m v_m·|overlap_m| / Σ_m |overlap_m|`, `Ocart_VB = Σ_m (1-v_m)·|overlap_m| / Σ_m |overlap_m|`.
+  No reference mode is ever dropped or hard-classified; `REF_PURITY_LO`/`REF_PURITY_HI` and the whole
+  medium-V exclusion band are retired. `Ocart_VS + Ocart_VB == 1` still holds exactly (same [0,1] range
+  as `V_Stretch`), and since there's no third bucket under a continuous split, `Ocart_VMix` is **dropped
+  entirely** (not zeroed — the column no longer exists). `build_reference_basis_cartesian` signature
+  changed: drops the now-unused `thresholds` parameter (and its `groups`/`classifier.vib_label` call),
+  returns `"v_scores"` (label -> `s[V_S]`) instead of `"groups"`; `main.py`'s call site updated to match.
+  Benzene EMIT 34's `Ocart_VS` is now 0.568 -- a genuinely different intermediate value from both the
+  original signed-sum (0.597, could partially cancel) and the exclusion-band (1.000, artifact) versions,
+  reflecting real proportionate credit from the 10/30 real normal modes with `s[V_S]` in [0.20, 0.80]
+  that both earlier versions failed to use correctly. Regenerated `C6H6_EMIT.csv`/`H2O_EMIT.csv` (H2O
+  unaffected in practice -- same as before, none of its 3 modes are in the medium band, but the column
+  set changed: `Ocart_VMix` dropped from both files' headers). `tests/test_projection.py`: repinned
+  EMIT 34's `Ocart_VS`/`Ocart_VB`, dropped the exclusion-count test in favor of
+  `test_ocart_vs_vb_continuous_weighting_no_exclusion` (confirms the 10 "medium" modes still carry
+  nonzero weight), removed all `Ocart_VMix` references/column-set entries. Full suite still 158 tests,
+  156/158 (same 2 pre-existing unrelated `test_veda_fmt_regression.py` failures).
+
 - **2026-08-14 (roster expansion)** — `test`-category transferability set 9 → 18: H2O retagged
   `non-ideal` → `test` (rerun at mp2/3-21g*, new `%mem`/`%nprocshared` header) and 8 new molecules added
   (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) with their own `.log`/`.gjf`/`.fchk` under

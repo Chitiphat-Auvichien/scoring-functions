@@ -92,19 +92,23 @@ def test_cartesian_overlap_pathway_is_raw_and_not_orthonormal():
     Q and Theta are positively aligned on this pure-translation mode).
 
     Ocart_VS/Ocart_VB, by contrast, ARE normalized (hard-classified S/B
-    |overlap| totals, L1-normalized by their S+B sum -- same magnitude-
-    weighted mechanism as Vscore, see project_emit_cartesian's docstring),
-    so they sum to exactly 1 and stay in [0,1] like V_Stretch even though
-    this basis is non-orthonormal. Ocart_Sum (raw Tx..Rz + the normalized
-    VS/VB) is still not expected to be anywhere near 1, in contrast to the
-    mass-weighted C2_* fractions' ~1 (Parseval) for that same mode -- pinned
-    regression values from a live run, demonstrating why the mass-weighted
-    pathway is the one to trust for T/R character specifically."""
+    |overlap| totals, L1-normalized by the FULL T+R+S+B |overlap| total --
+    same magnitude-weighted mechanism as Vscore, see project_emit_cartesian's
+    docstring), so they stay in [0,1] like V_Stretch even though this basis
+    is non-orthonormal, but sum to <= 1 rather than exactly 1 (== 1 only for
+    a mode with zero external overlap) since external T/R activity now
+    shares the same denominator -- EMIT 34 (a mixed-external Tx* mode with
+    real Ocart_Tx=0.876) lands well under 1. Ocart_Sum (raw Tx..Rz + the
+    normalized VS/VB) is still not expected to be anywhere near 1, in
+    contrast to the mass-weighted C2_* fractions' ~1 (Parseval) for that
+    same mode -- pinned regression values from a live run, demonstrating why
+    the mass-weighted pathway is the one to trust for T/R character
+    specifically."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
     assert abs(rows["EMIT 34"]["Ocart_Tx"] - 0.875991) < TOL
-    assert abs(rows["EMIT 34"]["Ocart_Sum"] - 1.875991) < TOL
-    assert abs(rows["EMIT 34"]["Ocart_VS"] + rows["EMIT 34"]["Ocart_VB"] - 1.0) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_Sum"] - 1.560176) < TOL
+    assert rows["EMIT 34"]["Ocart_VS"] + rows["EMIT 34"]["Ocart_VB"] < 1.0 - TOL
     mass_weighted_cols = ["C2_Tx", "C2_Ty", "C2_Tz", "C2_Rx", "C2_Ry", "C2_Rz",
                            "C2_VS", "C2_VB", "C2_VMix"]
     assert abs(sum(rows["EMIT 34"][c] for c in mass_weighted_cols) - 1.0) < 0.01
@@ -113,14 +117,21 @@ def test_cartesian_overlap_pathway_is_raw_and_not_orthonormal():
     assert abs(rows["EMIT 34"]["Ocart_Tx"] ** 2 - 0.767360) < TOL
 
 
-def test_ocart_vs_vb_sum_to_one():
-    """Ocart_VS + Ocart_VB == 1 exactly for every EMIT mode -- L1
-    (magnitude) normalization by the S+B total |overlap|, with no reference
-    mode excluded from the sum, so the two totals always partition the full
-    internal |overlap| sum with nothing dropped or double-counted."""
+def test_ocart_vs_vb_le_one_and_bounded_by_external_leakage():
+    """Ocart_VS + Ocart_VB <= 1 for every EMIT mode (L1 normalization by the
+    FULL T+R+S+B |overlap| total, not S+B alone -- an S+B-only denominator
+    was tried and reverted because it silently hid real external T/R
+    character by always summing to exactly 1 even for a mixed-external
+    mode). A mode with zero external overlap (e.g. EMIT 3, a clean internal
+    mode) still sums to ~1; a mode with real external character (e.g. EMIT
+    34, Ocart_Tx=0.876) sums to well under 1, the "gap" being that mode's
+    external share of the same total."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     totals = df["Ocart_VS"] + df["Ocart_VB"]
-    assert (totals - 1.0).abs().max() < TOL
+    assert (totals <= 1.0 + TOL).all()
+    rows = _rows_by_mode(df)
+    assert abs((rows["EMIT 3"]["Ocart_VS"] + rows["EMIT 3"]["Ocart_VB"]) - 1.0) < TOL
+    assert (rows["EMIT 34"]["Ocart_VS"] + rows["EMIT 34"]["Ocart_VB"]) < 0.7
 
 
 def test_ocart_vs_vb_l1_no_exclusion():
@@ -132,11 +143,12 @@ def test_ocart_vs_vb_l1_no_exclusion():
     entirely, and a continuous v_m-proportional split instead of a hard
     S/B bucket -- both changed the numbers only slightly versus this plain
     L1 version, so the simpler version is what's kept). Pinned regression
-    value for EMIT 34."""
+    value for EMIT 34 (denominator includes external T/R overlap too --
+    see test_ocart_vs_vb_le_one_and_bounded_by_external_leakage)."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
-    assert abs(rows["EMIT 34"]["Ocart_VS"] - 0.596629) < TOL
-    assert abs(rows["EMIT 34"]["Ocart_VB"] - 0.403371) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_VS"] - 0.408204) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_VB"] - 0.275981) < TOL
 
 
 def test_full_cartesian_projection_has_per_mode_detail():

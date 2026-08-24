@@ -630,6 +630,24 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   the loop on the Ocart_VS/VB exploration: signed-sum -> L1-hard-classified -> L1-with-exclusion ->
   continuous-weighted -> **back to L1-hard-classified** (current, final for now).
 
+- **2026-08-24 (Ocart_VS/VB denominator: T+R+S+B, not S+B alone)** — correction to the
+  L1-normalization above: the denominator for `Ocart_VS`/`Ocart_VB` (`project_emit_cartesian`,
+  `src/projection.py`) now includes the external `Tx/Ty/Tz/Rx/Ry/Rz` `|overlap|` totals alongside the
+  internal S/B ones (`ext_total = Σ_{slot in EXTERNAL_LABELS} |Overlap[slot,j]|`,
+  `denom = totals[S] + totals[B] + ext_total`), matching the original design intent from when this
+  denominator choice was first discussed (an S+B-only option was picked at the time for the "binary
+  classification" framing, but that silently made `Ocart_VS + Ocart_VB == 1` even for a mode with real
+  external T/R character, hiding the leakage rather than competing against it). `Ocart_VS`/`Ocart_VB` now
+  read as "of this mode's TOTAL raw activity (T+R+S+B), what fraction is stretch-like/bend-like" -- so
+  `Ocart_VS + Ocart_VB <= 1` in general, == 1 only for a mode with zero external overlap (benzene EMIT 3:
+  sum ~1.000; EMIT 34, a mixed-external Tx* mode with `Ocart_Tx`=0.876: sum ~0.684). `Ocart_Tx..Rz`
+  themselves are unchanged (still raw signed, not part of what's being renormalized -- only the S/B
+  totals' shared denominator changed). Regenerated `C6H6_EMIT.csv`/`H2O_EMIT.csv`.
+  `tests/test_projection.py`: repinned EMIT 34's `Ocart_VS`/`Ocart_VB`/`Ocart_Sum`; replaced
+  `test_ocart_vs_vb_sum_to_one` with `test_ocart_vs_vb_le_one_and_bounded_by_external_leakage` (checks
+  the <=1 bound generally, ~1 for a clean-internal mode, well under 1 for a mixed-external one). Full
+  suite still 158 tests, 156/158 (same 2 pre-existing unrelated `test_veda_fmt_regression.py` failures).
+
 - **2026-08-14 (roster expansion)** — `test`-category transferability set 9 → 18: H2O retagged
   `non-ideal` → `test` (rerun at mp2/3-21g*, new `%mem`/`%nprocshared` header) and 8 new molecules added
   (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) with their own `.log`/`.gjf`/`.fchk` under

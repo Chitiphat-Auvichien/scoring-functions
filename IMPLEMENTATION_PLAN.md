@@ -611,6 +611,25 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   nonzero weight), removed all `Ocart_VMix` references/column-set entries. Full suite still 158 tests,
   156/158 (same 2 pre-existing unrelated `test_veda_fmt_regression.py` failures).
 
+- **2026-08-24 (Ocart_VS/VB reverted to plain L1, no exclusion/weighting)** — the continuous
+  v_m-weighting entry directly above was itself reverted: the numeric difference it made versus the
+  plain hard-classified L1-normalized version (the very first fix in this sequence) was small (e.g.
+  benzene EMIT 34's `Ocart_VS`: 0.597 signed-sum-era value under both the original and this reverted
+  version vs. 1.000 under the exclusion-band version vs. 0.568 under continuous weighting), so the extra
+  machinery (either an exclusion band or a per-mode continuous split) wasn't worth keeping over the
+  simpler mechanism. Back to: each internal reference mode hard-classified S or B via
+  `classifier.vib_label(s[V_S])` (`build_reference_basis_cartesian` regained its `thresholds` parameter
+  and `"groups"` return key, in place of `"v_scores"`), `|overlap|` summed per bucket, both totals divided
+  by their S+B sum -- no reference mode excluded, no per-mode continuous weight. `Ocart_VMix` stays
+  dropped (not reintroduced -- that decision holds independent of the S/B mechanism). `main.py`'s
+  `build_reference_basis_cartesian(scorer_n, final_n, thresholds)` call site restored to pass
+  `thresholds` again. Regenerated `C6H6_EMIT.csv`/`H2O_EMIT.csv`. `tests/test_projection.py`: replaced
+  the continuous-weighting test with `test_ocart_vs_vb_l1_no_exclusion` (EMIT 34 pinned back to the
+  original 0.596629/0.403371); all other pins unchanged (VS+VB=1 invariant, Ocart_Tx/Sum). Full suite
+  158 tests, 156/158 (same 2 pre-existing unrelated `test_veda_fmt_regression.py` failures). This closes
+  the loop on the Ocart_VS/VB exploration: signed-sum -> L1-hard-classified -> L1-with-exclusion ->
+  continuous-weighted -> **back to L1-hard-classified** (current, final for now).
+
 - **2026-08-14 (roster expansion)** — `test`-category transferability set 9 → 18: H2O retagged
   `non-ideal` → `test` (rerun at mp2/3-21g*, new `%mem`/`%nprocshared` header) and 8 new molecules added
   (CH3COCH3, C6H4F2, XeF2Cl2, C2H4, C10H8, HOCl, HCOOH, C7H8) with their own `.log`/`.gjf`/`.fchk` under

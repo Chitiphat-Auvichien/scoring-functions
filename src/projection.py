@@ -36,30 +36,27 @@ orthonormal, which it isn't) -- the same signed, unnormalized form as
 Tscore/Rscore.
 
 "Ocart_VS"/"Ocart_VB", by contrast, ARE normalized -- same mechanism Vscore
-itself uses (magnitude-weighted total, not Parseval): |overlap| is summed
-across ALL internal reference modes, and EACH mode's own s[V_S] = v_m
-(itself in [0,1] -- the fraction of that mode's own character that is
-stretch-like) splits its |overlap| continuously between the two totals
-(v_m to S, 1-v_m to B) rather than assigning it whole to a hard-classified
-bucket:
-    Ocart_VS = Sum_m v_m * |overlap_m|  / Sum_m |overlap_m|
-    Ocart_VB = Sum_m (1-v_m) * |overlap_m| / Sum_m |overlap_m|
-This forces Ocart_VS + Ocart_VB == 1 exactly and each term into [0,1], the
-same range as Vscore's V_Stretch, without touching Q's geometry (no
-orthogonalization/rotation) and without any classification threshold at all
--- a mode with genuinely mixed character (v_m near 0.5) contributes real,
-proportionate evidence to BOTH totals instead of being force-labeled into
-one or excluded outright, so an EMIT mode dominated by mixed normal modes
-still gets a real intermediate value rather than an artifact near 0 or 1.
-(An earlier revision hard-classified each reference mode S/B via
-classifier.vib_label and summed |overlap| per bucket, later refined to
-additionally drop modes with "medium" v_m from the sum entirely -- both
-discarded the very modes needed to explain a genuinely mixed EMIT mode; the
-continuous weighting above replaced both and needs no MIXED_STRETCH_BEND
-bucket, hence no "Ocart_VMix" column.) "Ocart_Sum" reports the sum of
-Ocart_Tx..Rz (raw signed) plus Ocart_VS/VB (now continuously normalized) as
-a diagnostic with no expected target value -- not a Parseval fraction, and
-not asserted to sum to 1 (contrast C2_*'s own Sum, which is).
+itself uses (magnitude-weighted total, not Parseval): each internal
+reference mode is hard-classified S or B via classifier.vib_label(s[V_S])
+(the same Step-4 boundary classify_all_modes() itself uses), |overlap| is
+summed per bucket, and the two totals are divided by their S+B sum (Mix
+excluded from the denominator -- scheme="binary" never produces a Mix
+reference mode, so totals[Mix] is 0 under normal use anyway). This forces
+Ocart_VS + Ocart_VB == 1 exactly and each term into [0,1], the same range as
+Vscore's V_Stretch, without touching Q's geometry (no orthogonalization/
+rotation). No reference mode is excluded from the sum -- an earlier revision
+additionally dropped modes with "medium" s[V_S] (and a later one replaced
+the hard classification with a continuous v_m-proportional split entirely);
+both were tried and reverted because the numeric difference from this plain
+L1-normalized version was small while the extra machinery (an exclusion
+band, or per-mode continuous weights) added complexity not worth it -- this
+is the current, simplest version: hard-classify, sum |overlap| per bucket,
+normalize by S+B, keep every mode. No MIXED_STRETCH_BEND bucket is exposed
+as its own column, hence no "Ocart_VMix" (dropped, not just zeroed).
+"Ocart_Sum" reports the sum of Ocart_Tx..Rz (raw signed) plus Ocart_VS/VB
+(S+B-normalized) as a diagnostic with no expected target value -- not a
+Parseval fraction, and not asserted to sum to 1 (contrast C2_*'s own Sum,
+which is).
 """
 
 import numpy as np
@@ -71,11 +68,9 @@ from .scoring import EPS_DENOM
 # omits "Rx" (n_R=2); handled by simply never finding "Rx" in the labels.
 EXTERNAL_LABELS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 
-# Internal/vibration buckets a real normal mode's Theta_tilde**2 is summed
-# into; imported from classifier.py rather than hardcoded to stay in sync.
-# Used by project_emit()/build_reference_basis() (the mass-weighted C2_*
-# pathway) only -- project_emit_cartesian()'s Ocart_VS/VB use a continuous
-# v_m weighting instead and have no MIXED_STRETCH_BEND bucket of their own.
+# Internal/vibration buckets a real normal mode's Theta_tilde**2 (or, for
+# project_emit_cartesian, |overlap|) is summed into; imported from
+# classifier.py rather than hardcoded to stay in sync.
 _VIB_GROUPS = (STRETCHING, BENDING, MIXED_STRETCH_BEND)
 
 
@@ -229,37 +224,30 @@ def _cartesian_unit_columns(mode_list):
     return np.array(cols).T
 
 
-def build_reference_basis_cartesian(scorer, final_normal):
+def build_reference_basis_cartesian(scorer, final_normal, thresholds=None):
     """Cartesian-overlap counterpart of build_reference_basis(): the same T/R/
     vibrational reference set, unit-normalized in the plain Cartesian inner
     product instead of the mass-weighted one. See module docstring -- this
     basis is NOT orthonormal in general, so it exists only as an explicit
     point of comparison, not a replacement for the mass-weighted pathway.
 
-    No `thresholds` parameter (contrast build_reference_basis): Ocart_VS/VB
-    weight each internal reference mode continuously by its own s[V_S], so
-    there is no classification cutoff to apply here at all.
-
-    Returns
-    -------
-    dict with:
-      "Q"        : ndarray (3N, 3N), Cartesian unit-normalized reference
-                   columns, in final_normal's order.
-      "labels"   : list of str, the mode labels (Tx..Rz, Vib 1..Vib (3N-6)).
-      "v_scores" : dict label -> s[V_S], for every internal (non-EXTERNAL)
-                   label -- the continuous stretch-fraction weight
-                   project_emit_cartesian splits each mode's |overlap| by.
+    Parameters / Returns: mirror build_reference_basis(), minus "weights"
+    (there are none to reuse on the EMIT side under this convention).
     """
+    thresholds = thresholds or Thresholds(v_weighting="*")
     Q = _cartesian_unit_columns(final_normal)
 
     labels = []
-    v_scores = {}
+    groups = {}
     for mode in final_normal:
         label = mode.get("label")
         labels.append(label)
-        if label not in EXTERNAL_LABELS:
-            v_scores[label] = scorer.calculate_scores(mode["vector"])["V"]
-    return {"Q": Q, "labels": labels, "v_scores": v_scores}
+        if label in EXTERNAL_LABELS:
+            groups[label] = "EXTERNAL"
+        else:
+            sc = scorer.calculate_scores(mode["vector"])
+            groups[label] = vib_label(sc["V"], thresholds)
+    return {"Q": Q, "labels": labels, "groups": groups}
 
 
 def project_emit_cartesian(ref, final_emit):
@@ -274,26 +262,20 @@ def project_emit_cartesian(ref, final_emit):
     two mode shapes -- and the same signed, unnormalized form as Tscore/Rscore.
 
     "Ocart_VS"/"Ocart_VB" ARE normalized, though, via the same mechanism
-    Vscore itself uses (magnitude-weighted total, not Parseval/squaring), and
-    via a CONTINUOUS weight rather than a hard S/B classification: each
-    internal reference mode's |overlap| is split between the two totals in
-    proportion to that mode's own s[V_S] = v_m (v_m to S, 1-v_m to B), then
-    both totals are divided by their sum:
-        Ocart_VS = Sum_m v_m*|overlap_m| / Sum_m |overlap_m|
-        Ocart_VB = Sum_m (1-v_m)*|overlap_m| / Sum_m |overlap_m|
-    This forces Ocart_VS + Ocart_VB == 1 exactly, each in [0,1] -- the same
-    range as V_Stretch, directly comparable to it, without cancellation and
-    without touching Q's geometry. Unlike a hard classification (or a hard
-    classification plus excluding "medium" V reference modes, both tried and
-    discarded -- see module docstring), no reference mode is ever dropped:
-    a genuinely mixed reference mode (v_m near 0.5) still contributes real,
-    proportionate evidence to BOTH totals, so an EMIT mode dominated by
-    mixed normal modes lands at a real intermediate Ocart_VS/VB value
-    instead of an artifact near 0 or 1. No MIXED_STRETCH_BEND bucket is
-    needed under this scheme, hence no "Ocart_VMix" column. "Ocart_Sum" is
-    the sum of all 8 columns (Tx..Rz raw signed + VS/VB), still just a
-    diagnostic with no expected target value (contrast project_emit()'s
-    Parseval-motivated sum~1 check).
+    Vscore itself uses (magnitude-weighted total, not Parseval/squaring):
+    |overlap| is summed per group (hard-classified via classifier.vib_label,
+    same boundary as classify_all_modes()'s own Step 4), then divided by the
+    S+B total |overlap| (Mix excluded from the denominator -- scheme="binary"
+    never produces a Mix reference mode, so totals[Mix] is 0 under normal
+    use). This forces Ocart_VS + Ocart_VB == 1 exactly, each in [0,1] -- the
+    same range as V_Stretch, directly comparable to it, without cancellation
+    and without touching Q's geometry (no orthogonalization/rotation). No
+    reference mode is excluded from the sum -- plain L1 (magnitude) totals
+    over every internal mode, nothing dropped. No MIXED_STRETCH_BEND bucket
+    is exposed as its own column, hence no "Ocart_VMix" (dropped, not just
+    zeroed). "Ocart_Sum" is the sum of all 8 columns (Tx..Rz raw signed +
+    VS/VB, S+B-normalized), still just a diagnostic with no expected target
+    value (contrast project_emit()'s Parseval-motivated sum~1 check).
 
     Parameters
     ----------
@@ -303,10 +285,10 @@ def project_emit_cartesian(ref, final_emit):
     Returns
     -------
     (rows, full_rows) : same shape as project_emit(), with "Ocart_Tx".."Ocart_Rz"
-        (raw signed overlaps) and "Ocart_VS"/"Ocart_VB" (continuously
-        v_m-weighted fractions) plus "Ocart_Sum".
+        (raw signed overlaps) and "Ocart_VS"/"Ocart_VB" (S+B-normalized
+        fractions) plus "Ocart_Sum".
     """
-    Q, labels, v_scores = ref["Q"], ref["labels"], ref["v_scores"]
+    Q, labels, groups = ref["Q"], ref["labels"], ref["groups"]
     Theta = _cartesian_unit_columns(final_emit)
 
     Overlap = Q.T @ Theta  # raw signed overlap, NOT squared -- see docstring
@@ -323,23 +305,19 @@ def project_emit_cartesian(ref, final_emit):
         for slot in EXTERNAL_LABELS:
             row[f"Ocart_{slot}"] = float(Overlap[idx_of[slot], j]) if slot in idx_of else 0.0
 
-        # VS/VB: each internal reference mode's |overlap| split by its own
-        # v_m = s[V_S] (v_m to S, 1-v_m to B), then normalized by the total
-        # -- see docstring. No mode is ever excluded, so Ocart_VS + Ocart_VB
-        # == 1 exactly whenever any internal mode has nonzero overlap.
-        total_s = 0.0
-        total_b = 0.0
+        # VS/VB: |overlap| summed per hard-classified group, normalized by
+        # the S+B total only (Mix excluded from the denominator -- see
+        # docstring) so Ocart_VS + Ocart_VB == 1 exactly, same [0,1] range
+        # as Vscore. No mode is excluded from the sum.
+        totals = {g: 0.0 for g in _VIB_GROUPS}
         for lbl in labels:
             if lbl in EXTERNAL_LABELS:
                 continue
-            v = v_scores[lbl]
-            mag = abs(Overlap[idx_of[lbl], j])
-            total_s += v * mag
-            total_b += (1.0 - v) * mag
-        denom = total_s + total_b
+            totals[groups[lbl]] += abs(Overlap[idx_of[lbl], j])
+        denom = totals[STRETCHING] + totals[BENDING]
         if denom > EPS_DENOM:
-            row["Ocart_VS"] = total_s / denom
-            row["Ocart_VB"] = total_b / denom
+            row["Ocart_VS"] = totals[STRETCHING] / denom
+            row["Ocart_VB"] = totals[BENDING] / denom
         else:
             row["Ocart_VS"] = 0.0
             row["Ocart_VB"] = 0.0

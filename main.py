@@ -247,7 +247,7 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
     df_full = pd.DataFrame(full_rows)
     out_full = os.path.join(dirs["results"], f"{mol_name}_EMIT_full.csv")
 
-    ref_cart = build_reference_basis_cartesian(scorer_n, final_n)
+    ref_cart = build_reference_basis_cartesian(scorer_n, final_n, thresholds)
     rows_cart, full_rows_cart = project_emit_cartesian(ref_cart, final_e)
 
     contrib_cart = pd.DataFrame(rows_cart).drop(columns=["Eigenvalue"])

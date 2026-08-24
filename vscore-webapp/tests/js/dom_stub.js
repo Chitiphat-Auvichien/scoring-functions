@@ -104,6 +104,9 @@ var document={
     // markBondHeaders() sweeps every sortable header on the page at once --
     // the side panel's two and whatever the compare table currently shows
     if (s===".bsort") return BHEAD.concat(get("cmp-bonds").querySelectorAll("th.bsort"));
+    // markBondRows() moves the compare table's selected-bond class without
+    // re-rendering it, so it reaches the rows from the document down
+    if (s==="#cmp-bonds tr.cbrow") return get("cmp-bonds").querySelectorAll("tr.cbrow");
     return [];
   },
   addEventListener:function(){},

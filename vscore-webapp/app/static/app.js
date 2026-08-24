@@ -509,7 +509,7 @@
       // viewer must be told its box again or it draws into a stale buffer --
       // which is why the third panel came up blank.
       try { c.viewer.resize(); } catch (e) {}
-      renderMode(c.viewer, r, o);
+      c.model = renderMode(c.viewer, r, o);
       drawBondPicks(c.viewer);
       c.viewer.zoomTo();
       if (o.play) c.viewer.animate({ loop: "backAndForth", interval: 90 });
@@ -647,11 +647,23 @@
 
   function selectBond(bi) {
     selectedBond = (selectedBond === bi) ? null : bi;   // click again to clear
-    var r = selected === null ? null : byIndex(selected);
-    if (r) show(r);                                     // repaint list + viewer
-    // The colour lives in the model (renderMode), so every compare viewer has
-    // to be rebuilt for it to appear there as well.
-    if (picked.length >= 2) renderCompare();
+    // Lists and colour only -- show()/renderCompare() would rebuild the models
+    // and restart every animation, which is not what picking a bond asked for.
+    renderBondPanel(selected === null ? null : byIndex(selected));
+    markBondRows();
+    recolorBond(viewer, model);
+    cmpViews.forEach(function (c) {
+      if (!c.card.hidden) recolorBond(c.viewer, c.model);
+    });
+  }
+
+  /* The compare table's own selected-bond row. renderBondPanel() rebuilds the
+   * side panel wholesale; this table is far bigger, and rebuilding it would
+   * drop the scroll position, so only the class is moved. */
+  function markBondRows() {
+    document.querySelectorAll("#cmp-bonds tr.cbrow").forEach(function (tr) {
+      tr.classList.toggle("sel", parseInt(tr.dataset.b, 10) === selectedBond);
+    });
   }
 
   function drawOverlays() {
@@ -701,6 +713,50 @@
     });
   }
 
+  /* Paint the current selectedBond onto ONE atom array -- either a model's
+   * live atoms or a single vibration frame's copy of them. Every existing
+   * bondStyles entry is cleared first, so this is also the un-highlight path.
+   */
+  function paintBond(atoms) {
+    atoms.forEach(function (a) {
+      // A falsy entry is "no override" as far as drawBondSticks is concerned,
+      // so blanking is enough -- the array itself can stay.
+      if (a.bondStyles) {
+        for (var i = 0; i < a.bondStyles.length; i++) a.bondStyles[i] = undefined;
+      }
+    });
+    if (selectedBond === null || !P.bonds[selectedBond]) return;
+    var sb = P.bonds[selectedBond];
+    [[sb[0], sb[1]], [sb[1], sb[0]]].forEach(function (pair) {
+      var a = atoms[pair[0]];
+      if (!a) return;
+      var t = a.bonds.indexOf(pair[1]);
+      if (t < 0) return;
+      a.bondStyles = a.bondStyles || [];
+      a.bondStyles[t] = { color1: BOND_HL, color2: BOND_HL, radius: 0.24 };
+    });
+  }
+
+  /* Move the highlight on an ALREADY BUILT model, without rebuilding it.
+   *
+   * Going through renderMode() would work, but it stops the loop, drops the
+   * model and re-runs vibrate(), so the molecule snapped back to frame 0 and
+   * the animation restarted every time a bond was clicked. The frames are the
+   * only place the colour lives (vibrate() copies bondStyles into each one),
+   * so repainting all of them in place moves the highlight while the loop
+   * keeps running over them.
+   */
+  function recolorBond(v, m) {
+    if (!v || !m || !m.selectedAtoms) return;
+    paintBond(m.selectedAtoms({}));
+    (m.frames || []).forEach(paintBond);
+    // A running loop calls setFrame() on the next tick, which nulls molObj
+    // itself and so picks the colour up; a paused viewer never does, and would
+    // sit on stale geometry until something else invalidated it.
+    m.molObj = null;
+    v.render();
+  }
+
   /* Build one mode into a viewer. Shared by the main viewer and the compare
    * viewers, so they cannot drift apart in how a mode is rendered. */
   function renderMode(v, r, o) {
@@ -732,16 +788,7 @@
     // geometry while the stick underneath swings through it -- whereas this is
     // part of the model, so vibrate() copies it into every frame. Set before
     // vibrate() for exactly that reason.
-    if (selectedBond !== null && P.bonds[selectedBond]) {
-      var sb = P.bonds[selectedBond];
-      [[sb[0], sb[1]], [sb[1], sb[0]]].forEach(function (pair) {
-        var a = atoms[pair[0]];
-        var t = a.bonds.indexOf(pair[1]);
-        if (t < 0) return;
-        a.bondStyles = a.bondStyles || [];
-        a.bondStyles[t] = { color1: BOND_HL, color2: BOND_HL, radius: 0.24 };
-      });
-    }
+    paintBond(atoms);
 
     m.vibrate(o.frames, o.amp, true, o.arrow);
     // Style AFTER vibrate(): vibrate rebuilds the frames, and a style set
@@ -768,7 +815,7 @@
   function draw(r) {
     if (!viewer) return;
     var o = viewOpts();
-    renderMode(viewer, r, o);
+    model = renderMode(viewer, r, o);
     drawOverlays();
     drawBondPicks();
 

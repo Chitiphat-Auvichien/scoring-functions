@@ -839,6 +839,93 @@ def test_clicking_a_score_row_colours_that_bond(tmp_path):
     assert r["st"]["inFrames"] is not None
 
 
+def test_selecting_a_bond_does_not_restart_the_animation(tmp_path):
+    """Picking a bond recolours the model in place.
+
+    Rebuilding it (stopAnimate -> removeAllModels -> vibrate -> animate) put
+    the molecule back at frame 0 and started the loop again, so every click
+    made the vibration jump.
+    """
+    _, got = _run_js("C10H8", tmp_path, _BOND_STATE + """
+        var C = window.__cmp, v = CALLS.viewer;
+        var before = {a: CALLS.animateCount, s: CALLS.stopCount,
+                      model: v.models[0], n: v.models.length};
+        C.selectBond(4);
+        C.selectBond(9);                                // move it
+        C.selectBond(9);                                // and clear it
+        print(JSON.stringify({
+          animates: CALLS.animateCount - before.a,
+          stops: CALLS.stopCount - before.s,
+          sameModel: v.models[0] === before.model,
+          models: v.models.length === before.n,
+          live: CALLS.live
+        }));
+    """)
+    r = json.loads(got)
+    assert r["animates"] == 0, "no loop may be (re)started by picking a bond"
+    assert r["stops"] == 0, "the running loop must not be stopped"
+    assert r["sameModel"], "the model must be recoloured, not rebuilt"
+    assert r["models"], "no model may be added or dropped"
+    assert r["live"] == 1, "the animation must still be running afterwards"
+
+
+def test_recolouring_in_place_reaches_every_frame(tmp_path):
+    """The colour lives in the frames, so moving it has to repaint all of them
+    -- otherwise the highlight would flicker between the old bond and the new
+    one as the loop cycles."""
+    _, got = _run_js("C10H8", tmp_path, _BOND_STATE + """
+        var C = window.__cmp, P = JSON.parse(PAYLOAD_TXT);
+        var m = CALLS.viewer.models[0];
+        C.selectBond(4);
+        C.selectBond(9);                                // move the highlight
+        function styleIn(atoms, bi) {
+          var b = P.bonds[bi], a = atoms[b[0]];
+          var t = a.bonds.indexOf(b[1]);
+          return !!(a.bondStyles && a.bondStyles[t]);
+        }
+        var old = [], now = [];
+        m.frames.forEach(function (f) { old.push(styleIn(f, 4)); now.push(styleIn(f, 9)); });
+        print(JSON.stringify({
+          frames: m.frames.length,
+          staleAnywhere: old.some(Boolean),
+          colouredEverywhere: now.every(Boolean),
+          molObjCleared: m.molObj === null
+        }));
+    """)
+    r = json.loads(got)
+    assert r["frames"] > 1
+    assert not r["staleAnywhere"], "the previous bond must be cleared in every frame"
+    assert r["colouredEverywhere"], "the new bond must be coloured in every frame"
+    assert r["molObjCleared"], "geometry must be invalidated so the change is drawn"
+
+
+def test_selecting_a_bond_does_not_restart_the_compare_animations(tmp_path):
+    """Same guarantee for the side-by-side viewers, which were rebuilt wholesale
+    through renderCompare() on every bond click."""
+    _, got = _run_js("C10H8", tmp_path, _CMP_BOND + """
+        var C = window.__cmp;
+        C.toggle(6); C.toggle(7);
+        var v1 = CALLS.viewers[1], v2 = CALLS.viewers[2];
+        var before = {a: CALLS.animateCount, s: CALLS.stopCount,
+                      m1: v1.models[v1.models.length - 1],
+                      m2: v2.models[v2.models.length - 1]};
+        C.selectBond(5);
+        print(JSON.stringify({
+          animates: CALLS.animateCount - before.a,
+          stops: CALLS.stopCount - before.s,
+          same1: v1.models[v1.models.length - 1] === before.m1,
+          same2: v2.models[v2.models.length - 1] === before.m2,
+          coloured: colouredIn(5)
+        }));
+    """)
+    r = json.loads(got)
+    assert r["animates"] == 0, "no compare loop may be restarted"
+    assert r["stops"] == 0, "no compare loop may be stopped"
+    assert r["same1"] and r["same2"], "compare models must be recoloured, not rebuilt"
+    assert all(c for c in r["coloured"] if c is not None), \
+        "the bond must still end up coloured in every compare viewer"
+
+
 def test_clicking_the_same_bond_again_clears_it(tmp_path):
     _, got = _run_js("C10H8", tmp_path, _BOND_STATE + """
         var C = window.__cmp;
@@ -962,7 +1049,9 @@ def test_compare_bond_table_rows_select_the_bond(tmp_path):
         print(JSON.stringify({
           rows: rows.length,
           selected: C.selectedBond(),
-          markedInCompare: /class="cbrow sel" data-b="5"/.test(cb._html),
+          // The class is moved on the live row rather than re-rendered into
+          // the table's html, so read it off the node.
+          markedInCompare: rows[5].classList.contains('sel'),
           markedInPanel: /class="brow sel" data-b="5"/.test(bl._html),
           coloured: colouredIn(5)
         }));

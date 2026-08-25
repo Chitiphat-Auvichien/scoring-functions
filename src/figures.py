@@ -3248,7 +3248,7 @@ def plot_ped_vs_vscore(
     out_dir="data/figures",
     label="fig_ped_vs_vscore",
     tau_SB=None,
-    ylabel=r"$100\,s[\mathrm{V_S}]$",
+    ylabel=r"$s[\mathrm{V_S}]$ (%)",
     label_source_csv=None,
     color_by="reference",
 ):
@@ -3313,11 +3313,11 @@ def plot_ped_vs_vscore(
     vote sees the overridden per-row labels, matching how the canonical path
     already collapses labels baked in at tau_SB=0.50.
 
-    ``ylabel`` overrides the y-axis label (default the canonical
-    100*s[V_S] math label; e.g. archive_unweighted callers pass a label
-    that says "Unweighted" to distinguish this from the canonical
-    mu-weighted figure of the same name -- keep any override on the same
-    x100 percentage scale as the plotted data).
+    ``ylabel`` overrides the y-axis label (default "s[V_S] (%)"; e.g.
+    archive_unweighted callers pass a label that says "Unweighted" to
+    distinguish this from the canonical mu-weighted figure of the same
+    name -- keep any override on the same x100 percentage scale as the
+    plotted data).
 
     ``label_source_csv``, if given, points at a DIFFERENT combined_ped_vs_
     scores.csv (matched to this one's rows by Molecule+Mode) whose own
@@ -3389,13 +3389,13 @@ def plot_ped_vs_vscore(
 
     # tau_SB reference line (this framework's own bend/stretch cutoff on the
     # y-axis quantity s[V_S], rescaled to the same x100 percentage scale as
-    # the plotted data) -- same axhline + text convention as every other
-    # tau_SB-annotated figure (e.g. plot_boxplots), NOT added to the legend
-    # (in-axes text label instead, left of the y-axis at the line's own
-    # height).
+    # the plotted data) -- a solid line (unlike every other tau_SB-annotated
+    # figure's dashed axhline) so it reads as distinct from the dashed y=x
+    # parity line sharing this axes. NOT added to the legend (in-axes text
+    # label instead, right of the plot at the line's own height).
     tau_SB_pct = th.tau_SB * 100
-    ax.axhline(tau_SB_pct, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-    ax.text(0.01, tau_SB_pct, r"$\tau_{\mathrm{SB}}$", ha="left", va="bottom",
+    ax.axhline(tau_SB_pct, color=COLORS["threshold"], ls="-", lw=0.8, zorder=1)
+    ax.text(0.98, tau_SB_pct, r"$\tau_{\mathrm{SB}}$", ha="right", va="bottom",
             color=COLORS["threshold"], transform=ax.get_yaxis_transform())
 
     x = df["PED_Stretch_pct"].to_numpy(float)
@@ -3408,13 +3408,17 @@ def plot_ped_vs_vscore(
     # percentage points) reported ML-parity-plot style instead of R^2.
     lims = (-3, 103)
     ax.plot(lims, lims, ls="--", lw=1.2, color=COLORS["threshold"], zorder=4,
-            label=r"$y=x$" + f" (MAE={mae:.1f})")
+            label=r"$y=x$" + f" (MAE = {mae:.1f}%)")
 
     ax.set_xlabel(r"$\%\nu$")
     ax.set_ylabel(ylabel)
     ax.set_xlim(*lims)
     ax.set_ylim(*lims)
     ax.set_aspect("equal", adjustable="box")
+    # Full 4-sided border on this square parity plot -- _style() turns off
+    # the top/right spines globally, override back on for this figure only.
+    ax.spines["top"].set_visible(True)
+    ax.spines["right"].set_visible(True)
     ax.legend(loc="upper left", frameon=False, handletextpad=0.4,
               labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)
 

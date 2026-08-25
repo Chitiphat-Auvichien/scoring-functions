@@ -3402,12 +3402,12 @@ def plot_ped_vs_vscore(
     color_map = REF_CATEGORY_COLOR if color_by == "reference" else None
     fig, ax = plt.subplots(figsize=(4.6, 4.6))
 
-    # Light 50% midpoint gridlines on both axes -- purely a visual reading
-    # aid (quadrant split), thin and pale (COLORS["background"]) so they sit
-    # behind everything else (zorder=0, below even the scatter points at
-    # zorder=3) and don't compete with the tau_SB/y=x reference lines.
+    # Light %nu=50 midpoint gridline -- purely a visual reading aid, thin
+    # and pale (COLORS["background"]) so it sits behind everything else
+    # (zorder=0, below even the scatter points at zorder=3) and doesn't
+    # compete with the tau_SB/y=x reference lines. No s[V_S]=50 counterpart
+    # (removed) -- it visually competed with the nearby tau_SB=42 line.
     ax.axvline(50, color=COLORS["background"], lw=0.6, zorder=0)
-    ax.axhline(50, color=COLORS["background"], lw=0.6, zorder=0)
 
     for code, cat in _LABEL_CODE_TO_CATEGORY.items():
         sub = df[df["label"] == code]

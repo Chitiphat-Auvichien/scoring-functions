@@ -3195,7 +3195,7 @@ _DEGENERATE_FREQ_TOL_CM1 = 0.01
 
 
 def _collapse_degenerate_freqs(df, value_cols, freq_col="Freq", label_col=None,
-                                tol=_DEGENERATE_FREQ_TOL_CM1):
+                                tol=_DEGENERATE_FREQ_TOL_CM1, extra_agg=None):
     """Average ``value_cols`` over sets of rows sharing one physical
     frequency within a molecule (``freq_col`` values equal to within
     ``tol`` cm^-1). VEDA reports PED for each individual member of a
@@ -3207,6 +3207,13 @@ def _collapse_degenerate_freqs(df, value_cols, freq_col="Freq", label_col=None,
     (group size 1) passed through unchanged. If ``label_col`` is given, the
     most common label in the group is carried through (ties broken by
     first occurrence) for scatter coloring.
+
+    ``extra_agg``, if given, is a {column: aggregation} dict merged into the
+    groupby (e.g. ``{"Mode": lambda s: "/".join(s.astype(str))}`` to carry
+    a joined identifier of the group's constituent modes through, or
+    ``{"Freq": "mean"}`` for the group's own averaged frequency) -- for
+    columns callers need in the output but that aren't part of the
+    mean-averaged ``value_cols`` or the majority-voted ``label_col``.
     """
     df = df.sort_values(["Molecule", freq_col]).reset_index(drop=True)
     freqs = df[freq_col].to_numpy(float)
@@ -3222,6 +3229,8 @@ def _collapse_degenerate_freqs(df, value_cols, freq_col="Freq", label_col=None,
     agg = {c: "mean" for c in value_cols}
     if label_col is not None:
         agg[label_col] = lambda s: s.mode().iloc[0]
+    if extra_agg is not None:
+        agg.update(extra_agg)
     out = df.groupby(["_gid", "Molecule"], as_index=False, sort=False).agg(agg)
     return out.drop(columns=["_gid"])
 
@@ -3251,6 +3260,7 @@ def plot_ped_vs_vscore(
     ylabel=r"$s[\mathrm{V_S}]$ (%)",
     label_source_csv=None,
     color_by="reference",
+    data_csv_path="data/results/ped_vs_vscore_data.csv",
 ):
     """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
     molecule-level stretch score s[V_S] (``V_Stretch``, plotted as a
@@ -3329,6 +3339,17 @@ def plot_ped_vs_vscore(
     definition's classification colors the points, e.g. coloring an
     unweighted-definition scatter by the canonical mu-weighted S/B split.
     Raises ValueError if any row fails to find a Molecule+Mode match.
+
+    ``data_csv_path`` (default "data/results/ped_vs_vscore_data.csv") is
+    where the ONE per-mode (per plotted point) data table backing this
+    figure is written -- raw plotted values and derived error together in
+    a single file, not split across separate "raw data"/"errors" CSVs.
+    One row per physical frequency: Molecule, Mode (constituent Mode
+    strings joined by "/" for a degenerate group), Freq, label,
+    PED_Stretch_pct, V_Stretch_pct, error_pct (V_Stretch_pct -
+    PED_Stretch_pct, signed error against the y=x parity line),
+    abs_error_pct -- sorted worst agreement first. MAE reported in the
+    figure/return value is this column's mean.
     """
     _style()
     df = pd.read_csv(csv_input)
@@ -3369,7 +3390,8 @@ def plot_ped_vs_vscore(
         df = df.copy()
         df["label"] = df["V_Stretch"].map(lambda v: vib_label_binary(v, tau_SB))
     df = _collapse_degenerate_freqs(
-        df, value_cols=["PED_Stretch_pct", "V_Stretch"], label_col="label")
+        df, value_cols=["PED_Stretch_pct", "V_Stretch"], label_col="label",
+        extra_agg={"Mode": lambda s: "/".join(s.astype(str)), "Freq": "mean"})
 
     df["V_Stretch_pct"] = df["V_Stretch"] * 100
 
@@ -3402,6 +3424,19 @@ def plot_ped_vs_vscore(
     y = df["V_Stretch_pct"].to_numpy(float)
     mae = float(np.mean(np.abs(y - x)))
 
+    # ONE per-mode (per plotted point) data table -- raw plotted values and
+    # the derived signed/absolute error against the y=x parity line
+    # together in the same file (not a separate "raw data" CSV plus a
+    # separate "errors" CSV). One row per physical frequency (a degenerate
+    # group's Mode is the "/"-joined constituent Mode strings, see
+    # _collapse_degenerate_freqs' extra_agg). Sorted worst-agreement first.
+    point_data = df[["Molecule", "Mode", "Freq", "label", "PED_Stretch_pct", "V_Stretch_pct"]].copy()
+    point_data["error_pct"] = point_data["V_Stretch_pct"] - point_data["PED_Stretch_pct"]
+    point_data["abs_error_pct"] = point_data["error_pct"].abs()
+    point_data = point_data.sort_values("abs_error_pct", ascending=False).reset_index(drop=True)
+    os.makedirs(os.path.dirname(data_csv_path), exist_ok=True)
+    point_data.to_csv(data_csv_path, index=False)
+
     # y=x parity line (not a fit): both axes are the same 0-100 percentage
     # quantity, so exact agreement with the independent PED reference is
     # the diagonal, not a fitted trend. MAE (mean absolute error, in
@@ -3428,10 +3463,12 @@ def plot_ped_vs_vscore(
 
     return {
         "pdf": pdf_path, "png": png_path,
+        "data_csv": data_csv_path,
         "n_frequency_points": len(df),
         "n_raw_modes_before_degenerate_averaging": n_raw_modes,
         "n_molecules": df["Molecule"].nunique(),
         "mae": mae,
+        "max_abs_error_pct": float(point_data["abs_error_pct"].max()),
         "color_by": color_by,
         "tau_SB": th.tau_SB,
     }

@@ -8,7 +8,8 @@ iff GT_EXT_LO < M_ext < GT_EXT_HI, else CLEAN. GT_EXT_HI=0.95 reuses tau_TR
 (the classifier's own purity bar); GT_EXT_LO=0.05 is a small symmetric floor
 above the ~1e-4 numerical orthonormality noise floor (projection.py).
 
-Finding: precision = 1.0 (flag never fires on a genuinely clean mode), recall
+Finding (pre-2026-08-25, PRESERVED HISTORICAL RESULT, see restructuring note
+below): precision = 1.0 (flag never fires on a genuinely clean mode), recall
 = 5/17 = 0.294 (misses most genuinely mixed modes). Root cause: Step 2's
 one-to-one linear_sum_assignment only ever assigns 6 of 36 modes an external
 slot at all (by construction, not a bug) -- the other 30 modes reach Step 4
@@ -17,13 +18,30 @@ has more genuine Ry character than EMIT 9 by projection (38.7% vs 14.1%) but
 EMIT 9 wins the Ry slot on raw score (0.215 vs 0.143), so EMIT 9 is flagged
 (TP) while EMIT 2 is missed (FN) -- the recall gap is systematic to Step 2's
 assignment mechanism, not an isolated edge case.
+
+RESTRUCTURING NOTE (2026-08-25): src/classifier.py's Step 3 (T/R
+identification) no longer has any purity gate at all -- there is no more
+"mixed-external flag" for this module to validate. `is_mixed_external` on a
+freshly-produced `tr_label` is now definitionally always False, so
+`benzene_emit_flag_confusion`'s `predicted_positive` column is 0 everywhere
+by construction (TP=FP=0, recall collapses to 0 rather than the historical
+0.294) -- this module's original question ("does the flag fire correctly?")
+no longer has a live subject. Kept functional (not deleted) purely so old
+call sites/tests don't crash, and because `ground_truth_label`'s projection-
+based MIXED/CLEAN classification is still a valid, independent diagnostic on
+its own -- but its precision/recall numbers against `predicted_positive` are
+no longer a meaningful pipeline-behavior claim. This was already excluded
+from the manuscript (2026-07-09, see IMPLEMENTATION_PLAN.md) as an internal
+diagnostic only; not revisited further here (out of scope for the Step-3
+restructuring pass -- flag this module for removal or a real rewrite in a
+future session if it is still wanted).
 """
 import os
 
 import numpy as np
 import pandas as pd
 
-from src.classifier import Thresholds, is_mixed_external
+from src.classifier import Thresholds, is_mixed_external, predicted_category_column
 from src.library_ingest import load_library_scores
 
 # Ground-truth thresholds on the projection-derived max external fraction.
@@ -88,9 +106,15 @@ def benzene_emit_flag_confusion(data_dir="data", thresholds=None,
     for _, r in df_contrib.iterrows():
         name = r["Mode"]
         m = by_name[name]
+        # 2026-08-25: no combined "classification" field anymore -- and
+        # since Step 3 no longer gates, is_mixed_external() on a
+        # freshly-produced tr_label is always False (see module docstring's
+        # restructuring note). Reconstructed only for the CSV's own
+        # informational "classifier_label" column.
+        classifier_label = m["tr_label"] or m["vib_label"]
         m_ext = float(r["M_ext"])
         gt_pos = ext_lo < m_ext < ext_hi
-        pred_pos = is_mixed_external(m["classification"])
+        pred_pos = is_mixed_external(classifier_label)
         if pred_pos and gt_pos:
             cell = "TP"
         elif pred_pos and not gt_pos:
@@ -101,7 +125,7 @@ def benzene_emit_flag_confusion(data_dir="data", thresholds=None,
             cell = "TN"
         rows.append({
             "Mode": name,
-            "classifier_label": m["classification"],
+            "classifier_label": classifier_label,
             "M_ext": m_ext,
             "ground_truth": "MIXED" if gt_pos else "CLEAN",
             "predicted_positive": pred_pos,
@@ -128,7 +152,9 @@ def library_external_flag_confusion(data_dir="data", lib_df=None):
     """
     lib_df = load_library_scores(data_dir, lib_df)
     ext = lib_df[(lib_df["kind"] == "external") & (lib_df["has_geometry"])].copy()
-    pred_pos = ext["predicted_label"].apply(is_mixed_external).to_numpy()
+    predicted_label = predicted_category_column(
+        ext["predicted_tr_label"], ext["predicted_vib_label"])
+    pred_pos = predicted_label.apply(is_mixed_external).to_numpy()
     gt_pos = np.zeros(len(ext), dtype=bool)  # exact completeness -> ground truth always CLEAN
     stats = _confusion_from_bools(pred_pos, gt_pos)
     stats["n_molecules"] = int(ext["molecule"].nunique())

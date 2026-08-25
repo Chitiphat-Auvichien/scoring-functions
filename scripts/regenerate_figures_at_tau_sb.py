@@ -44,9 +44,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src import figures as F
-from src.classifier import (
-    Thresholds, rescheme_internal_label, vib_label, vib_label_binary,
-)
+from src.classifier import Thresholds, vib_label_binary
 
 # ==========================================================================
 # FIGURES
@@ -164,11 +162,12 @@ def regenerate_figures(tau_sb, fig_dir, results_dir):
 # every to_csv() call site in src/figures.py:
 #
 # tau_SB-SENSITIVE (regenerated below):
-#   - library_scores.csv -- THE master table. predicted_label (internal
-#     rows) and predicted_annotation's embedded "vibration=<label>" (any
-#     mixed-external row) are both derived from vib_label(..., scheme=
-#     "binary") under the hood -- both are re-derived here from the
-#     already-computed V_Stretch column.
+#   - library_scores.csv -- THE master table. predicted_vib_label (every
+#     row, 2026-08-25 schema) is derived from vib_label(..., scheme=
+#     "binary") -- re-derived here from the already-computed V_Stretch
+#     column. predicted_tr_label/predicted_tr_score (Step 3's optional,
+#     ungated T/R winner) do NOT depend on tau_SB at all and are left
+#     untouched.
 #   - C6H6_normal.csv -- see NORMAL_CSV_SCOPE_NOTE below for why only this
 #     one molecule's dump is regenerated, not all 26.
 #   - combined_ped_vs_scores.csv -- same vib_label_binary(V_Stretch, tau_SB)
@@ -241,36 +240,22 @@ RESULTS_SKIPPED_NOTE_ITEMS = [
 
 
 def reschemed_library_scores(tau_sb, canonical_csv="data/results/library_scores.csv"):
-    """Cheaply re-derive library_scores.csv's tau_SB-dependent columns at an
+    """Cheaply re-derive library_scores.csv's tau_SB-dependent column at an
     alternate tau_SB, from the already-computed (threshold-independent)
     V_Stretch column -- no re-scoring, no re-parsing.
 
-    predicted_label: re-derived for internal (stretch/bend/mixed) rows via
-    rescheme_internal_label (external T/R rows pass through unchanged, since
-    tau_SB never touches Step 2/3).
+    predicted_vib_label (2026-08-25 schema, Step 2, unconditional): every
+    row re-derived fresh via vib_label_binary(V_Stretch, tau_sb) -- this
+    Step never depended on whether a mode also won a T/R slot, so EVERY row
+    (external references included -- they trivially get "B" since V=0,
+    unaffected by any reasonable tau_sb) is recomputed the same way.
 
-    predicted_annotation: any row whose annotation already reads
-    "vibration=<label>" (a Step-3 mixed-external row) has that embedded
-    sub-label re-derived too, via the same vib_label(..., scheme="binary")
-    call classify_all_modes itself uses to build it. This is currently a
-    no-op for the canonical library (0 mixed-external rows at the current
-    tau_TR=0.95), but kept correct rather than silently stale.
+    predicted_tr_label/predicted_tr_score (Step 3, optional T/R winner) do
+    NOT depend on tau_SB at all (Step 3 uses no threshold or scheme) and are
+    left completely untouched.
     """
     df = pd.read_csv(canonical_csv)
-    th = dataclasses.replace(Thresholds.calibrated(), tau_SB=tau_sb)
-
-    df["predicted_label"] = df.apply(
-        lambda row: rescheme_internal_label(
-            row["predicted_label"], row["V_Stretch"], th, scheme="binary"),
-        axis=1)
-
-    def _reannotate(row):
-        ann = row["predicted_annotation"]
-        if isinstance(ann, str) and ann.startswith("vibration="):
-            return f"vibration={vib_label(row['V_Stretch'], th, scheme='binary')}"
-        return ann
-
-    df["predicted_annotation"] = df.apply(_reannotate, axis=1)
+    df["predicted_vib_label"] = df["V_Stretch"].map(lambda v: vib_label_binary(v, tau_sb))
     return df
 
 
@@ -281,30 +266,38 @@ def regenerate_results(tau_sb, results_dir):
     """
     os.makedirs(results_dir, exist_ok=True)
     written = []
+    # Used only by the thresholds_active.json provenance note below --
+    # tau_TR/tau_S/tau_B/v_weighting are unaffected by tau_sb, this is just
+    # for the record.
     th = dataclasses.replace(Thresholds.calibrated(), tau_SB=tau_sb)
 
     # 1. library_scores.csv -- the master table.
     lib_df = reschemed_library_scores(tau_sb)
     lib_out = os.path.join(results_dir, "library_scores.csv")
     lib_df.to_csv(lib_out, index=False)
-    written.append(("master table: predicted_label/predicted_annotation re-derived", lib_out))
+    written.append(("master table: predicted_vib_label re-derived "
+                     "(predicted_tr_label/predicted_tr_score untouched -- "
+                     "Step 3 does not depend on tau_SB)", lib_out))
     print(f"  [regenerated] library_scores.csv -> {lib_out}")
 
-    # 2. C6H6_normal.csv only -- see NORMAL_CSV_SCOPE_NOTE.
+    # 2. C6H6_normal.csv only -- see NORMAL_CSV_SCOPE_NOTE. vib_label is
+    # Step 2's unconditional label -- re-derived for EVERY row (including
+    # the external Tx..Rz reference rows, trivially "B" since V=0,
+    # unaffected by any reasonable tau_sb); tr_label/tr_score (Step 3)
+    # don't depend on tau_SB and are left untouched.
     normal_df = pd.read_csv("data/results/C6H6_normal.csv")
-    normal_df["label"] = normal_df.apply(
-        lambda row: rescheme_internal_label(
-            row["label"], row["V_Stretch"], th, scheme="binary"),
-        axis=1)
+    normal_df["vib_label"] = normal_df["V_Stretch"].map(lambda v: vib_label_binary(v, tau_sb))
     normal_out = os.path.join(results_dir, "C6H6_normal.csv")
     normal_df.to_csv(normal_out, index=False)
     written.append(("only roster molecule regenerated -- see scope note below", normal_out))
     print(f"  [regenerated] C6H6_normal.csv -> {normal_out}")
 
     # 3. combined_ped_vs_scores.csv -- full canonical row scope (not just
-    # the mol_type=='test' subset plot_ped_vs_vscore filters to).
+    # the mol_type=='test' subset plot_ped_vs_vscore filters to). Internal
+    # rows only (PED has no external T/R analogue), so "vib_label" is the
+    # whole story -- no tr_label/tr_score column here at all.
     ped_df = pd.read_csv("data/results/combined_ped_vs_scores.csv")
-    ped_df["label"] = ped_df["V_Stretch"].map(lambda v: vib_label_binary(v, tau_sb))
+    ped_df["vib_label"] = ped_df["V_Stretch"].map(lambda v: vib_label_binary(v, tau_sb))
     ped_out = os.path.join(results_dir, "combined_ped_vs_scores.csv")
     ped_df.to_csv(ped_out, index=False)
     written.append(("PED-vs-V_Stretch comparison, full canonical row scope", ped_out))

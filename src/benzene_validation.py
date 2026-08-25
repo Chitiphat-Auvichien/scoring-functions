@@ -6,16 +6,22 @@ docstring for why its "ground truth" would be circular).
 Ground truth: the literature/group-theory vibrational assignment for each of
 benzene's 30 real normal modes predates this code (e.g. Wilson's classic
 numbering) and is ingested as ``ref_label`` for molecule C6H6 in
-``library_scores.csv``. Comparing the classifier's own ``predicted_label``
+``library_scores.csv``. Comparing the classifier's own predicted category
 against that independent label is a genuine, non-circular accuracy check.
 
 Every function here reuses already-computed ``library_scores.csv`` columns
--- no re-parsing/re-running of Step 1-3 is ever done here. The three-way-only
-SB diagnostics below additionally cheaply RE-DERIVE ``predicted_label`` for
-every internal row from its own ``V_Stretch`` (``classifier.
-rescheme_internal_label``, an explicit ``scheme="threeway"`` default),
-since ``library_scores.csv``'s own ``predicted_label`` column is built under
-the global default scheme (binary, as of the 2026-08 switch) and
+-- no re-parsing/re-running of Step 1/3 is ever done here.
+``library_scores.csv`` stores ``predicted_tr_label`` (Step 3, optional T/R
+winner) and ``predicted_vib_label`` (Step 2, unconditional vibrational
+label) SEPARATELY as of the 2026-08-25 restructuring (see
+src/classifier.py's module docstring) -- a combined ``predicted_label``
+display string is materialized on the fly via
+``classifier.predicted_category``/``predicted_category_column`` wherever
+this module needs one. The three-way-only SB diagnostics below additionally
+cheaply RE-DERIVE that combined label's vibrational half for every internal
+row from its own ``V_Stretch`` (an explicit ``scheme="threeway"`` default),
+since ``library_scores.csv``'s own ``predicted_vib_label`` column is built
+under the global default scheme (binary, as of the 2026-08 switch) and
 MIXED_STRETCH_BEND never occurs there -- see
 ``benzene_normal_reference_detail``'s ``scheme``/``thresholds`` parameters:
 - ``benzene_normal_reference_detail``/``_summary``: per-mode and per-category
@@ -45,7 +51,9 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
-from src.classifier import classification_bucket, Thresholds, rescheme_internal_label
+from src.classifier import (
+    classification_bucket, Thresholds, vib_label, predicted_category_column,
+)
 from src.library_ingest import load_library_scores
 from src.scoring import parse_bond_string
 
@@ -73,33 +81,41 @@ _CH_BONDS = ("C1-H7", "C2-H8", "C3-H9", "C4-H10", "C5-H11", "C6-H12")
 
 def benzene_normal_reference_detail(lib_df=None, data_dir="data", scheme=None, thresholds=None):
     """One row per benzene normal mode with a literature ``ref_label`` (6
-    external T/R + 30 internal stretch/bend/SB), comparing
-    ``predicted_label`` against ``ref_label`` (via
+    external T/R + 30 internal stretch/bend/SB), comparing a materialized
+    ``predicted_label`` display string against ``ref_label`` (via
     ``_expected_pred_bucket`` so literature "SB" counts as correct iff
     predicted bucket is "mixed").
 
-    Columns: mode_index, kind, freq, ref_label, predicted_label,
-    predicted_bucket, correct, crossed_opposite, migrated_to_mixed.
+    Columns: mode_index, kind, freq, ref_label, predicted_tr_label,
+    V_Stretch, predicted_label, predicted_bucket, correct, crossed_opposite,
+    migrated_to_mixed. ``predicted_tr_label``/``V_Stretch`` are carried
+    through (not just consumed internally) so a caller like
+    ``src/figures.py``'s ``plot_benzene_internal_confusion`` can build its
+    own joint confusion table straight off this DataFrame.
 
-    `scheme` (None by default): None reads ``predicted_label`` exactly as
-    already computed in ``library_scores.csv`` -- tracks whichever scheme
-    ``library_ingest`` last classified the roster under (binary by default,
-    the paper-standard scheme as of the 2026-08 switch). An explicit
-    "threeway"/"binary" cheaply RE-DERIVES ``predicted_label`` for every
-    internal row from its own ``V_Stretch`` (Step 1's score -- always
-    scheme-independent) via ``classifier.rescheme_internal_label``, with NO
-    re-parse/re-run of Step 1-3 -- needed by the threeway-only SB
-    diagnostics below (``benzene_internal_confusion_matrix``,
+    2026-08-25 restructuring (see src/classifier.py's module docstring):
+    ``library_scores.csv`` no longer carries a single combined
+    ``predicted_label`` column -- it stores ``predicted_tr_label`` (Step 3,
+    optional T/R winner) and ``predicted_vib_label`` (Step 2, unconditional
+    vibrational label) separately. `scheme` (None by default) controls which
+    vib_label feeds the canonical ``predicted_category`` recombination:
+    None uses the STORED ``predicted_vib_label`` as-is -- tracks whichever
+    scheme ``library_ingest`` last classified the roster under (binary by
+    default, the paper-standard scheme as of the 2026-08 switch). An
+    explicit "threeway"/"binary" instead recomputes a FRESH vib_label for
+    every row from its own ``V_Stretch`` (Step 1's score -- always
+    scheme-independent), with NO re-parse/re-run of Step 1/3 -- needed by
+    the threeway-only SB diagnostics below (``benzene_internal_confusion_matrix``,
     ``benzene_mixed_bond_diagnostic``, ``benzene_sb_vs_stretch_bond_diagnostic``),
     since MIXED_STRETCH_BEND never occurs under the binary scheme and those
     functions would otherwise degenerate to an empty "mixed" bucket once
-    library_scores.csv's canonical column is binary-only. A Step-2
-    external-slot row (e.g. an internal reference mode that won a T/R slot)
-    is left untouched, since scheme never touches Step 2/3 -- see
-    ``rescheme_internal_label``'s own docstring.
+    library_scores.csv's stored column is binary-only. A Step-3
+    external-slot winner (``predicted_tr_label`` non-empty, e.g. an internal
+    reference mode that won a T/R slot) always takes priority over either
+    vib_label source, since scheme never touches Step 3.
 
     Raises ValueError if benzene has no ref_label rows (ingest not run) or
-    if any ref_label row lacks a predicted_label (incomplete geometry merge).
+    if any ref_label row lacks a predicted category (incomplete geometry merge).
     """
     df = load_library_scores(data_dir, lib_df)
     b = df[(df["molecule"] == MOLECULE) & df["ref_label"].notna()].copy()
@@ -108,11 +124,12 @@ def benzene_normal_reference_detail(lib_df=None, data_dir="data", scheme=None, t
             f"No {MOLECULE} rows with a ref_label in library_scores.csv -- "
             "has src.library_ingest.build_library_scores() been run?")
 
-    if scheme is not None:
+    if scheme is None:
+        vib_col = b["predicted_vib_label"]
+    else:
         th = thresholds or Thresholds.calibrated()
-        b["predicted_label"] = b.apply(
-            lambda row: rescheme_internal_label(row["predicted_label"], row["V_Stretch"], th, scheme),
-            axis=1)
+        vib_col = b["V_Stretch"].map(lambda v: vib_label(v, th, scheme))
+    b["predicted_label"] = predicted_category_column(b["predicted_tr_label"], vib_col)
 
     missing_pred = b["predicted_label"].isna()
     if missing_pred.any():
@@ -132,8 +149,9 @@ def benzene_normal_reference_detail(lib_df=None, data_dir="data", scheme=None, t
     )
     b["migrated_to_mixed"] = (~b["correct"]) & (b["predicted_bucket"] == "mixed")
 
-    cols = ["mode_index", "kind", "freq", "ref_label", "predicted_label",
-            "predicted_bucket", "correct", "crossed_opposite", "migrated_to_mixed"]
+    cols = ["mode_index", "kind", "freq", "ref_label", "predicted_tr_label", "V_Stretch",
+            "predicted_label", "predicted_bucket", "correct", "crossed_opposite",
+            "migrated_to_mixed"]
     return b[cols].reset_index(drop=True)
 
 
@@ -509,7 +527,13 @@ def benzene_worked_examples(lib_df=None, data_dir="data", freq_tol=1.0):
     df = load_library_scores(data_dir, lib_df)
     internal = df[(df["molecule"] == MOLECULE) & (df["kind"] == "internal")].copy()
     internal["mode_index"] = internal["mode_index"].astype(int)
-    internal["predicted_bucket"] = internal["predicted_label"].map(classification_bucket)
+    # 2026-08-25: materialize the combined predicted-category display string
+    # from the stored (predicted_tr_label, predicted_vib_label) columns --
+    # this function has no `scheme` param of its own, so it always tracks
+    # whatever `lib_df`'s own predicted_vib_label was built under.
+    predicted_label = predicted_category_column(
+        internal["predicted_tr_label"], internal["predicted_vib_label"])
+    internal["predicted_bucket"] = predicted_label.map(classification_bucket)
 
     stretch = internal[internal["predicted_bucket"] == "stretch"].sort_values("freq")
     if len(stretch) < 2:

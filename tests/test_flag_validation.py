@@ -5,12 +5,18 @@ Run from ``Github/scoring-functions/``:
     py -m pytest tests/                (with pytest)
     py tests/test_flag_validation.py  (standalone; no pytest needed)
 
-Pins the exact confusion counts computed this session (see
-src/flag_validation.py's module docstring for the ground-truth criterion and
-its rationale): benzene's 36 EMIT modes give TP=5, FP=0, FN=12, TN=19
-(precision 1.0, recall 5/17 ~ 0.294), and the geometry-backed library
-external (T/R) rows give FP=0 (trivial, ground truth always CLEAN by
-Eckart-Sayvetz completeness).
+**2026-08-25 RESTRUCTURING NOTE** (see src/flag_validation.py's own module
+docstring for the full mechanism): Step 3 (T/R identification) no longer has
+ANY purity gate, so there is no more "mixed-external flag" for this module
+to validate -- `is_mixed_external()` on a freshly-produced `tr_label` is
+always False by construction. The pre-2026-08-25 headline numbers (TP=5,
+FP=0, FN=12, TN=19, precision 1.0, recall 5/17~0.294) are RETIRED, not
+repinned to a stale historical value -- the correct, current numbers are
+degenerate (TP=0 everywhere, precision undefined/NaN, recall 0.0), and that
+degeneracy is now the thing being pinned/tested below, not a bug. The
+geometry-backed library external (T/R) rows still correctly show FP=0
+(trivial, ground truth always CLEAN by Eckart-Sayvetz completeness) --
+UNCHANGED from before, since that count was already 0 either way.
 
 **2026-07-07 basename update:** benzene is now resolved through
 library_ingest.resolve_log_basename("C6H6", ...) inside
@@ -45,17 +51,21 @@ from src.flag_validation import (                                    # noqa: E40
 
 
 def test_benzene_emit_confusion_counts_pinned():
-    """The headline systematic result: precision 1.0 (flag never fires on a
-    genuinely clean mode), recall 5/17~0.294 (it misses most genuinely mixed
-    modes) -- across ALL 36 modes, not just the prior 3-mode spot-check."""
+    """2026-08-25: the flag no longer exists (Step 3 has no purity gate), so
+    predicted_positive is False for all 36 modes by construction -- TP=0,
+    FP=0 (never fires, trivially), FN=17 (every genuinely-mixed mode is
+    missed, since nothing is ever flagged), TN=19, precision undefined
+    (0/0 -> NaN), recall 0.0. This is the current, correct, DEGENERATE
+    result, not a repin of the old headline number -- see this module's
+    RESTRUCTURING NOTE above and src/flag_validation.py's own docstring."""
     detail, stats = benzene_emit_flag_confusion()
     assert stats["n"] == 36
-    assert stats["TP"] == 5
+    assert stats["TP"] == 0
     assert stats["FP"] == 0
-    assert stats["FN"] == 12
+    assert stats["FN"] == 17
     assert stats["TN"] == 19
-    assert stats["precision"] == 1.0
-    assert abs(stats["recall"] - 5 / 17) < 1e-9
+    assert stats["precision"] != stats["precision"]  # NaN
+    assert stats["recall"] == 0.0
     assert len(detail) == 36
 
 
@@ -72,32 +82,40 @@ def test_benzene_emit_36_is_a_false_negative_not_a_true_negative():
     assert row["cell"] == "FN"
 
 
-def test_benzene_emit_34_35_are_true_positives():
-    """EMIT 34/35 (Tx/Ty=1, s[V_S]=0.667/0.577) are correctly flagged with the
-    axis-specific mixed-external label ("Tx*"/"Ty*") by the classifier AND are
-    genuinely externally-mixed by projection (~76.7% translational, rest
-    vibrational) -- a true positive, matching the prior anecdotal spot-check."""
+def test_benzene_emit_34_35_are_false_negatives():
+    """2026-08-25: EMIT 34/35 (Tx/Ty=1, s[V_S]=0.667/0.577) win their T-axis
+    slot cleanly (bare "Tx"/"Ty", no more starred label -- Step 3 has no
+    purity gate to fail) and are STILL genuinely externally-mixed by
+    projection (~76.7% translational, rest vibrational) -- but since there
+    is no more flag mechanism at all, they are now FALSE NEGATIVES (missed),
+    not true positives. This is the direct, mechanical consequence of
+    retiring the purity gate, not a regression to fix."""
     detail, _ = benzene_emit_flag_confusion()
-    expected = {"EMIT 34": "Tx*", "EMIT 35": "Ty*"}
+    expected = {"EMIT 34": "Tx", "EMIT 35": "Ty"}
     for name, label in expected.items():
         row = detail[detail["Mode"] == name].iloc[0]
         assert row["classifier_label"] == label
-        assert row["cell"] == "TP"
+        assert row["cell"] == "FN"
 
 
-def test_emit_2_vs_9_ry_inversion_produces_opposite_confusion_cells():
+def test_emit_2_vs_9_ry_inversion_still_visible_in_projection_and_assignment():
     """EMIT 2 has MORE genuine Ry projection character (38.7%) than EMIT 9
     (14.1%) -- the documented score/projection ranking inversion -- yet
-    EMIT 9 wins the Ry slot (its |s[Ry]| SCORE is larger) and is flagged
-    (TP), while EMIT 2, despite being the more genuinely mixed mode, is
-    missed (FN). This is direct evidence the low recall is a systematic
-    consequence of Step 2's one-to-one assignment, not an isolated case."""
+    EMIT 9 wins the Ry slot (its |s[Ry]| SCORE is larger), while EMIT 2 does
+    not win any slot at all. This underlying ranking inversion (a fact about
+    src/projection.py's projection vs. Step 3's own score-based assignment)
+    is UNCHANGED by the 2026-08-25 restructuring -- what changed is that
+    BOTH modes are now FN (there is no more flag for EMIT 9 to be a TP of),
+    since Step 3 no longer has a purity gate to pass or fail. See
+    test_benzene_emit_confusion_counts_pinned for the mechanism."""
     detail, _ = benzene_emit_flag_confusion()
     row2 = detail[detail["Mode"] == "EMIT 2"].iloc[0]
     row9 = detail[detail["Mode"] == "EMIT 9"].iloc[0]
     assert row2["M_ext"] > row9["M_ext"]
     assert row2["cell"] == "FN"
-    assert row9["cell"] == "TP"
+    assert row9["cell"] == "FN"
+    assert row2["classifier_label"] == "B"    # never won a slot
+    assert row9["classifier_label"] == "Ry"   # won the Ry slot, but cleanly (no flag exists to fire)
 
 
 def test_ground_truth_label_thresholds():

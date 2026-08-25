@@ -69,7 +69,16 @@ _EXTERNAL_SLOTS = ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz")
 SCHEMA_COLUMNS = [
     "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
     "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
-    "predicted_label", "predicted_annotation",
+    # 2026-08-25 restructuring: the old single-string "predicted_label"/
+    # "predicted_annotation" (gate2-based clean/mixed-external) columns are
+    # retired in favor of two independently-populated columns matching
+    # classify_all_modes()'s own Step 2 (unconditional)/Step 3 (optional,
+    # ungated) split -- see src/classifier.py's module docstring.
+    # predicted_vib_label: "S"/"B" (or "S"/"B"/"SB" under scheme="threeway"),
+    # always populated. predicted_tr_label: one of "Tx".."Rz" if this mode
+    # won that Step-3 slot, else empty. predicted_tr_score: that slot's own
+    # signed score, else empty.
+    "predicted_vib_label", "predicted_tr_label", "predicted_tr_score",
     "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "ref_key",
     "reduced_mass", "force_constant", "irrep",
     # d_CA: central/hub-atom displacement amplitude, ||mode_vector[central
@@ -212,8 +221,9 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None, mol_type=Non
                 "V_Stretch": m["V"], "delta_b_mean": None,
                 "s_AB": "", "rel_db": "",
                 "has_geometry": True,
-                "predicted_label": m["classification"],
-                "predicted_annotation": m["annotation"],
+                "predicted_vib_label": m["vib_label"],
+                "predicted_tr_label": m["tr_label"] or "",
+                "predicted_tr_score": m["tr_score"],
                 "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
                 "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
                 "ref_key": None,  # T/R rows are structural/exact -- no literature citation
@@ -256,8 +266,9 @@ def score_geometry_molecule(base, data_dir="data", thresholds=None, mol_type=Non
             "V_Stretch": m["V"], "delta_b_mean": delta_b_mean,
             "s_AB": s_ab_str, "rel_db": rel_db_str,
             "has_geometry": True,
-            "predicted_label": m["classification"],
-            "predicted_annotation": m["annotation"],
+            "predicted_vib_label": m["vib_label"],
+            "predicted_tr_label": m["tr_label"] or "",
+            "predicted_tr_score": m["tr_score"],
             "Tx": m["T"]["x"], "Ty": m["T"]["y"], "Tz": m["T"]["z"],
             "Rx": m["R"]["x"], "Ry": m["R"]["y"], "Rz": m["R"]["z"],
             "ref_key": None,  # attached later, label-only
@@ -581,7 +592,7 @@ def _build_library_scores(data_dir, thresholds, return_skip_report):
             "calculation than data/logs/ (e.g. a fallback level of theory -- see "
             "mol_list_method.csv's current_method column), or characterised_modes.csv "
             "needs to be regenerated (regenerate_characterised_modes()). Its scores "
-            "(V_Stretch, Tx..Rz, predicted_label, ...) are still the real "
+            "(V_Stretch, Tx..Rz, predicted_vib_label, predicted_tr_label, ...) are still the real "
             "engine's own and are NOT affected; only ref_label/ref_key "
             "are left null (ideal is unaffected -- it comes from mol_list_method.csv's "
             "mol_type, not this gate).",
@@ -612,8 +623,8 @@ def _thresholds_for_current_weighting():
     the library to produce the distribution the new tau_S/tau_B are derived
     FROM, but the thresholds.json on disk is still stamped for the old
     definition and classify_all_modes() would refuse it. Only the
-    predicted_label column depends on thresholds -- V_Stretch, which drives the
-    derivation, does not -- so a provisional pass is sound, and --library is
+    predicted_vib_label column depends on thresholds -- V_Stretch, which drives
+    the derivation, does not -- so a provisional pass is sound, and --library is
     re-run after --calibrate to make the labels consistent.
     """
     from src.classifier import Thresholds
@@ -625,7 +636,7 @@ def _thresholds_for_current_weighting():
             f"thresholds.json is calibrated for v_weighting="
             f"{thresholds.v_weighting!r} but scoring is running under "
             f"{active!r}; using provisional bootstrap thresholds for this pass. "
-            f"Run --calibrate next, then --library again so predicted_label "
+            f"Run --calibrate next, then --library again so predicted_vib_label "
             f"reflects the recalibrated cut points.")
         return Thresholds.bootstrap()
     return thresholds

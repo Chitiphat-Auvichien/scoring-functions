@@ -53,7 +53,6 @@ from src.library_ingest import (                                   # noqa: E402
     _basename_to_molecule_map, regenerate_characterised_modes,
     _EXTERNAL_SLOTS, SCHEMA_COLUMNS,
 )
-from src.classifier import is_clean_external                       # noqa: E402
 from src.csv_label_ingest import build_label_lookup                # noqa: E402
 
 LIB_CSV = os.path.join(ROOT, "data", "results", "library_scores.csv")
@@ -250,12 +249,15 @@ def test_geometry_backed_molecules_have_expected_external_row_counts():
 
 def test_external_rows_classify_clean_translation_rotation():
     """Ideal T/R references (Eckart-Sayvetz, exact for normal modes) must
-    classify clean (bare "Tx".."Rz", no trailing "*") for every geometry-backed
-    molecule -- the completeness guarantee, not an anecdotal check."""
+    each win their OWN Step-3 slot (predicted_tr_label == mode_index, e.g.
+    a "Tx" row's predicted_tr_label is "Tx") for every geometry-backed
+    molecule -- the completeness guarantee, not an anecdotal check.
+    2026-08-25: Step 3 no longer has a purity gate, so "clean" now just
+    means "won its own slot", not "won its own slot AND passed a bar"."""
     df = _load()
     ext = df[df["kind"] == "external"]
-    bad = ext[~ext["predicted_label"].apply(is_clean_external)]
-    assert len(bad) == 0, bad[["molecule", "mode_index", "predicted_label"]]
+    bad = ext[ext["predicted_tr_label"] != ext["mode_index"]]
+    assert len(bad) == 0, bad[["molecule", "mode_index", "predicted_tr_label"]]
     assert ext["ref_label"].isin(("translation", "rotation")).all()
 
 
@@ -320,7 +322,7 @@ def test_score_geometry_molecule_water_direct():
     assert sorted(r["mode_index"] for r in internal) == [1, 2, 3]
 
     for r in external:
-        assert is_clean_external(r["predicted_label"])
+        assert r["predicted_tr_label"] == r["mode_index"]  # wins its own slot
         assert r["ref_label"] in ("translation", "rotation")
         assert r["ideal"] is None  # label-only join not yet attached
         assert r["has_geometry"] is True
@@ -431,14 +433,19 @@ def test_schema_columns_includes_mu_k_irrep_and_d_ca():
     """reduced_mass/force_constant/irrep (2026-07-08 parser rework), d_CA
     (2026-07-08 data_score.csv retirement) and v_weighting (2026-08-14
     reduced-mass V-score variant) are appended to the end of the locked
-    schema -- purely additive, existing columns untouched."""
+    schema -- purely additive, existing columns untouched. 2026-08-25:
+    predicted_label/predicted_annotation (2 columns) retired in favor of
+    predicted_vib_label/predicted_tr_label/predicted_tr_score (3 columns) --
+    see src/classifier.py's Step 2/Step 3 split -- so the prefix below grew
+    by one column; the trailing reduced_mass..v_weighting slice is
+    unaffected (same distance from the end)."""
     assert SCHEMA_COLUMNS[-16:-11] == [
         "reduced_mass", "force_constant", "irrep", "d_CA", "v_weighting",
     ]
     assert SCHEMA_COLUMNS[:-16] == [
         "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
         "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
-        "predicted_label", "predicted_annotation",
+        "predicted_vib_label", "predicted_tr_label", "predicted_tr_score",
         "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "ref_key",
     ]
 

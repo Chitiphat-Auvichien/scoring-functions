@@ -35,7 +35,6 @@ import pandas as pd                                                 # noqa: E402
 from main import load_inputs, build_scorer_and_final                # noqa: E402
 from src.classifier import (                                        # noqa: E402
     classify_all_modes, Thresholds,
-    is_external_label, is_mixed_external,
     STRETCHING, BENDING, MIXED_STRETCH_BEND,
 )
 from src.calibrate import (                                         # noqa: E402
@@ -226,13 +225,24 @@ def test_tau_sensitivity_sweep_plateau_and_accuracy():
     # Accuracy (library normal-mode T/R ground truth) is 100% everywhere --
     # exact completeness for normal modes holds across the whole tau_TR grid.
     assert (sweep["accuracy"] == 1.0).all()
-    # Exactly one grid step shows a label change (benzene EMIT 19's Rz
-    # assignment, |score|=0.333, crossing the grid at tau_TR~0.335 -- the
-    # sole tau_TR-sensitive transition anywhere in the evaluated data; every
-    # other external mode's classification is gated by tau_B, not tau_TR,
-    # across this whole range).
+    # 2026-08-25 restructuring changed this from 1 to 3 grid steps showing a
+    # label change -- a real, understood consequence of retiring gate 2, not
+    # a bug: benzene EMIT 19's Rz assignment (|score|=0.333, V~0, crossing
+    # the grid at tau_TR~0.335) was ALREADY visible under the old two-gate
+    # test (gate 2 trivially passed since its V_Stretch is ~0). EMIT 6's Rx
+    # assignment (|score|=0.383, V=0.663) and EMIT 9's Ry assignment
+    # (|score|=0.215, V=0.302) are NEW transitions, both crossing the grid
+    # near their own |score| (tau_TR~0.385/~0.220 respectively) -- under the
+    # old two-gate test these were PERMANENTLY masked as "always mixed"
+    # (their V_Stretch is well above tau_B, so gate 2 failed for every
+    # tau_TR value, hiding their genuine gate-1/tau_TR sensitivity
+    # entirely). Retiring gate 2 makes this real sensitivity visible for the
+    # first time, exactly as the restructuring intends (Step 3 tracks
+    # tr_score's own tau_TR-crossing behavior, unconflated with Step 2's
+    # vibrational character).
     nonzero = sweep[sweep["label_change_fraction"] > 0]
-    assert len(nonzero) == 1, nonzero
+    assert len(nonzero) == 3, nonzero
+    assert list(nonzero["tau_TR"]) == [0.22, 0.335, 0.385]
     lo, hi = find_plateau(sweep)
     tau_TR, plateau = freeze_tau_tr(sweep)
     assert (lo, hi) == plateau
@@ -242,35 +252,46 @@ def test_tau_sensitivity_sweep_plateau_and_accuracy():
 
 
 def test_benzene_emit_34_35_36_under_calibrated_thresholds():
-    """Task-4 re-check: EMIT 34/35 flagged, EMIT 36 the documented blind
-    spot -- re-verified under Thresholds.calibrated() (tau_S 0.9->0.90368,
-    tau_B 0.2->0.17327), not just the provisional 0.95/0.9/0.2 defaults.
-    V_Stretch for 34/35 (0.667/0.577) is far above the calibrated tau_B
-    (0.17327) either way, so this is robust to the shift, as predicted.
-    (2026-07-07: "benzene" -> the finalized roster basename
+    """Task-4 re-check: EMIT 34/35's stretching character (vib_label),
+    EMIT 36's blind spot -- re-verified under Thresholds.calibrated()
+    (tau_S 0.9->0.90368, tau_B 0.2->0.17327), not just the provisional
+    0.95/0.9/0.2 defaults. V_Stretch for 34/35 (0.667/0.577) is far above
+    the calibrated tau_B (0.17327) either way, so this is robust to the
+    shift, as predicted. Step 3 (tr_label/tr_score) is unaffected by
+    tau_S/tau_B entirely -- both win their own T-axis slot with
+    |tr_score|~=1.0 regardless of scheme/threshold, the same restructured
+    (2026-08-25) behavior test_classifier.py pins under the provisional
+    defaults. (2026-07-07: "benzene" -> the finalized roster basename
     C6H6 -- content-preserving rename, numbers unchanged.)"""
     calibrated = Thresholds.calibrated()
     t = _classify("C6H6", "emit", calibrated)
-    assert t["EMIT 34"]["classification"] == "Tx*"
-    assert t["EMIT 34"]["annotation"] == f"vibration={MIXED_STRETCH_BEND}"
-    assert t["EMIT 35"]["classification"] == "Ty*"
-    assert t["EMIT 35"]["annotation"] == f"vibration={MIXED_STRETCH_BEND}"
-    assert t["EMIT 36"]["classification"] == "Tz"
+    assert t["EMIT 34"]["tr_label"] in ("Tx", "Ty")
+    assert t["EMIT 35"]["tr_label"] in ("Tx", "Ty")
+    assert t["EMIT 34"]["tr_label"] != t["EMIT 35"]["tr_label"]
+    assert abs(abs(t["EMIT 34"]["tr_score"]) - 1.0) < 1e-6
+    assert abs(abs(t["EMIT 35"]["tr_score"]) - 1.0) < 1e-6
+    assert t["EMIT 34"]["vib_label"] == MIXED_STRETCH_BEND
+    assert t["EMIT 35"]["vib_label"] == MIXED_STRETCH_BEND
+    assert t["EMIT 36"]["tr_label"] == "Tz"
+    assert t["EMIT 36"]["vib_label"] == BENDING
 
 
 def test_benzene_emit_34_35_binary_default_under_calibrated_thresholds():
     """Mirror check of test_benzene_emit_34_35_36_under_calibrated_thresholds
     above, but for classify_all_modes()'s own scheme DEFAULT (binary, the
     2026-08 paper-standard switch) instead of the "threeway" pin `_classify`
-    applies. EMIT 34/35 (V_Stretch 0.667/0.577, both far above tau_SB=0.50)
-    are STRETCHING under binary, never MIXED_STRETCH_BEND."""
+    applies. EMIT 34/35 (V_Stretch 0.667/0.577, both far above tau_SB=0.42)
+    are STRETCHING under binary, never MIXED_STRETCH_BEND. tr_label/tr_score
+    are identical to the threeway result (scheme never touches Step 3)."""
     calibrated = Thresholds.calibrated()
     t = _classify("C6H6", "emit", calibrated, scheme="binary")
-    assert t["EMIT 34"]["classification"] == "Tx*"
-    assert t["EMIT 34"]["annotation"] == "vibration=S"
-    assert t["EMIT 35"]["classification"] == "Ty*"
-    assert t["EMIT 35"]["annotation"] == "vibration=S"
-    assert t["EMIT 36"]["classification"] == "Tz"
+    assert t["EMIT 34"]["tr_label"] in ("Tx", "Ty")
+    assert t["EMIT 35"]["tr_label"] in ("Tx", "Ty")
+    assert abs(abs(t["EMIT 34"]["tr_score"]) - 1.0) < 1e-6
+    assert abs(abs(t["EMIT 35"]["tr_score"]) - 1.0) < 1e-6
+    assert t["EMIT 34"]["vib_label"] == STRETCHING
+    assert t["EMIT 35"]["vib_label"] == STRETCHING
+    assert t["EMIT 36"]["tr_label"] == "Tz"
 
 
 def test_water_targets_under_calibrated_thresholds():
@@ -284,10 +305,10 @@ def test_water_targets_under_calibrated_thresholds():
     calibrated = Thresholds.calibrated()
     t = _classify("H2O", "normal", calibrated)
     for lbl in ("Tx", "Ty", "Tz", "Rx", "Ry", "Rz"):
-        assert t[lbl]["classification"] == lbl
-    assert t["Vib 1"]["classification"] == BENDING
-    assert t["Vib 2"]["classification"] == STRETCHING
-    assert t["Vib 3"]["classification"] == STRETCHING
+        assert t[lbl]["tr_label"] == lbl
+    assert t["Vib 1"]["vib_label"] == BENDING
+    assert t["Vib 2"]["vib_label"] == STRETCHING
+    assert t["Vib 3"]["vib_label"] == STRETCHING
 
 
 def test_degenerate_emit_block_sanity_check():
@@ -311,17 +332,17 @@ def test_degenerate_emit_block_sanity_check():
 
     scored_a = classify_all_modes(scorer, final, calibrated)
     scored_b = classify_all_modes(scorer, final, calibrated)
-    labels_a = [m["classification"] for m in scored_a]
-    labels_b = [m["classification"] for m in scored_b]
-    assert labels_a == labels_b  # deterministic, run-to-run stable
+    tr_a = [m["tr_label"] for m in scored_a]
+    tr_b = [m["tr_label"] for m in scored_b]
+    assert tr_a == tr_b  # deterministic, run-to-run stable
 
-    n_slotted = sum(1 for lbl in labels_a if is_external_label(lbl))
+    n_slotted = sum(1 for lbl in tr_a if lbl is not None)
     assert n_slotted == 6  # n_T(3) + n_R(3) for benzene (non-linear)
 
     # The degenerate block (EMIT 1-9, eigenvalue -23.7514 cm-1) genuinely
     # contains 2 of the 6 slot-winners (EMIT 6 -> Rx, EMIT 9 -> Ry) and 7
-    # modes that fall through to Step 4 with their own vib_label -- these 7
-    # are NOT all the same label, which is expected (different eigenvectors,
+    # modes that fall through to Step 2's own vib_label -- these 7 are NOT
+    # all the same label, which is expected (different eigenvectors,
     # different s[V_S]), not a bug.
     by_name = {m["name"]: m for m in scored_a}
     degenerate_block = [f"EMIT {i}" for i in range(1, 10)]
@@ -329,10 +350,10 @@ def test_degenerate_emit_block_sanity_check():
     # Numerically degenerate (same eigenvalue to within the EMIT file's print
     # precision, ~1e-6 relative), not necessarily bit-identical.
     assert max(freqs) - min(freqs) < 1e-4 * abs(freqs[0]), freqs
-    block_labels = {n: by_name[n]["classification"] for n in degenerate_block}
-    assert is_mixed_external(block_labels["EMIT 6"]) and block_labels["EMIT 6"].startswith("Rx")
-    assert is_mixed_external(block_labels["EMIT 9"]) and block_labels["EMIT 9"].startswith("Ry")
-    n_external_in_block = sum(1 for lbl in block_labels.values() if is_external_label(lbl))
+    block_tr = {n: by_name[n]["tr_label"] for n in degenerate_block}
+    assert block_tr["EMIT 6"] == "Rx"
+    assert block_tr["EMIT 9"] == "Ry"
+    n_external_in_block = sum(1 for lbl in block_tr.values() if lbl is not None)
     assert n_external_in_block == 2  # not 0, not 9 -- exactly the 2 slot-winners
 
 

@@ -210,11 +210,11 @@ def test_merge_molecule_ped_ch4_end_to_end():
     # 'B') should show high PED_Bend_pct and much lower V_Stretch.
     for label, row in by_mode.items():
         if 3000 < row['Freq'] < 3300:
-            assert row['label'] == 'S'
+            assert row['vib_label'] == 'S'
             assert row['V_Stretch'] > 0.9
             assert row['PED_Stretch_pct'] > 90
         elif 1400 < row['Freq'] < 1700:
-            assert row['label'] == 'B'
+            assert row['vib_label'] == 'B'
             assert row['V_Stretch'] < 0.1
             assert row['PED_Bend_pct'] > 90
 
@@ -227,7 +227,7 @@ def test_merge_molecule_ped_ch4_end_to_end():
     assert "BondScore_C-H" in df.columns
     assert "BondScore_C-H_pct" in df.columns
     for r in vib_rows:
-        if r['label'] == 'S':
+        if r['vib_label'] == 'S':
             assert r['BondScore_C-H_pct'] > 90
 
 

@@ -160,23 +160,26 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
 
 
 def run_scoring_pipeline(mol_name, mode_type, data_dir="data", thresholds=None, write=True,
-                          scheme="binary"):
+                          scheme="binary", identify_tr=True):
     """Headless pipeline: load inputs -> classify_all_modes (Algorithm 1) -> CSV.
 
     This is the single, complete per-molecule result: scores (Tx..Rz,
-    V_Stretch), Mu/K/Irrep, and the Steps 2-4 classification (label,
-    annotation, s_AB) all in one row per mode -- there is no separate
+    V_Stretch), Mu/K/Irrep, and the Step 2/3 classification (vib_label,
+    tr_label, tr_score, s_AB) all in one row per mode -- there is no separate
     scores-only output. Writes data/results/<mol>_{normal,EMIT}.csv.
 
     `scheme` ("binary" default, paper-standard, or "threeway" explicit
     opt-in) is passed straight through to classify_all_modes() -- see that
     function's docstring. Default tracks classify_all_modes()'s own default
     so callers that don't pass `scheme` (e.g. reproduce.py's per-molecule
-    stages) automatically follow the global scheme choice.
+    stages) automatically follow the global scheme choice. `identify_tr`
+    (default True, matching classify_all_modes()'s own default) toggles the
+    optional Step 3 T/R identification; every reproduce.py/headless default
+    run keeps it on.
     """
     raw, dirs = load_inputs(mol_name, mode_type, data_dir)
     scorer, final = build_scorer_and_final(raw, mode_type)
-    scored = classify_all_modes(scorer, final, thresholds, scheme=scheme)
+    scored = classify_all_modes(scorer, final, thresholds, scheme=scheme, identify_tr=identify_tr)
     df = pd.DataFrame(classify_to_rows(scored))
     suffix = "normal" if mode_type == "normal" else "EMIT"
     output_file = os.path.join(dirs["results"], f"{mol_name}_{suffix}.csv")
@@ -415,35 +418,41 @@ def main():
                                   "Recorded in data/results/thresholds.json -- scoring and "
                                   "thresholds must be produced under the same setting.")
     user_group.add_argument("--tau-tr", type=float, default=None, dest="tau_tr",
-                             help="Override tau_TR (Step-3 purity gate) for this run only -- "
-                                  "starts from Thresholds.calibrated() and is never written back "
-                                  "to data/results/thresholds.json. Default: the calibrated value.")
+                             help="Override tau_TR for this run only -- starts from "
+                                  "Thresholds.calibrated() and is never written back to "
+                                  "data/results/thresholds.json. DIAGNOSTIC-ONLY as of the "
+                                  "2026-08-25 restructuring: Step 3 (T/R identification) no "
+                                  "longer gates on tau_TR at all, so this value no longer changes "
+                                  "any output label -- it is kept only for descriptive/sensitivity "
+                                  "reporting (src.calibrate's tau_TR sweep). Default: the "
+                                  "calibrated value.")
     user_group.add_argument("--tau-s", type=float, default=None, dest="tau_s",
                              help="Override tau_S (three-way stretching bar) for this run only -- "
                                   "see --tau-tr. Only affects scheme=threeway (no longer the "
                                   "default; pass --classify-scheme threeway to use it).")
     user_group.add_argument("--tau-b", type=float, default=None, dest="tau_b",
                              help="Override tau_B (three-way bending bar) for this run only -- "
-                                  "see --tau-tr. Only affects scheme=threeway (no longer the "
-                                  "default), including that scheme's own Step-3 gate 2. Does NOT "
-                                  "affect scheme=binary's gate 2 -- see --tau-purity.")
+                                  "see --tau-tr. Only affects scheme=threeway's Step-2 vibrational "
+                                  "vocabulary (no longer the default; pass --classify-scheme "
+                                  "threeway to use it) -- as of the 2026-08-25 restructuring this "
+                                  "is purely a Step-2 boundary, not a purity gate of any kind.")
     user_group.add_argument("--tau-sb", type=float, default=None, dest="tau_sb",
                              help="Override tau_SB (single-cutoff binary S/B split) for this run "
                                   "only -- see --tau-tr. Only affects scheme=binary.")
-    user_group.add_argument("--tau-purity", type=float, default=None, dest="tau_purity",
-                             help="Override tau_purity (Step-3 gate 2's vibrational-leakage bound) "
-                                  "for this run only -- see --tau-tr. Only affects scheme=binary's "
-                                  "Step-3 gate 2. Default: 0.05, fixed (not calibrated via a "
-                                  "sweep). scheme=threeway's gate 2 continues to use tau_B, "
-                                  "unaffected by this flag.")
     user_group.add_argument("--classify-scheme", choices=["threeway", "binary"],
                              default="binary", dest="classify_scheme",
-                             help="Step-4 internal classification vocabulary: 'binary' "
-                                  "(default, paper-standard) forces every internal mode to "
-                                  "'S' or 'B' via the single tau_SB cutoff, never 'SB'; "
-                                  "'threeway' (explicit opt-in) may label a mode 'SB' (mixed "
-                                  "stretch/bend) via the tau_S/tau_B split. Does not affect "
-                                  "Step 2/3 (external T/R assignment, purity gates).")
+                             help="Step-2 vibrational-label vocabulary: 'binary' (default, "
+                                  "paper-standard) forces every mode to 'S' or 'B' via the single "
+                                  "tau_SB cutoff, never 'SB'; 'threeway' (explicit opt-in) may "
+                                  "label a mode 'SB' (mixed stretch/bend) via the tau_S/tau_B "
+                                  "split. Does not affect Step 3 (the optional T/R identification), "
+                                  "which uses no scheme or threshold at all.")
+    user_group.add_argument("--no-identify-tr", action="store_false", dest="identify_tr",
+                             help="Skip Step 3 (the optional T/R identification) -- every mode's "
+                                  "tr_label/tr_score are left blank, only the Step-2 vib_label is "
+                                  "reported. Default: Step 3 runs (identify_tr=True), matching the "
+                                  "flowchart's default path; every reproduce.py/headless run keeps "
+                                  "this on.")
 
     dev_group = ap.add_argument_group(
         "Developer / maintainer workflow",
@@ -503,16 +512,14 @@ def main():
         tau_S=args.tau_s if args.tau_s is not None else base.tau_S,
         tau_B=args.tau_b if args.tau_b is not None else base.tau_B,
         tau_SB=args.tau_sb if args.tau_sb is not None else base.tau_SB,
-        tau_purity=args.tau_purity if args.tau_purity is not None else base.tau_purity,
         v_weighting=base.v_weighting,
     )
-    if any(v is not None for v in (args.tau_tr, args.tau_s, args.tau_b, args.tau_sb, args.tau_purity)) \
-            or args.classify_scheme != "binary":
+    if any(v is not None for v in (args.tau_tr, args.tau_s, args.tau_b, args.tau_sb)) \
+            or args.classify_scheme != "binary" or not args.identify_tr:
         print(f"Note: threshold/scheme override active for this run only (not written to "
               f"thresholds.json): tau_TR={thresholds.tau_TR} tau_S={thresholds.tau_S} "
               f"tau_B={thresholds.tau_B} tau_SB={thresholds.tau_SB} "
-              f"tau_purity={thresholds.tau_purity} "
-              f"scheme={args.classify_scheme}")
+              f"scheme={args.classify_scheme} identify_tr={args.identify_tr}")
 
     if _run_flag_pipelines(args, thresholds):
         return
@@ -555,7 +562,8 @@ def main():
 
     try:
         df, output_file = run_scoring_pipeline(mol_name, mode_type, thresholds=thresholds,
-                                                scheme=args.classify_scheme)
+                                                scheme=args.classify_scheme,
+                                                identify_tr=args.identify_tr)
     except ValueError as e:
         print(f"Error: {e}")
         return

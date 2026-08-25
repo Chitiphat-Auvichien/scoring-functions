@@ -24,6 +24,8 @@ do not fit portrait even at \\tiny) `pdflscape`.
 import os
 import pandas as pd
 
+from src.classifier import predicted_category
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DATA_DIR = os.path.join(REPO_ROOT, "data")
 # Two levels up from Github/scoring-functions/ is the OneDrive project root
@@ -147,8 +149,9 @@ def water_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
 
     rows = []
     for _, row in df.iterrows():
+        pred = predicted_category(row["tr_label"], row["vib_label"])
         rows.append([
-            _esc(row["Mode"]), _fmt(row["Freq"], 2), _esc(row["label"]), _esc(row["Irrep"]),
+            _esc(row["Mode"]), _fmt(row["Freq"], 2), _esc(pred), _esc(row["Irrep"]),
             _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
             _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
             _esc(_pack_bond_scores(row, bond_cols)),
@@ -178,10 +181,11 @@ def library_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
 
     rows = []
     for _, row in df.iterrows():
+        pred = predicted_category(row["predicted_tr_label"], row["predicted_vib_label"])
         rows.append([
             _esc(row["molecule"]), _esc(row["mode_index"]), _esc(row["kind"]),
             _fmt(row["freq"], 2), _esc(row["ref_label"]), _esc(row["ideal"]),
-            _esc(row["predicted_label"]),
+            _esc(pred),
             _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
             _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
             _esc(row["s_AB"]), _fmt(row["reduced_mass"], 4), _fmt(row["force_constant"], 4),
@@ -208,8 +212,9 @@ def benzene_normal_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DI
 
     rows = []
     for _, row in df.iterrows():
+        pred = predicted_category(row["tr_label"], row["vib_label"])
         rows.append([
-            _esc(row["Mode"]), _fmt(row["Freq"], 2), _esc(row["label"]), _esc(row["Irrep"]),
+            _esc(row["Mode"]), _fmt(row["Freq"], 2), _esc(pred), _esc(row["Irrep"]),
             _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
             _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
             _esc(_pack_bond_scores(row, bond_cols)),

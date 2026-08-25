@@ -104,8 +104,8 @@ from scipy.optimize import curve_fit
 
 from src.classifier import (
     Thresholds, classification_bucket,
-    is_clean_external, is_mixed_external, external_axis,
-    vib_label_binary,
+    is_clean_external, is_mixed_external, is_external_label, external_axis,
+    vib_label, vib_label_binary, predicted_category, predicted_category_column,
 )
 from src.csv_label_ingest import TYPE_TO_REF_LABEL
 
@@ -594,7 +594,10 @@ def plot_benzene_normal_modes(
 
     seen_labels = set()
     for _, row in normal.iterrows():
-        row_label = row["label"]
+        # 2026-08-25: normal_csv's schema is now vib_label/tr_label/tr_score
+        # (not a single combined "label" column) -- reconstruct the
+        # combined display string via the canonical predicted_category rule.
+        row_label = predicted_category(row["tr_label"], row["vib_label"])
         if tau_SB is not None:
             row_label = rescheme_internal_label(row_label, row["V_Stretch"],
                                                  thresholds, scheme="binary")
@@ -663,26 +666,32 @@ def plot_benzene_normal_modes(
 # --------------------------------------------------------------------------
 
 def _axis_aware_pred_category(predicted_label):
-    """Map a RAW classifier `predicted_label` string (e.g. "Tx", "Tx*", "S",
-    "SB") to a confusion-table COLUMN category, WITHOUT collapsing a clean
-    external label to the coarse "translation"/"rotation" bucket the way
-    `classification_bucket()` does.
+    """Map a materialized `predicted_label` string -- the CANONICAL
+    predicted-category rule (src.classifier.predicted_category): the bare
+    Step-3 winning slot axis (e.g. "Tx") if a caller assigned one, else the
+    Step-2 vib_label ("S"/"B"/"SB") -- to a confusion-table COLUMN category,
+    WITHOUT collapsing a clean external label to the coarse "translation"/
+    "rotation" bucket the way `classification_bucket()` does.
 
-    Returns the bare axis ("Tx".."Rz") for a clean external prediction,
-    "mixed_external" for a flagged one (any axis), or the ordinary
-    `classification_bucket()` result for anything else (internal S/B/SB
-    predictions). This is what lets a row's PREDICTION land in an
+    Returns the bare axis ("Tx".."Rz") for an external winner, or the
+    ordinary `classification_bucket()` result for anything else (internal
+    S/B/SB labels). This is what lets a row's PREDICTION land in an
     axis-specific column independent of that row's own `kind` -- e.g. an
-    internal reference mode whose residual character won a Step-2 external
+    internal reference mode whose residual character won a Step-3 external
     slot would show up in a "Tx" column here, which a bucket-collapsed
     lookup could never surface. Used by `_joint_confusion_table` below for
     the joint external+internal confusion matrices (fig:confusion,
     fig:benzeneconfusion, the SI rigorous-tier table).
+
+    2026-08-25: simplified now that Step 3 no longer produces a starred
+    ("Tx*") mixed-external label at all -- every caller pre-populates
+    `predicted_label` via `predicted_category()`/`predicted_category_column()`
+    from the two real (`predicted_tr_label`, vib_label) columns before
+    calling this, so `is_mixed_external` never matches here in practice
+    (kept only for backward-compatible reading of pre-2026-08-25 data).
     """
-    if is_clean_external(predicted_label):
+    if is_external_label(predicted_label):
         return external_axis(predicted_label)
-    if is_mixed_external(predicted_label):
-        return "mixed_external"
     return classification_bucket(predicted_label)
 
 
@@ -831,34 +840,32 @@ def plot_confusion_matrix(
     is applied explicitly (not left to confusion_matrix_stats's internal
     filter) so internal and external rows share the same molecule scope.
 
-    THREE-WAY RESCHEME: ``library_scores.csv``'s own ``predicted_label`` is
-    built under the global default scheme (binary as of the 2026-08 switch),
-    which never produces "mixed" -- so this figure re-derives every internal
-    row's ``predicted_label`` under ``scheme="threeway"`` from its own
-    ``V_Stretch`` (``classifier.rescheme_internal_label``, cheap, no
-    re-parse/re-run of Step 1-3) before building the confusion table, so the
-    "mixed" column stays genuinely populated regardless of what scheme the
-    cached CSV happens to be built under.
+    THREE-WAY RESCHEME (2026-08-25): ``library_scores.csv``'s stored
+    ``predicted_vib_label`` is built under the global default scheme (binary
+    as of the 2026-08 switch), which never produces "mixed" -- so this
+    figure recomputes a FRESH vib_label under ``scheme="threeway"`` from
+    each row's own ``V_Stretch`` (cheap, no re-parse/re-run of Step 1/3),
+    combined with the row's own (unaffected) ``predicted_tr_label`` via the
+    canonical ``predicted_category()`` rule, before building the confusion
+    table -- so the "mixed" column stays genuinely populated regardless of
+    what scheme the cached CSV happens to be built under.
     """
     _style()
     from src.calibrate import confusion_matrix_stats, filter_single_centre_library
-    from src.classifier import rescheme_internal_label
 
     lib_df = pd.read_csv(library_csv)
     lib_df = filter_single_centre_library(lib_df)
     thresholds = Thresholds.calibrated()
 
     nonideal_df = lib_df[(lib_df["kind"] == "internal") & (lib_df["ideal"] == "no")].copy()
-    nonideal_df["predicted_label"] = nonideal_df.apply(
-        lambda row: rescheme_internal_label(row["predicted_label"], row["V_Stretch"],
-                                             thresholds, "threeway"),
-        axis=1)
-    stats_n = confusion_matrix_stats(nonideal_df, thresholds)
+    stats_n = confusion_matrix_stats(nonideal_df, thresholds, scheme="threeway")
 
     nonideal_molecules = nonideal_df["molecule"].unique()
     nonideal_external_df = lib_df[(lib_df["kind"] == "external") &
                                    (lib_df["molecule"].isin(nonideal_molecules))]
     joint_df = pd.concat([nonideal_df, nonideal_external_df], ignore_index=True)
+    fresh_vib = joint_df["V_Stretch"].map(lambda v: vib_label(v, thresholds, "threeway"))
+    joint_df["predicted_label"] = predicted_category_column(joint_df["predicted_tr_label"], fresh_vib)
 
     # "mixed_external" ("T/R*") dropped: verified empty on this population.
     ref_order_n = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "bend", "stretch"]
@@ -969,16 +976,21 @@ def plot_confusion_matrix_binary(
     nonideal_df = nonideal_df[nonideal_df["ref_label"] != "SB"]
 
     def _binarize(row):
-        bucket = classification_bucket(row["predicted_label"])
-        if bucket in ("stretch", "bend", "mixed"):
-            return vib_label_binary(row["V_Stretch"], tau_SB)
-        return row["predicted_label"]  # external crossover -- left untouched
+        """Materialize this row's predicted-category display string,
+        reading predicted_vib_label/predicted_tr_label (2026-08-25
+        restructuring) instead of the retired combined predicted_label: the
+        Step-3 winning slot if assigned (left untouched, not re-labeled --
+        scheme only changes the Step-2 vibrational vocabulary, never Step
+        3's external assignment), else vib_label_binary(V_Stretch, tau_SB)."""
+        return predicted_category(row["predicted_tr_label"],
+                                   vib_label_binary(row["V_Stretch"], tau_SB))
 
     nonideal_df["predicted_label"] = nonideal_df.apply(_binarize, axis=1)
 
     nonideal_molecules = nonideal_df["molecule"].unique()
     nonideal_external_df = lib_df[(lib_df["kind"] == "external") &
-                                   (lib_df["molecule"].isin(nonideal_molecules))]
+                                   (lib_df["molecule"].isin(nonideal_molecules))].copy()
+    nonideal_external_df["predicted_label"] = nonideal_external_df.apply(_binarize, axis=1)
     joint_df = pd.concat([nonideal_df, nonideal_external_df], ignore_index=True)
 
     # 2-way internal: no "mixed" column, unlike plot_confusion_matrix's 3-way.
@@ -1136,9 +1148,13 @@ def plot_rigorous_tier_check(
     lib_df = filter_single_centre_library(lib_df)
     thresholds = Thresholds.calibrated()
 
-    rigorous_df = lib_df[(lib_df["kind"] == "external") | (lib_df["ideal"] == "yes")]
+    rigorous_df = lib_df[(lib_df["kind"] == "external") | (lib_df["ideal"] == "yes")].copy()
     # For acceptance_floor/floor_met (coarse 4-bucket construction check).
     stats_r = confusion_matrix_stats(rigorous_df, thresholds)
+
+    fresh_vib = rigorous_df["V_Stretch"].map(lambda v: vib_label(v, thresholds, "binary"))
+    rigorous_df["predicted_label"] = predicted_category_column(
+        rigorous_df["predicted_tr_label"], fresh_vib)
 
     cats_r = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "bend", "stretch"]
     tbl_r = _joint_confusion_table(rigorous_df, cats_r, cats_r)
@@ -1230,19 +1246,19 @@ def plot_transferability_confusion(
     hand-curated ``ref_label`` column ``src/library_ingest.py::attach_labels()``
     joins in from ``data/characterised_modes.csv``.
 
-    THREE-WAY RESCHEME: like ``plot_confusion_matrix``, this figure
-    re-derives every internal row's ``predicted_label`` under
-    ``scheme="threeway"`` from its own ``V_Stretch``
-    (``classifier.rescheme_internal_label``) before use, since
-    ``library_scores.csv``'s own column is built under the global default
-    scheme (binary) and would otherwise never populate the "SB" prediction.
+    THREE-WAY RESCHEME (2026-08-25): like ``plot_confusion_matrix``, this
+    figure materializes a combined ``predicted_label`` display column fresh
+    from ``predicted_tr_label`` and a freshly-threeway-recomputed vib_label
+    (``classifier.predicted_category_column``) before use, since
+    ``library_scores.csv``'s own stored ``predicted_vib_label`` is built
+    under the global default scheme (binary) and would otherwise never
+    populate the "SB" prediction.
 
     T/R ground truth: first character of the external row's ``mode_index``
     ("Tx"->"T", "Rz"->"R"). T/R prediction: ``classifier.external_axis()``
-    (strips a mixed-external "*" suffix before taking the first character,
-    so an impure "Tx*" still counts as predicted "T" -- confirmed empirically
-    absent for this tier's current data, 0/498 rows starred, but handled for
-    correctness). B/SB/S on both sides go through the ordinary
+    (strips a legacy mixed-external "*" suffix before taking the first
+    character -- Step 3 no longer produces one, this is a no-op on fresh
+    data). B/SB/S on both sides go through the ordinary
     ``ref_label``/``classification_bucket()`` vocabulary. Any internal row
     still missing ``ref_label`` (stale ``library_scores.csv``, i.e. ``python
     main.py --library`` hasn't been rerun since the last
@@ -1257,7 +1273,7 @@ def plot_transferability_confusion(
     look at, not just the aggregate counts in ``matrix_csv_path``.
     """
     _style()
-    from src.classifier import classification_bucket, external_axis, rescheme_internal_label
+    from src.classifier import classification_bucket, external_axis
     from src.csv_label_ingest import load_label_csvs
     from src.library_ingest import test_tier_molecules
 
@@ -1266,11 +1282,12 @@ def plot_transferability_confusion(
     df = lib_df[lib_df["molecule"].isin(test_mols)].copy()
 
     thresholds = Thresholds.calibrated()
-    internal_mask = df["kind"] == "internal"
-    df.loc[internal_mask, "predicted_label"] = df.loc[internal_mask].apply(
-        lambda row: rescheme_internal_label(row["predicted_label"], row["V_Stretch"],
-                                             thresholds, "threeway"),
-        axis=1)
+    # 2026-08-25: materialize the combined predicted_label display string
+    # fresh from (predicted_tr_label, a freshly-threeway-recomputed
+    # vib_label) via the canonical predicted_category rule -- see
+    # plot_confusion_matrix's identical pattern.
+    fresh_vib = df["V_Stretch"].map(lambda v: vib_label(v, thresholds, "threeway"))
+    df["predicted_label"] = predicted_category_column(df["predicted_tr_label"], fresh_vib)
 
     ext_mask = df["kind"] == "external"
     ref_internal_map = {"bend": "B", "stretch": "S", "SB": "SB"}
@@ -1405,6 +1422,12 @@ def plot_transferability_confusion_binary(
     test_mols = test_tier_molecules()
     df = lib_df[lib_df["molecule"].isin(test_mols)].copy()
     tau_SB = tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB
+
+    # 2026-08-25: materialize the combined predicted_label display string
+    # fresh from (predicted_tr_label, vib_label_binary(V_Stretch, tau_SB))
+    # via the canonical predicted_category rule.
+    fresh_vib = df["V_Stretch"].map(lambda v: vib_label_binary(v, tau_SB))
+    df["predicted_label"] = predicted_category_column(df["predicted_tr_label"], fresh_vib)
 
     ext_mask = df["kind"] == "external"
     # No "SB" entry (unlike the three-way figure's ref_internal_map) -- a
@@ -1661,12 +1684,13 @@ def plot_benzene_internal_confusion_binary(
     b = b[b["ref_label"] != "SB"]
 
     def _binarize(row):
-        if row["kind"] != "internal":
-            return row["predicted_label"]
-        bucket = classification_bucket(row["predicted_label"])
-        if bucket in ("stretch", "bend", "mixed"):
-            return vib_label_binary(row["V_Stretch"], tau_SB)
-        return row["predicted_label"]  # external crossover -- left untouched
+        """Materialize predicted_label from predicted_tr_label/V_Stretch
+        (2026-08-25 restructuring): the Step-3 winning slot if assigned
+        (left untouched, not re-labeled -- scheme only changes Step 2's
+        vibrational vocabulary, never Step 3's external assignment), else
+        vib_label_binary(V_Stretch, tau_SB)."""
+        return predicted_category(row["predicted_tr_label"],
+                                   vib_label_binary(row["V_Stretch"], tau_SB))
 
     b["predicted_label"] = b.apply(_binarize, axis=1)
 
@@ -1802,19 +1826,26 @@ def plot_benzene_emit_counts(
     36 EMIT modes classify -- one bar per clean/starred external axis
     (Tx..Rz, Tx*..Rz*) and per internal bucket (S/B/SB).
 
-    Presentation only: reads the already-computed ``label`` column of raw
-    classifier-output strings from ``emit_csv`` via ``value_counts()`` --
+    Presentation only: reads ``emit_csv``'s ``vib_label``/``tr_label``
+    columns (2026-08-25 schema), recombined into the single display string
+    via the canonical ``predicted_category`` rule, via ``value_counts()`` --
     never recomputes scores. Categories plotted are exactly whatever is
     present in the data (not a hardcoded set), so the chart stays correct
-    if the classification changes as more EMIT diagnostics land.
+    if the classification changes as more EMIT diagnostics land. The
+    starred ("Tx*") entries in ``canonical_order`` below are retired
+    (Step 3 no longer produces them) but kept harmlessly in the list --
+    they simply never appear in ``present`` on fresh data.
     """
     _style()
     df = pd.read_csv(emit_csv)
+    df["label"] = predicted_category_column(df["tr_label"], df["vib_label"])
     counts = df["label"].value_counts()
 
     # Canonical order: T-axis, then R-axis (clean before starred within an
-    # axis), then internal B/SB/S in ascending-frequency order (bending is
-    # lowest frequency, stretching highest) -- filtered to categories present.
+    # axis -- starred entries retired 2026-08-25, kept only so any leftover
+    # legacy data still renders), then internal B/SB/S in ascending-
+    # frequency order (bending is lowest frequency, stretching highest) --
+    # filtered to categories present.
     canonical_order = [
         "Tx", "Tx*", "Ty", "Ty*", "Tz", "Tz*",
         "Rx", "Rx*", "Ry", "Ry*", "Rz", "Rz*",
@@ -3353,6 +3384,11 @@ def plot_ped_vs_vscore(
     """
     _style()
     df = pd.read_csv(csv_input)
+    # combined_ped_vs_scores.csv's own column is "vib_label" (renamed from
+    # "label" 2026-08-25, see ped/merge_ped_scores.py) -- restore the local
+    # "label" working-column name this function's body uses throughout.
+    if "vib_label" in df.columns:
+        df = df.rename(columns={"vib_label": "label"})
     roster = pd.read_csv(mol_list_csv)
     test_molecules = set(roster.loc[roster["mol_type"] == "test", "molecule"])
     df = df[df["Molecule"].isin(test_molecules)]

@@ -14,8 +14,8 @@
 > `git log -p -- IMPLEMENTATION_PLAN.md`. Every decision, formula, and numeric target that was still live
 > is preserved below in **Locked decisions** / **Authoritative spec** / the Phase checklists.
 >
-> Last updated: 2026-08-14 (H2O reverted to mp2/3-21g + VEDA PED added for 8 test molecules — see
-> Recent history).
+> Last updated: 2026-08-25 (Step 2/Step 3 restructuring — the two-gate purity test is retired; Step 3
+> [T/R identification] is now optional and ungated — see Recent history).
 
 ## Status snapshot (current stage)
 - **Phases 0–3: DONE.** Core engine, unified classifier, EMIT projection, library ingest, τ-calibration,
@@ -208,17 +208,32 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
   refuses a scorer/threshold mismatch (`Thresholds.bootstrap()`'s `"*"` is the escape used by the first
   `--library` pass after a switch). The pre-2026-08-14 outputs are in `data/{results,figures}/archive_unweighted/`;
   `scripts/compare_weighting.py` diffs the two.
-- **Algorithm 1**: Step1 score → Step2 global one-to-one Hungarian (`linear_sum_assignment(...,
-  maximize=True)` over `n_T+n_R` external slots vs. all modes, `Σ|score|`) → Step3 **two-gate purity**:
-  clean iff `|score|≥τ_TR` AND `s[V_S]≤gate2_bar`, else `MIXED_EXTERNAL_WITH_VIBRATION` (flag + dominant slot +
-  `s[V_S]`) → Step4 (unassigned modes only) `s[V_S]≥τ_S` stretching / `≤τ_B` bending / else mixed.
-  `n_T=3`, `n_R=2 if linear else 3`. Gate 1 (`τ_TR`) and Step 2's assignment are scheme-independent; gate
-  2's bar is **scheme-dependent as of 2026-08 (`gate2_bar` in `src/classifier.py`)**: `τ_purity` (fixed,
-  0.05 — decoupled from the three-way split, exploratory like `τ_SB`'s own rollout, not swept) under
-  `scheme="binary"` (paper-standard default); `τ_B` (calibrated) under `scheme="threeway"`, unchanged from
-  before this split existed. For exact normal-mode externals (`s[V_S]=0`) the gate never fires regardless.
-  Benzene EMIT 34/35 (`s[V_S]=0.667/0.577`) correctly flagged under both; EMIT 36 is the Decision-X blind
-  spot (see Locked decisions).
+- **Algorithm 1 (RESTRUCTURED 2026-08-25 — supersedes the two-gate-purity description below the strike-
+  through; see the dated entry in Recent history for the full change)**: Step1 score every mode → **Step2,
+  UNCONDITIONAL on every one of the 3N candidate modes** (including the synthetic ideal T/R reference
+  rows, which trivially get `vib_label="B"` since their `V_Stretch=0` — expected, not a bug): a
+  vibrational label from `s[V_S]` alone via `vib_label()` (`"S"/"B"` under the default `scheme="binary"`,
+  single `τ_SB` cutoff; `"S"/"B"/"SB"` under `scheme="threeway"`, `τ_S`/`τ_B`) — never depends on whether
+  the mode is a good T/R match → **Step3, OPTIONAL (`identify_tr=True` default), independent of Step 2**:
+  the same one-to-one Hungarian assignment as before (`linear_sum_assignment(..., maximize=True)` over
+  `n_T+n_R` external slots vs. all modes, `Σ|score|`, no degenerate-axis-block mechanism — Decision 8,
+  unaffected by this change) but with **NO purity gate of any kind**: every winner gets the bare slot
+  name (`Tx`..`Rz`) and the assignment's own raw signed score (`tr_score`), unconditionally. If
+  `identify_tr=False`, every mode's `tr_label`/`tr_score` stay `None` and only `vib_label` is populated.
+  `n_T=3`, `n_R=2 if linear else 3` (unchanged). Benzene EMIT 34/35 (`s[V_S]=0.667/0.577`) now win a
+  T-axis slot cleanly (`tr_label∈{"Tx","Ty"}`, `tr_score≈1.0`, `vib_label="S"` since both clear
+  `τ_SB=0.42`) — no more asterisk; EMIT 36 remains the Decision-X blind spot (`tr_label="Tz"`,
+  `tr_score≈1.0`, `vib_label="B"` since `V_Stretch=0` — Step 2 still can't see its out-of-plane-bending
+  residual, just expressed without a purity flag to fail now). ~~Retired: the old two-gate purity test
+  (`gate2_bar`, `Thresholds.tau_purity`, the starred `"Tx*"` mixed-external label + its
+  `"vibration=<label>"` annotation, `rescheme_external_label` — deleted from `src/classifier.py`, not
+  just deprecated). That design made Step 3 (T/R identity) depend on Step 2's vibrational character,
+  which was almost always true (hence "impure") for non-normal-mode input (e.g. EMIT) since there is no
+  real translation/rotation in that basis at all — the flag was nearly useless outside the normal-mode
+  case.~~ **OPEN FOLLOW-UP**: the manuscript prose (Theory/Algorithm section text, the benzene EMIT 34-36
+  "flagged with contaminating SB character" narrative in the JCC `.tex`) still describes the RETIRED
+  two-gate behavior and needs a separate `/revise-section` pass once this code change is reviewed —
+  intentionally out of scope for the code-restructuring session that made this change.
 - Conventions: `ε_disp=1e-8`; `unit(0):=0`. `DEGEN_TOL` survives only as a general numeric constant (Phase-3
   degenerate-mode sanity check), not an assignment mechanism. `τ_TR` comes from **calibration**, not
   hardcoded.
@@ -424,6 +439,72 @@ data in hand (water, benzene, gramicidin), then scaled out via the full 68-molec
 > One line per session, newest first. Full narration for any entry predating 2026-08-10 is in git history:
 > `git log -p -- IMPLEMENTATION_PLAN.md`.
 
+- **2026-08-25 (Step 2/Step 3 restructuring — retires the two-gate purity test)** — `src/classifier.py`'s
+  `classify_all_modes` rewritten to match the flowchart referenced by `fig:flowchart`
+  (`JCC/JCC_man_scoring/images/classifier_algorithm.pdf`): Step 2 (vibrational `vib_label` from `s[V_S]`)
+  now runs UNCONDITIONALLY on every one of the 3N candidate modes (including the synthetic ideal T/R
+  reference rows, which trivially get `vib_label="B"` since `V_Stretch=0` — expected, since downstream
+  consumers must treat `tr_label` as authoritative for T/R identity, never `vib_label`); Step 3 (T/R
+  identification) is now OPTIONAL (`identify_tr=True` default, new kwarg threaded through
+  `run_scoring_pipeline`/`main.py`'s new `--no-identify-tr` flag) and applies **NO purity gate at all** —
+  every Hungarian-assignment winner (same `linear_sum_assignment(..., maximize=True)` mechanism as
+  before, unaffected) gets the bare slot name and its own raw signed `tr_score`, full stop. See the
+  updated "Algorithm 1" bullet in Authoritative spec above for the precise new behavior. **Retired**
+  (deleted, not just deprecated): `gate2_bar()`, `Thresholds.tau_purity` (and its `.calibrated()`
+  JSON-loading fallback), the old Step-3 gate branch, `rescheme_external_label()`, and the starred
+  `"Tx*"` mixed-external label + `"vibration=<label>"` annotation vocabulary. `Thresholds.tau_TR` itself
+  is NOT deleted — repurposed as a diagnostic-only lens (e.g. `src/calibrate.py`'s tau_TR sensitivity
+  sweep), no longer gating anything in the pipeline. **CSV schema rename** (label-layer only — every
+  `ModeScorer` score, e.g. water's `tab:water` numbers and Σ|s_AB|==s[V_S], is byte-identical to before):
+  per-molecule `<mol>_{normal,EMIT}.csv`'s `label`/`annotation` → `vib_label`/`tr_label`/`tr_score`;
+  `library_scores.csv`'s `predicted_label`/`predicted_annotation` → `predicted_vib_label`/
+  `predicted_tr_label`/`predicted_tr_score`; `combined_ped_vs_scores.csv`'s `label` → `vib_label` (PED
+  merge only ever touches internal rows, so no `tr_label`/`tr_score` needed there). New shared helpers
+  `classifier.predicted_category()`/`predicted_category_column()` implement the canonical "tr_label if
+  assigned, else vib_label" rule, reused by `calibrate.confusion_matrix_stats` (now scheme-aware, fresh-
+  recomputes vib_label from `V_Stretch` rather than trusting a possibly-stale stored column),
+  `calibrate.sweep_tau_tr` (simplified: ONE Hungarian pass per molecule instead of one per grid point,
+  since Step 3 no longer depends on `τ_TR`/scheme at all — `τ_TR` is now a pure post-hoc filter over each
+  mode's already-fixed `tr_score`), `figures.py`'s confusion-matrix family (materializes a local
+  `predicted_label` display column from the two real columns at the top of each function — chosen over a
+  full rewrite of `_joint_confusion_table`/`_axis_aware_pred_category`'s internals to minimize risk of
+  visual/layout drift, per the explicit "zero visual change" requirement; `_axis_aware_pred_category`
+  itself was simplified since the starred case can no longer occur), and `benzene_validation.py`'s
+  `benzene_normal_reference_detail`/`benzene_worked_examples`. `src/flag_validation.py` (Phase-6 internal
+  diagnostic, already excluded from the manuscript 2026-07-09) had its premise retired along with the
+  flag it measured — light-touch fix keeps it from crashing (TP=0/FP=0 everywhere now, by construction,
+  documented in its own module docstring as a restructuring note) rather than a full rewrite, since it
+  was out of this session's core scope. `scripts/regenerate_figures_at_tau_sb.py` simplified to match
+  (only `vib_label` needs re-deriving at an alternate `τ_SB`; `tr_label`/`tr_score` are untouched by a
+  `τ_SB` change — the old `predicted_annotation` re-derivation logic is gone entirely).
+  **Test changes**: `tests/test_classifier.py` rewritten — gate2-specific tests deleted (their subject
+  matter no longer exists), new tests added for Step 2's unconditional behavior, Step 3's
+  `identify_tr=False` opt-out, and a live-rerun-verified benzene EMIT 34/35/36 spot-check
+  (`tr_score≈1.0` for all three, matching Decision X's "perfect axis alignment" — NOT `s[V_S]`'s
+  0.667/0.577, which is a different quantity; verified by direct rerun rather than trusted from the
+  session's own exploratory numbers, per instruction). `tests/test_calibrate.py`,
+  `tests/test_library_ingest.py`, `tests/test_benzene_validation.py`, `tests/test_merge_ped_scores.py`,
+  `tests/test_flag_validation.py` updated to the new schema; `test_tau_sensitivity_sweep_plateau_and_
+  accuracy` repinned 1→3 tau_TR-sensitive label-change grid points — a real, understood consequence of
+  retiring gate 2 (EMIT 6/9's T/R assignments were previously PERMANENTLY masked as "always mixed" by
+  gate 2 regardless of `τ_TR`, since their `V_Stretch` sits well above `τ_B`; retiring gate 2 makes their
+  genuine `τ_TR`-crossing sensitivity visible for the first time). Full suite 154/156 (same 2
+  pre-existing, unrelated `test_veda_fmt_regression.py` failures as every prior session).
+  **Regeneration**: full `py reproduce.py` (library→calibrate→library2→molecules→emit→projection→ped→
+  benzene_validation→benchmark→figures); all `data/results/*.csv` + `data/figures/*` regenerated under
+  the new schema; benzene EMIT 34-36 and water-table score-level invariants reconfirmed unaffected.
+  **Concurrency note**: this session ran concurrently with another agent session actively developing
+  `plot_ped_vs_vscore`/`_collapse_degenerate_freqs` in the SAME `src/figures.py` (gridlines, y=x parity
+  line + MAE, reference-label coloring, a consolidated `data/results/ped_vs_vscore_data.csv` export) —
+  4 of their commits landed mid-session (`cbf3c2e`..`c034c4e`). Reconciled by hand (their work is
+  additive/orthogonal to this session's schema-rename edits in the same function) after two rounds of
+  drift where a stale local edit briefly clobbered their gridline revision; fixed each time by re-diffing
+  against a freshly-fetched `HEAD` rather than trusting a cached view of the file, per the explicit
+  "verify against a live read every time, don't guess" discipline this kind of shared-working-tree
+  collision requires. **OPEN FOLLOW-UP**: the manuscript prose (Theory/Algorithm section text, the
+  benzene EMIT 34-36 "flagged with contaminating SB character" narrative) still describes the retired
+  two-gate behavior and needs a separate `/revise-section` pass once this code change lands —
+  intentionally out of scope for this implementation pass.
 - **2026-08-20 (later same day, figures follow-up)** — Closed the one remaining open item from the
   entry directly below: canonical `data/figures/` had still not been regenerated after the `tau_SB`
   0.50→0.42 fix, so it was internally inconsistent with the now fully self-consistent canonical

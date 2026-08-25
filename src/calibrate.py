@@ -39,7 +39,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from src.classifier import Thresholds, is_clean_external
+from src.classifier import Thresholds, vib_label, predicted_category_column
 from src.scoring import get_v_weighting
 from src.library_ingest import (
     build_library_scores, resolve_log_basename, _EXTERNAL_SLOTS,
@@ -156,38 +156,61 @@ def sweep_tau_tr(lib_df, tau_S, tau_B, data_dir="data", tau_grid=DEFAULT_TAU_GRI
     point: tau_TR, accuracy (library normal-mode T/R ground truth), and
     label_change_fraction (combined library-external + benzene-EMIT set,
     relative to the previous grid point; NaN for the first point).
+
+    2026-08-25: Step 3 (T/R identification) no longer depends on tau_TR (or
+    scheme) at all -- see src/classifier.py's restructuring -- so the
+    Hungarian assignment itself is computed ONCE per molecule (not once per
+    grid point, a genuine simplification over the pre-2026-08-25 version of
+    this function), and tau_TR is applied as a purely POST-HOC filter over
+    each mode's already-fixed `tr_label`/`tr_score`: a library T/R reference
+    row counts "clean" at a given tau_TR iff it won its OWN slot (tr_label
+    == its own name -- true by construction for a real geometry-backed
+    reference, Eckart-Sayvetz completeness) AND |tr_score| >= tau_TR; a
+    benzene EMIT mode counts "flagged" iff it won ANY slot (tr_label is not
+    None) AND |tr_score| >= tau_TR. This reproduces the same "how stable is
+    the purity call as tau_TR moves" question the pre-2026-08-25 two-gate
+    version answered, now expressed as a diagnostic lens rather than a
+    pipeline gate (tau_TR itself no longer changes any label).
     """
     from src.classifier import classify_all_modes
 
     pool = _load_geometry_pool(lib_df, data_dir)
     scorer_e, final_e = _load_benzene_emit(data_dir)
 
+    # Match whatever weighting the pool's scorers were built with, so a
+    # `--v-weighting none --calibrate` run doesn't trip its own guard.
+    # scheme="threeway" pinned explicitly: this sweep determines the
+    # THREE-WAY tau_S/tau_B boundaries specifically, regardless of
+    # classify_all_modes()'s own default (binary as of the 2026-08 scheme
+    # switch) -- flipping that default must not silently change what this
+    # sweep measures. tau_TR itself is irrelevant to Step 3's assignment, so
+    # any placeholder value works here; the real sweep happens below.
+    th = Thresholds(tau_S=tau_S, tau_B=tau_B, v_weighting=get_v_weighting())
+
+    tr_by_mol_slot = {}  # (mol, slot) -> (tr_label, tr_score) for T/R ground-truth rows
+    for mol, (scorer, final) in pool.items():
+        scored = classify_all_modes(scorer, final, th, scheme="threeway")
+        for m in scored:
+            if m["name"] in _EXTERNAL_SLOTS:
+                tr_by_mol_slot[(mol, m["name"])] = (m["tr_label"], m["tr_score"])
+    total = len(tr_by_mol_slot)
+
+    scored_e = classify_all_modes(scorer_e, final_e, th, scheme="threeway")
+    tr_emit = {m["name"]: (m["tr_label"], m["tr_score"]) for m in scored_e}
+
     records = []
     prev_labels = None
     for tau_TR in tau_grid:
-        # Match whatever weighting the pool's scorers were built with, so a
-        # `--v-weighting none --calibrate` run doesn't trip its own guard.
-        th = Thresholds(tau_TR=tau_TR, tau_S=tau_S, tau_B=tau_B,
-                        v_weighting=get_v_weighting())
         labels = {}
         correct = 0
-        total = 0
-        # scheme="threeway" pinned explicitly: this sweep determines the
-        # THREE-WAY tau_S/tau_B boundaries specifically, regardless of
-        # classify_all_modes()'s own default (binary as of the 2026-08
-        # scheme switch) -- flipping that default must not silently change
-        # what this sweep measures.
-        for mol, (scorer, final) in pool.items():
-            scored = classify_all_modes(scorer, final, th, scheme="threeway")
-            for m in scored:
-                if m["name"] in _EXTERNAL_SLOTS:
-                    total += 1
-                    is_clean = is_clean_external(m["classification"])
-                    correct += int(is_clean)
-                    labels[(mol, m["name"])] = m["classification"]
-        scored_e = classify_all_modes(scorer_e, final_e, th, scheme="threeway")
-        for m in scored_e:
-            labels[("benzene_EMIT", m["name"])] = m["classification"]
+        for (mol, slot), (tr_label, tr_score) in tr_by_mol_slot.items():
+            is_clean = (tr_label == slot and tr_score is not None
+                        and abs(tr_score) >= tau_TR)
+            correct += int(is_clean)
+            labels[(mol, slot)] = is_clean
+        for name, (tr_label, tr_score) in tr_emit.items():
+            is_flagged = tr_label is not None and abs(tr_score) >= tau_TR
+            labels[("benzene_EMIT", name)] = is_flagged
 
         accuracy = correct / total if total else float("nan")
         if prev_labels is None:
@@ -275,14 +298,20 @@ def calibrate(lib_df, data_dir="data", tau_grid=DEFAULT_TAU_GRID, preferred_tau_
     return thresholds, result, sweep_df
 
 
-def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
+def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95, scheme="binary"):
     """Clean-category confusion matrix + per-category precision/recall
     (fig:confusion's numbers), restricted to the single-centre AB_n scope
     (SINGLE_CENTRE_ONLY_EXCLUDE, applied first). Reference labels:
     'stretch'/'bend' for internal rows, 'translation'/'rotation' for
-    external rows (exact ground truth, Eckart-Sayvetz). Predicted labels
-    come from the already-computed 'predicted_label' column
-    (score_geometry_molecule(), full Algorithm 1).
+    external rows (exact ground truth, Eckart-Sayvetz). Predicted category
+    (2026-08-25 restructuring, see src/classifier.py's module docstring):
+    the canonical rule `predicted_category(predicted_tr_label,
+    vib_label(V_Stretch, thresholds, scheme))` -- the Step-3 winning slot if
+    this mode was assigned one (`predicted_tr_label`), else a FRESH Step-2
+    vib_label recomputed from `V_Stretch` under `thresholds`/`scheme` (not
+    the already-stored `predicted_vib_label` column, so a caller passing
+    alternate thresholds -- e.g. a sweep -- gets genuinely re-derived
+    labels, not the stale ones baked into library_scores.csv).
 
     Returns {'acceptance_floor', 'per_category': {...}, 'floor_met',
     'confusion_table': DataFrame} -- the contingency table for fig:confusion.
@@ -297,14 +326,14 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
     `ideal=='yes'` population, so no ideal-tier row can land on the wrong
     side of its own defining boundary.
     """
-    from src.classifier import vib_label, classification_bucket
+    from src.classifier import classification_bucket
 
     # Applied first, regardless of whether the caller already pre-filtered.
     lib_df = filter_single_centre_library(lib_df)
 
     # classification_bucket() does the label->bucket mapping logically
-    # (src/classifier.py), not via a flat dict, since clean/mixed-external
-    # labels are 6 distinct axis-specific strings each (e.g. "Tx".."Rz*").
+    # (src/classifier.py), not via a flat dict, since external slot labels
+    # are 6 distinct axis-specific strings each (e.g. "Tx".."Rz").
 
     df = lib_df.copy()
     df = df[df["ref_label"].notna()]
@@ -320,13 +349,10 @@ def confusion_matrix_stats(lib_df, thresholds, acceptance_floor=0.95):
     _KNOWN_REF_LABELS = ("stretch", "bend", "translation", "rotation")
     df = df[df["ref_label"].isin(_KNOWN_REF_LABELS)]
 
-    def _predict(row):
-        if row["kind"] == "internal" and not row["has_geometry"]:
-            return classification_bucket(vib_label(row["V_Stretch"], thresholds))
-        return classification_bucket(row["predicted_label"])
-
     df = df.copy()
-    df["_pred_bucket"] = df.apply(_predict, axis=1)
+    fresh_vib = df["V_Stretch"].map(lambda v: vib_label(v, thresholds, scheme))
+    pred_cat = predicted_category_column(df["predicted_tr_label"], fresh_vib)
+    df["_pred_bucket"] = pred_cat.map(classification_bucket)
 
     confusion_table = pd.crosstab(df["ref_label"], df["_pred_bucket"])
 

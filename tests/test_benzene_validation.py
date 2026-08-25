@@ -29,7 +29,9 @@ from src.benzene_validation import (                               # noqa: E402
     benzene_mixed_bond_diagnostic, benzene_worked_examples, MOLECULE,
     benzene_internal_confusion_matrix, benzene_sb_vs_stretch_bond_diagnostic,
 )
-from src.classifier import MIXED_STRETCH_BEND, BENDING               # noqa: E402
+from src.classifier import (                                          # noqa: E402
+    MIXED_STRETCH_BEND, BENDING, predicted_category_column,
+)
 
 LIB_CSV = os.path.join(ROOT, "data", "results", "library_scores.csv")
 
@@ -242,13 +244,16 @@ def test_benzene_sb_vs_stretch_bond_diagnostic_raises_if_no_sb_modes():
 
 
 def test_benzene_normal_detail_raises_on_incomplete_merge():
-    """Fail-loud check: if a ref_label row lacks a predicted_label (merge
-    never happened), the function must raise, not silently validate against
-    a partial dataset."""
+    """Fail-loud check: if a ref_label row lacks BOTH predicted_tr_label and
+    predicted_vib_label (merge never happened -- 2026-08-25: these are the
+    two real source columns predicted_category_column() combines into the
+    single predicted_label the function raises on), the function must
+    raise, not silently validate against a partial dataset."""
     lib_df = _lib().copy()
     mask = (lib_df["molecule"] == MOLECULE) & (lib_df["ref_label"] == "bend")
     idx = lib_df[mask].index[0]
-    lib_df.loc[idx, "predicted_label"] = None
+    lib_df.loc[idx, "predicted_tr_label"] = None
+    lib_df.loc[idx, "predicted_vib_label"] = None
     try:
         benzene_normal_reference_detail(lib_df)
         assert False, "expected ValueError for an incomplete geometry merge"
@@ -375,11 +380,16 @@ def test_benzene_worked_examples_identifies_ring_breathing_and_ch_stretch():
 
 
 def test_benzene_worked_examples_raises_if_fewer_than_two_stretch_modes():
+    """2026-08-25: benzene_worked_examples() materializes its own
+    predicted_label from (predicted_tr_label, predicted_vib_label) --
+    mutate predicted_vib_label (the internal-row source column) to collapse
+    the population, same net effect as the retired single-column mutation."""
     lib_df = _lib().copy()
-    mask = (lib_df["molecule"] == MOLECULE) & (lib_df["predicted_label"] == "S")
+    predicted = predicted_category_column(lib_df["predicted_tr_label"], lib_df["predicted_vib_label"])
+    mask = (lib_df["molecule"] == MOLECULE) & (predicted == "S")
     idxs = lib_df[mask].index
     # Collapse all but one STRETCHING mode into BENDING, leaving only 1.
-    lib_df.loc[idxs[1:], "predicted_label"] = BENDING
+    lib_df.loc[idxs[1:], "predicted_vib_label"] = BENDING
     try:
         benzene_worked_examples(lib_df)
         assert False, "expected ValueError with fewer than 2 STRETCHING modes"

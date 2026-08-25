@@ -1,8 +1,11 @@
 {
   "v_weighting": "mu",
-  "git_commit": "1b313b77b04fb2ef9668556f0cd1fb8189854766",
-  "timestamp": "2026-08-20T18:24:00",
+  "git_commit": "c034c4e3310736f97176ea2f8815645231ac17eb",
+  "timestamp": "2026-08-25T19:43:57",
   "stages_run": [
+    "ped",
+    "benzene_validation",
+    "benchmark",
     "figures"
   ],
   "molecules": [
@@ -34,6 +37,9 @@
     "XeF2Cl2"
   ],
   "outputs": [
+    "('data\\\\results\\\\benzene_internal_confusion_matrix.csv', 'data\\\\results\\\\benzene_internal_confusion_summary.csv')",
+    "('data\\\\results\\\\benzene_mixed_bond_diagnostic.csv', 'data\\\\results\\\\benzene_mixed_degenerate_pairs.csv')",
+    "('data\\\\results\\\\benzene_normal_reference_detail.csv', 'data\\\\results\\\\benzene_normal_reference_summary.csv')",
     "data/figures\\fig_benzene.pdf",
     "data/figures\\fig_benzene.png",
     "data/figures\\fig_benzene_confusion.pdf",
@@ -85,6 +91,29 @@
     "data/figures\\fig_transferability_confusion.pdf",
     "data/figures\\fig_transferability_confusion.png",
     "data/figures\\fig_transferability_confusion_threeway.pdf",
-    "data/figures\\fig_transferability_confusion_threeway.png"
+    "data/figures\\fig_transferability_confusion_threeway.png",
+    "data\\results\\B3N3H6_full_ped_table.csv",
+    "data\\results\\C10H16_full_ped_table.csv",
+    "data\\results\\C10H8_full_ped_table.csv",
+    "data\\results\\C2H4_full_ped_table.csv",
+    "data\\results\\C3H6_full_ped_table.csv",
+    "data\\results\\C3O3H6_full_ped_table.csv",
+    "data\\results\\C4H4_full_ped_table.csv",
+    "data\\results\\C6H4F2_full_ped_table.csv",
+    "data\\results\\C6H6_full_ped_table.csv",
+    "data\\results\\C7H8_full_ped_table.csv",
+    "data\\results\\CH3CN_full_ped_table.csv",
+    "data\\results\\CH3COCH3_full_ped_table.csv",
+    "data\\results\\CH4_full_ped_table.csv",
+    "data\\results\\CHCl3_full_ped_table.csv",
+    "data\\results\\H2O_full_ped_table.csv",
+    "data\\results\\HCOOH_full_ped_table.csv",
+    "data\\results\\HOCl_full_ped_table.csv",
+    "data\\results\\PCl5_full_ped_table.csv",
+    "data\\results\\XeF2Cl2_full_ped_table.csv",
+    "data\\results\\benzene_sb_vs_stretch_bond_diagnostic.csv",
+    "data\\results\\benzene_worked_examples.csv",
+    "data\\results\\combined_ped_vs_scores.csv",
+    "data\\results\\cpu_time_benchmark.csv"
   ]
 }

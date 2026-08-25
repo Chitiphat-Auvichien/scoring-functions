@@ -87,8 +87,12 @@ from src.classifier import classify_all_modes  # noqa: E402
 # looser than that.
 DEFAULT_FREQ_TOL_CM1 = 2.0
 
+# "vib_label" (renamed from "label" 2026-08-25 -- see src/classifier.py's
+# Step 2/Step 3 split): this module only ever touches internal ("Vib N")
+# rows, which never carry a tr_label/tr_score of their own, so no
+# corresponding tr_label/tr_score column is needed here.
 _COMBINED_BASE_COLUMNS = [
-    "Molecule", "Mode", "Freq", "V_Stretch", "label",
+    "Molecule", "Mode", "Freq", "V_Stretch", "vib_label",
     "PED_Stretch_pct", "PED_Bend_pct", "VEDA_Freq", "Freq_Residual_cm-1",
 ]
 
@@ -580,7 +584,7 @@ def merge_molecule_ped(molecule, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_TOL
             'Mode': df.loc[orig_idx, 'Mode'],
             'Freq': df.loc[orig_idx, 'Freq'],
             'V_Stretch': v_stretch,
-            'label': df.loc[orig_idx, 'label'],
+            'vib_label': df.loc[orig_idx, 'vib_label'],
             'PED_Stretch_pct': stretch,
             'PED_Bend_pct': bend,
             'VEDA_Freq': veda_freq,

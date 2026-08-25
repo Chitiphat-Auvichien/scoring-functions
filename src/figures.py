@@ -3248,20 +3248,26 @@ def plot_ped_vs_vscore(
     out_dir="data/figures",
     label="fig_ped_vs_vscore",
     tau_SB=None,
-    fit_degree=1,
-    ylabel=r"$s[\mathrm{V_S}]$",
+    ylabel=r"$100\,s[\mathrm{V_S}]$",
     label_source_csv=None,
     color_by="reference",
 ):
     """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
-    molecule-level stretch score s[V_S] (``V_Stretch``), one point per
-    physical frequency (degenerate modes averaged together via
-    _collapse_degenerate_freqs -- see its docstring) of
-    combined_ped_vs_scores.csv, fit with a straight line (ordinary least
-    squares, reported with R^2) summarizing the overall trend. One marker
-    shape (circle) for all points -- color alone distinguishes the category,
-    so varying marker shape too would be a redundant second encoding of the
-    same distinction (matches fig:bondscores' marker="o" override).
+    molecule-level stretch score s[V_S] (``V_Stretch``, plotted as a
+    percentage -- ``100 * V_Stretch`` -- so both axes share the same 0-100
+    scale), one point per physical frequency (degenerate modes averaged
+    together via _collapse_degenerate_freqs -- see its docstring) of
+    combined_ped_vs_scores.csv. A parity (y=x) line replaces a fitted
+    trend -- this is an agreement/calibration check against an independent
+    ground truth (see ``color_by`` below), not a correlation to be fit --
+    annotated with the mean absolute error (MAE, in percentage points),
+    ML-parity-plot style, instead of R^2. The axes share identical limits
+    and the axes box is forced square (``ax.set_aspect("equal")``) so the
+    y=x line is visually a true 45 degrees and reads as "perfect
+    agreement". One marker shape (circle) for all points -- color alone
+    distinguishes the category, so varying marker shape too would be a
+    redundant second encoding of the same distinction (matches
+    fig:bondscores' marker="o" override).
 
     ``color_by`` selects what the point color/legend encodes:
       - "reference" (default): the literature/PED ground-truth S/B/SB label,
@@ -3307,23 +3313,19 @@ def plot_ped_vs_vscore(
     vote sees the overridden per-row labels, matching how the canonical path
     already collapses labels baked in at tau_SB=0.50.
 
-    ``fit_degree`` selects the OLS polynomial order for the summary curve
-    (default 1, matching the canonical figure exactly -- zero behavior
-    change). 2 fits a quadratic instead; the legend label switches from
-    "linear fit" to "quadratic fit" accordingly.
-
-    ``ylabel`` overrides the y-axis label (default the canonical s[V_S]
-    math label; e.g. archive_unweighted callers pass a label that says
-    "Unweighted" to distinguish this from the canonical mu-weighted figure
-    of the same name).
+    ``ylabel`` overrides the y-axis label (default the canonical
+    100*s[V_S] math label; e.g. archive_unweighted callers pass a label
+    that says "Unweighted" to distinguish this from the canonical
+    mu-weighted figure of the same name -- keep any override on the same
+    x100 percentage scale as the plotted data).
 
     ``label_source_csv``, if given, points at a DIFFERENT combined_ped_vs_
     scores.csv (matched to this one's rows by Molecule+Mode) whose own
     V_Stretch column is used to derive the S/B coloring via
     ``vib_label_binary(v, tau_SB)`` -- ``tau_SB`` still applies here (falls
     back to ``Thresholds.calibrated().tau_SB`` the same as the no-override
-    path). The plotted x/y (``PED_Stretch_pct``/``V_Stretch``) and the
-    fitted curve always come from ``csv_input`` -- this only swaps which
+    path). The plotted x/y (``PED_Stretch_pct``/``V_Stretch``) and the MAE
+    always come from ``csv_input`` -- this only swaps which
     definition's classification colors the points, e.g. coloring an
     unweighted-definition scatter by the canonical mu-weighted S/B split.
     Raises ValueError if any row fails to find a Molecule+Mode match.
@@ -3369,42 +3371,50 @@ def plot_ped_vs_vscore(
     df = _collapse_degenerate_freqs(
         df, value_cols=["PED_Stretch_pct", "V_Stretch"], label_col="label")
 
+    df["V_Stretch_pct"] = df["V_Stretch"] * 100
+
     th = Thresholds.calibrated()
     if tau_SB is not None:
         th = dataclasses.replace(th, tau_SB=tau_SB)
 
     color_map = REF_CATEGORY_COLOR if color_by == "reference" else None
-    fig, ax = plt.subplots(figsize=(6.2, 3.4))
+    fig, ax = plt.subplots(figsize=(4.6, 4.6))
     for code, cat in _LABEL_CODE_TO_CATEGORY.items():
         sub = df[df["label"] == code]
         if sub.empty:
             continue
         kw = _marker_kwargs(cat, marker="o", color_map=color_map)
-        ax.scatter(sub["PED_Stretch_pct"], sub["V_Stretch"], s=16,
+        ax.scatter(sub["PED_Stretch_pct"], sub["V_Stretch_pct"], s=16,
                    zorder=3, label=CATEGORY_LABEL[cat], **kw)
 
     # tau_SB reference line (this framework's own bend/stretch cutoff on the
-    # y-axis quantity s[V_S]) -- same axhline + text convention as every
-    # other tau_SB-annotated figure (e.g. plot_boxplots), NOT added to the
-    # legend (in-axes text label instead, left of the y-axis at the line's
-    # own height).
-    ax.axhline(th.tau_SB, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-    ax.text(0.01, th.tau_SB, r"$\tau_{\mathrm{SB}}$", ha="left", va="bottom",
+    # y-axis quantity s[V_S], rescaled to the same x100 percentage scale as
+    # the plotted data) -- same axhline + text convention as every other
+    # tau_SB-annotated figure (e.g. plot_boxplots), NOT added to the legend
+    # (in-axes text label instead, left of the y-axis at the line's own
+    # height).
+    tau_SB_pct = th.tau_SB * 100
+    ax.axhline(tau_SB_pct, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
+    ax.text(0.01, tau_SB_pct, r"$\tau_{\mathrm{SB}}$", ha="left", va="bottom",
             color=COLORS["threshold"], transform=ax.get_yaxis_transform())
 
     x = df["PED_Stretch_pct"].to_numpy(float)
-    y = df["V_Stretch"].to_numpy(float)
-    coeffs, r2 = _linear_fit_r2(x, y, degree=fit_degree)
-    fit_name = {1: "linear", 2: "quadratic"}.get(fit_degree, f"degree-{fit_degree}")
-    xx = np.linspace(x.min(), x.max(), 200)
-    ax.plot(xx, np.polyval(coeffs, xx), ls="--", lw=1.2,
-            color=COLORS["threshold"], zorder=4,
-            label=f"{fit_name} fit ($R^2$={r2:.2f})")
+    y = df["V_Stretch_pct"].to_numpy(float)
+    mae = float(np.mean(np.abs(y - x)))
+
+    # y=x parity line (not a fit): both axes are the same 0-100 percentage
+    # quantity, so exact agreement with the independent PED reference is
+    # the diagonal, not a fitted trend. MAE (mean absolute error, in
+    # percentage points) reported ML-parity-plot style instead of R^2.
+    lims = (-3, 103)
+    ax.plot(lims, lims, ls="--", lw=1.2, color=COLORS["threshold"], zorder=4,
+            label=r"$y=x$" + f" (MAE={mae:.1f})")
 
     ax.set_xlabel(r"$\%\nu$")
     ax.set_ylabel(ylabel)
-    ax.set_xlim(-3, 103)
-    ax.set_ylim(-0.03, 1.05)
+    ax.set_xlim(*lims)
+    ax.set_ylim(*lims)
+    ax.set_aspect("equal", adjustable="box")
     ax.legend(loc="upper left", frameon=False, handletextpad=0.4,
               labelspacing=0.35, borderaxespad=0.3, fontsize=LEGEND_FONTSIZE)
 
@@ -3417,9 +3427,7 @@ def plot_ped_vs_vscore(
         "n_frequency_points": len(df),
         "n_raw_modes_before_degenerate_averaging": n_raw_modes,
         "n_molecules": df["Molecule"].nunique(),
-        "fit_degree": fit_degree,
-        "fit_coeffs": tuple(float(c) for c in coeffs),
-        "r2": float(r2),
+        "mae": mae,
         "color_by": color_by,
         "tau_SB": th.tau_SB,
     }

@@ -3244,25 +3244,46 @@ def _linear_fit_r2(x, y, degree=1):
 def plot_ped_vs_vscore(
     csv_input="data/results/combined_ped_vs_scores.csv",
     mol_list_csv="data/mol_list_method.csv",
+    characterised_modes_csv="data/characterised_modes.csv",
     out_dir="data/figures",
     label="fig_ped_vs_vscore",
     tau_SB=None,
     fit_degree=1,
     ylabel=r"$s[\mathrm{V_S}]$",
     label_source_csv=None,
+    color_by="reference",
 ):
     """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
     molecule-level stretch score s[V_S] (``V_Stretch``), one point per
     physical frequency (degenerate modes averaged together via
     _collapse_degenerate_freqs -- see its docstring) of
     combined_ped_vs_scores.csv, fit with a straight line (ordinary least
-    squares, reported with R^2) summarizing the overall trend. Points colored/
-    colored by this framework's own S/B/SB classify_all_modes label (the
-    csv's own `label` column), reusing CATEGORY_COLOR/CATEGORY_LABEL as-is
-    via _LABEL_CODE_TO_CATEGORY. One marker shape (circle) for all points --
-    color alone distinguishes the category, so varying marker shape too
-    would be a redundant second encoding of the same distinction (matches
-    fig:bondscores' marker="o" override).
+    squares, reported with R^2) summarizing the overall trend. One marker
+    shape (circle) for all points -- color alone distinguishes the category,
+    so varying marker shape too would be a redundant second encoding of the
+    same distinction (matches fig:bondscores' marker="o" override).
+
+    ``color_by`` selects what the point color/legend encodes:
+      - "reference" (default): the literature/PED ground-truth S/B/SB label,
+        read from ``characterised_modes_csv``'s hand-curated `type` column
+        and joined onto each row by Molecule + mode number (parsed from the
+        `Mode` column, e.g. "Vib 6" -> 6; validated by exact Freq agreement
+        with the source csv). Uses REF_CATEGORY_COLOR (the Okabe-Ito
+        bend/stretch pair), matching every other reference-colored figure
+        in this module. This is the independent ground truth the y-axis
+        score is being validated against, so it does not depend on
+        V_Stretch/tau_SB at all -- coloring by the framework's OWN label
+        here would color the plot by (a thresholded version of) the same
+        quantity already on the y-axis. Raises ValueError if any row has no
+        Molecule+mode match in ``characterised_modes_csv``.
+      - "predicted": the original behavior -- color by this framework's own
+        S/B/SB classify_all_modes label (the csv's own `label` column, or
+        re-derived via `tau_SB`/`label_source_csv`, see below), reusing
+        CATEGORY_COLOR/CATEGORY_LABEL via _LABEL_CODE_TO_CATEGORY.
+
+    ``tau_SB``/``label_source_csv`` only affect "predicted" coloring
+    (accepted but unused when color_by="reference", since reference labels
+    are fixed ground truth, not derived from V_Stretch).
 
     Scoped to mol_type=='test' molecules only (the 9-molecule held-out
     transferability set): combined_ped_vs_scores.csv also happens to carry
@@ -3310,7 +3331,23 @@ def plot_ped_vs_vscore(
     df = df[df["Molecule"].isin(test_molecules)]
     df = df.dropna(subset=["PED_Stretch_pct", "V_Stretch"])
     n_raw_modes = len(df)
-    if label_source_csv is not None:
+    if color_by == "reference":
+        df = df.copy()
+        cm = pd.read_csv(characterised_modes_csv)[["molecule", "mode", "type"]]
+        cm = cm.assign(mode=pd.to_numeric(cm["mode"], errors="coerce"))
+        mode_num = pd.to_numeric(df["Mode"].str.extract(r"(\d+)")[0], errors="coerce")
+        df = df.assign(_mode_num=mode_num).merge(
+            cm, how="left", left_on=["Molecule", "_mode_num"],
+            right_on=["molecule", "mode"])
+        if df["type"].isna().any():
+            missing = df.loc[df["type"].isna(), ["Molecule", "Mode"]]
+            raise ValueError(
+                f"characterised_modes_csv={characterised_modes_csv!r} has no "
+                f"Molecule+mode match for {len(missing)} row(s), e.g. "
+                f"{missing.iloc[0].to_dict()}")
+        df["label"] = df["type"]
+        df = df.drop(columns=["_mode_num", "molecule", "mode", "type"])
+    elif label_source_csv is not None:
         df = df.copy()
         src_tau_SB = tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB
         src = pd.read_csv(label_source_csv).dropna(subset=["V_Stretch"])
@@ -3328,12 +3365,13 @@ def plot_ped_vs_vscore(
     df = _collapse_degenerate_freqs(
         df, value_cols=["PED_Stretch_pct", "V_Stretch"], label_col="label")
 
+    color_map = REF_CATEGORY_COLOR if color_by == "reference" else None
     fig, ax = plt.subplots(figsize=(6.2, 3.4))
     for code, cat in _LABEL_CODE_TO_CATEGORY.items():
         sub = df[df["label"] == code]
         if sub.empty:
             continue
-        kw = _marker_kwargs(cat, marker="o")
+        kw = _marker_kwargs(cat, marker="o", color_map=color_map)
         ax.scatter(sub["PED_Stretch_pct"], sub["V_Stretch"], s=16,
                    zorder=3, label=CATEGORY_LABEL[cat], **kw)
 
@@ -3365,7 +3403,11 @@ def plot_ped_vs_vscore(
         "fit_degree": fit_degree,
         "fit_coeffs": tuple(float(c) for c in coeffs),
         "r2": float(r2),
-        "tau_SB": tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB,
+        "color_by": color_by,
+        "tau_SB": (
+            None if color_by == "reference"
+            else tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB
+        ),
     }
 
 

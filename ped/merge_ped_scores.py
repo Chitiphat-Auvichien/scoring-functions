@@ -674,6 +674,43 @@ def build_combined_table(molecules, repo_root=_REPO_ROOT, freq_tol=DEFAULT_FREQ_
 
 
 # ---------------------------------------------------------------------------
+# Shared PED-aggregate lookup (consumed by src/figures.py and
+# src/library_ingest.py so both the transferability-confusion misclassified
+# CSV and library_scores.csv join PED_Stretch_pct/PED_Bend_pct the same way)
+# ---------------------------------------------------------------------------
+
+_COMBINED_MODE_RE = re.compile(r'^Vib (\d+)$')
+
+
+def load_ped_lookup(combined_csv_path=None):
+    """Read data/results/combined_ped_vs_scores.csv (or `combined_csv_path`)
+    and return {(molecule, mode_index:int): (PED_Stretch_pct, PED_Bend_pct)}.
+
+    combined_ped_vs_scores.csv's 'Mode' column is text ('Vib N', N matching
+    <mol>_normal.csv's row order -- see build_combined_table/merge_molecule_
+    ped above), which is the same 1-based internal mode_index used by
+    library_scores.csv/data/characterised_modes.csv, so 'Vib N' -> int(N) is
+    a direct match, no frequency re-matching needed here (that already
+    happened once, in match_modes_by_frequency, when this CSV was built).
+    Molecules absent from the combined CSV (no data/ved/<mol>.ved+.vdf yet)
+    simply have no entries -- callers should treat a missing key as NaN, not
+    an error.
+    """
+    if combined_csv_path is None:
+        combined_csv_path = os.path.join(_REPO_ROOT, 'data', 'results',
+                                          'combined_ped_vs_scores.csv')
+    df = pd.read_csv(combined_csv_path)
+    lookup = {}
+    for _, row in df.iterrows():
+        m = _COMBINED_MODE_RE.match(str(row['Mode']))
+        if not m:
+            continue
+        key = (row['Molecule'], int(m.group(1)))
+        lookup[key] = (row['PED_Stretch_pct'], row['PED_Bend_pct'])
+    return lookup
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 

@@ -1,7 +1,7 @@
 """Library ingest: builds data/results/library_scores.csv for every molecule
-in the JCC paper's roster, ``data/mol_list_method.csv`` (77 rows: 10 "ideal"
-single-centre AB_n shapes, 57 "non-ideal" substituted variants, 1
-"multi-centre" = benzene, 9 "test" = a held-out transferability-test set).
+in the JCC paper's roster, ``data/mol_list_method.csv`` (85 rows: 10 "ideal"
+single-centre AB_n shapes, 56 "non-ideal" substituted variants, 1
+"multi-centre" = benzene, 18 "test" = a held-out transferability-test set).
 ``data/mol_list_method.csv`` is the single source of truth; since 2026-08-11
 its ``molecule`` column doubles as the on-disk basename (the old, redundant
 ``basename`` column was dropped -- every on-disk file was already renamed to
@@ -27,6 +27,15 @@ Pipeline
    ``src/csv_label_ingest.py``'s CSVs, gated by a per-molecule frequency
    check (see that function's docstring). ``attach_ideal_tags()`` separately
    populates ``ideal`` from the roster's ``mol_type`` column.
+5. library_scores.csv is the single "gather everything" file, so three more
+   append-only columns groups are attached: ``attach_mode_metadata()``
+   (``description``/``sym``/``νₖ``/``Note``, internal rows only, reusing
+   ``attach_labels()``'s exact frequency gate), ``attach_roster_metadata()``
+   (``mol_type``/``shape``/``point_group``/``current_method``/
+   ``roster_note``, every row, unconditional like ``attach_ideal_tags()``),
+   and ``attach_ped_percentages()`` (``PED_Stretch_pct``/``PED_Bend_pct``,
+   internal rows only, from ``data/results/combined_ped_vs_scores.csv`` --
+   NaN for the roster molecules with no VEDA4 output yet).
 
 ``data/data_score.csv`` is retired: every quantity it used to supply now
 comes from the engine (``d_CA``) or from ``characterised_modes.csv``/
@@ -35,10 +44,10 @@ comes from the engine (``d_CA``) or from ``characterised_modes.csv``/
 (not roster-restricted), preserving manually-curated literature columns.
 
 Output schema (``SCHEMA_COLUMNS``, unchanged names so ``src/calibrate.py``/
-``src/figures.py`` keep working). ``has_geometry`` is unconditionally
-``True`` (every roster molecule has on-disk geometry) but kept in the schema
-so downstream readers (e.g. ``src/calibrate.py``'s ``_load_geometry_pool``)
-don't need to change.
+``src/figures.py`` keep working -- new columns are appended, never inserted/
+renamed). ``has_geometry`` is unconditionally ``True`` (every roster
+molecule has on-disk geometry) but kept in the schema so downstream readers
+(e.g. ``src/calibrate.py``'s ``_load_geometry_pool``) don't need to change.
 """
 import os
 import warnings
@@ -71,6 +80,16 @@ SCHEMA_COLUMNS = [
     # Which eq:vscore bond weighting produced V_Stretch/s_AB on this row, so
     # the CSV is self-describing about its own scoring definition.
     "v_weighting",
+    # 2026-08-25: library_scores.csv becomes the single "gather everything"
+    # file -- these append-only columns are populated by
+    # attach_roster_metadata() (mol_type/shape/point_group/current_method/
+    # roster_note, every row), attach_mode_metadata() (description/sym/νₖ/
+    # Note, internal rows only, same frequency gate as attach_labels()) and
+    # attach_ped_percentages() (PED_Stretch_pct/PED_Bend_pct, internal rows
+    # only, NaN for roster molecules with no VEDA4 output yet).
+    "mol_type", "shape", "point_group", "current_method", "roster_note",
+    "description", "sym", "νₖ", "Note",
+    "PED_Stretch_pct", "PED_Bend_pct",
 ]
 
 
@@ -290,35 +309,32 @@ def test_tier_molecules(data_dir="data"):
     return frozenset(roster.loc[roster["mol_type"] == "test", "molecule"])
 
 
-def attach_labels(df, csv_tables, label_lookup, freq_atol=0.05, freq_rtol=1e-4):
-    """Join ref_label/ref_key onto `df`'s internal rows, molecule by
-    molecule, gated by a whole-molecule frequency-agreement check against
-    `csv_tables["characterised_modes"]`. This gate is NOT dead code: a
-    single mismatched or missing mode disqualifies the WHOLE molecule's
-    label join (no half-merge), catching real mode-index mismatches between
-    the engine's parsed frequency and characterised_modes.csv's independent
-    expectation. Scores themselves are never affected by a failed join --
-    only ref_label/ref_key are left null. `ideal` is set separately by
-    `attach_ideal_tags()` (a structural roster property, ungated).
+def _gated_matches(df, cm, freq_atol=0.05, freq_rtol=1e-4):
+    """Shared per-molecule frequency-gated match between `df`'s internal rows
+    and `cm` (characterised_modes.csv, with 'freq'/'mode' already coerced
+    numeric) -- factored out of attach_labels() so attach_mode_metadata()
+    can join different columns off the exact same gate: a single mismatched
+    or missing mode disqualifies the WHOLE molecule's join (no half-merge),
+    catching real mode-index mismatches between the engine's parsed
+    frequency and characterised_modes.csv's independent expectation.
 
-    Returns (df, skip_report): skip_report is a list of {'molecule',
-    'n_mismatched', 'example': (mode_index, engine_freq, cm_freq)} dicts, one
-    per molecule whose join was skipped. A molecule entirely absent from
-    characterised_modes.csv is left untouched with no skip-report entry --
-    not an error, just no ground truth to gate against.
+    Returns (matches_by_mol, skip_report):
+      - matches_by_mol: {molecule: [(df_idx, cm_row), ...]} for molecules
+        that passed the gate.
+      - skip_report: list of {'molecule', 'n_mismatched', 'example':
+        (mode_index, engine_freq, cm_freq)} dicts, one per molecule whose
+        join was skipped. A molecule entirely absent from
+        characterised_modes.csv has no entry in either dict -- not an
+        error, just no ground truth to gate against.
     """
-    cm = csv_tables["characterised_modes"].copy()
-    cm["freq"] = pd.to_numeric(cm["freq"], errors="coerce")
-    cm["mode"] = pd.to_numeric(cm["mode"], errors="coerce")
     cm_molecules = set(cm["molecule"].dropna().unique())
-
     cm_by_key = {}
     for _, r in cm.iterrows():
         if pd.isna(r["mode"]):
             continue
         cm_by_key[(r["molecule"], int(r["mode"]))] = r
 
-    df = df.copy()
+    matches_by_mol = {}
     skip_report = []
     for mol in df["molecule"].unique():
         if mol not in cm_molecules:
@@ -349,6 +365,31 @@ def attach_labels(df, csv_tables, label_lookup, freq_atol=0.05, freq_rtol=1e-4):
             })
             continue
 
+        matches_by_mol[mol] = matched
+
+    return matches_by_mol, skip_report
+
+
+def attach_labels(df, csv_tables, label_lookup, freq_atol=0.05, freq_rtol=1e-4):
+    """Join ref_label/ref_key onto `df`'s internal rows, molecule by
+    molecule, gated by a whole-molecule frequency-agreement check against
+    `csv_tables["characterised_modes"]` (see `_gated_matches`). Scores
+    themselves are never affected by a failed join -- only ref_label/ref_key
+    are left null. `ideal` is set separately by `attach_ideal_tags()` (a
+    structural roster property, ungated); `description`/`sym`/`νₖ`/`Note`
+    are set separately by `attach_mode_metadata()` (same gate, different
+    columns).
+
+    Returns (df, skip_report): see `_gated_matches`.
+    """
+    cm = csv_tables["characterised_modes"].copy()
+    cm["freq"] = pd.to_numeric(cm["freq"], errors="coerce")
+    cm["mode"] = pd.to_numeric(cm["mode"], errors="coerce")
+
+    df = df.copy()
+    matches_by_mol, skip_report = _gated_matches(df, cm, freq_atol, freq_rtol)
+
+    for mol, matched in matches_by_mol.items():
         for idx, cm_row in matched:
             mode_index = int(df.at[idx, "mode_index"])
             ref_label, ref_key = csv_label_ingest.get_label(label_lookup, mol, mode_index)
@@ -356,6 +397,87 @@ def attach_labels(df, csv_tables, label_lookup, freq_atol=0.05, freq_rtol=1e-4):
             df.at[idx, "ref_key"] = ref_key
 
     return df, skip_report
+
+
+def attach_mode_metadata(df, csv_tables, freq_atol=0.05, freq_rtol=1e-4):
+    """Join description/sym/νₖ/Note onto `df`'s internal rows from
+    characterised_modes.csv, reusing the exact same per-molecule frequency
+    gate as attach_labels() (`_gated_matches`) so a molecule whose label
+    join is skipped there doesn't get a bogus half-join here either.
+    Deliberately does NOT pull characterised_modes.csv's own 'shape' column
+    -- that field is sparser and differently-scoped than mol_list_method.csv's
+    'shape' (attach_roster_metadata()), which is used instead. No separate
+    skip_report -- attach_labels()'s warnings already cover the same gate.
+    """
+    cm = csv_tables["characterised_modes"].copy()
+    cm["freq"] = pd.to_numeric(cm["freq"], errors="coerce")
+    cm["mode"] = pd.to_numeric(cm["mode"], errors="coerce")
+
+    df = df.copy()
+    matches_by_mol, _skip_report = _gated_matches(df, cm, freq_atol, freq_rtol)
+
+    for mol, matched in matches_by_mol.items():
+        for idx, cm_row in matched:
+            df.at[idx, "description"] = cm_row.get("description")
+            df.at[idx, "sym"] = cm_row.get("sym")
+            df.at[idx, "νₖ"] = cm_row.get("νₖ")
+            df.at[idx, "Note"] = cm_row.get("Note")
+
+    return df
+
+
+_ROSTER_METADATA_COLS = {
+    "mol_type": "mol_type", "shape": "shape", "point_group": "point_group",
+    "current_method": "current_method", "roster_note": "note",
+}
+
+
+def attach_roster_metadata(df, roster):
+    """Populate df['mol_type']/'shape'/'point_group'/'current_method'/
+    'roster_note' for EVERY row (external and internal alike -- these are
+    molecule-level roster properties, not per-mode) from
+    mol_list_method.csv. Unconditional, like attach_ideal_tags() -- NOT
+    gated by attach_labels()'s frequency-agreement check, since none of
+    these come from a per-mode literature match that could be stale.
+    `roster_note` is mol_list_method.csv's own 'note' column, renamed to
+    avoid colliding with characterised_modes.csv's per-mode 'Note'
+    (attach_mode_metadata()).
+    """
+    df = df.copy()
+    roster_by_mol = roster.set_index("molecule")
+    for out_col, roster_col in _ROSTER_METADATA_COLS.items():
+        df[out_col] = df["molecule"].map(roster_by_mol[roster_col])
+    return df
+
+
+def attach_ped_percentages(df, data_dir="data"):
+    """Populate df['PED_Stretch_pct']/['PED_Bend_pct'] for internal rows
+    from data/results/combined_ped_vs_scores.csv
+    (ped.merge_ped_scores.load_ped_lookup), keyed by (molecule, mode_index).
+    NaN for external rows and for the roster molecules with no VEDA4 output
+    yet (most of it -- see ped/README.md) or when the combined CSV hasn't
+    been generated at all (`python main.py --ped-merge-all` first).
+    """
+    from ped.merge_ped_scores import load_ped_lookup
+
+    df = df.copy()
+    df["PED_Stretch_pct"] = np.nan
+    df["PED_Bend_pct"] = np.nan
+
+    combined_path = os.path.join(data_dir, "results", "combined_ped_vs_scores.csv")
+    if not os.path.isfile(combined_path):
+        return df
+
+    lookup = load_ped_lookup(combined_path)
+    internal_idx = df.index[df["kind"] == "internal"]
+    for idx in internal_idx:
+        key = (df.at[idx, "molecule"], int(df.at[idx, "mode_index"]))
+        if key in lookup:
+            stretch, bend = lookup[key]
+            df.at[idx, "PED_Stretch_pct"] = stretch
+            df.at[idx, "PED_Bend_pct"] = bend
+
+    return df
 
 
 _MOL_TYPE_TO_IDEAL = {"ideal": "yes", "non-ideal": "no"}  # multi-centre -> None (n/a)
@@ -427,8 +549,20 @@ def _build_library_scores(data_dir, thresholds, return_skip_report):
         all_rows.extend(rows)
 
     df = pd.DataFrame(all_rows, columns=SCHEMA_COLUMNS)
+    # Unlike ref_label/ideal/ref_key (explicitly seeded to None per-row by
+    # score_geometry_molecule(), so already object dtype), these
+    # gather-everything columns have no row-dict entries anywhere and would
+    # otherwise start as all-NaN float64 -- cast up front so the per-cell
+    # string assignment in attach_mode_metadata()/attach_roster_metadata()
+    # below doesn't trip pandas' incompatible-dtype FutureWarning.
+    for col in ("mol_type", "shape", "point_group", "current_method", "roster_note",
+                "description", "sym", "νₖ", "Note"):
+        df[col] = df[col].astype(object)
     df, skip_report = attach_labels(df, csv_tables, label_lookup)
     df = attach_ideal_tags(df, roster)
+    df = attach_mode_metadata(df, csv_tables)
+    df = attach_roster_metadata(df, roster)
+    df = attach_ped_percentages(df, data_dir)
 
     for molecule, base, err in load_errors:
         warnings.warn(

@@ -432,14 +432,26 @@ def test_schema_columns_includes_mu_k_irrep_and_d_ca():
     (2026-07-08 data_score.csv retirement) and v_weighting (2026-08-14
     reduced-mass V-score variant) are appended to the end of the locked
     schema -- purely additive, existing columns untouched."""
-    assert SCHEMA_COLUMNS[-5:] == [
+    assert SCHEMA_COLUMNS[-16:-11] == [
         "reduced_mass", "force_constant", "irrep", "d_CA", "v_weighting",
     ]
-    assert SCHEMA_COLUMNS[:-5] == [
+    assert SCHEMA_COLUMNS[:-16] == [
         "molecule", "mode_index", "kind", "freq", "ref_label", "ideal",
         "V_Stretch", "delta_b_mean", "s_AB", "rel_db", "has_geometry",
         "predicted_label", "predicted_annotation",
         "Tx", "Ty", "Tz", "Rx", "Ry", "Rz", "ref_key",
+    ]
+
+
+def test_schema_columns_includes_gather_everything_metadata():
+    """2026-08-25: library_scores.csv becomes the single gather-everything
+    file -- roster/mode-metadata/PED columns are appended to the end of the
+    locked schema, purely additive, same convention as the previous append
+    documented in test_schema_columns_includes_mu_k_irrep_and_d_ca."""
+    assert SCHEMA_COLUMNS[-11:] == [
+        "mol_type", "shape", "point_group", "current_method", "roster_note",
+        "description", "sym", "νₖ", "Note",
+        "PED_Stretch_pct", "PED_Bend_pct",
     ]
 
 

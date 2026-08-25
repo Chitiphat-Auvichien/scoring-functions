@@ -1,18 +1,29 @@
-molecule,mode_index,kind,freq,irrep,V_Stretch,predicted_label,ref_category,predicted_category,description,ref
-B3N3H6,9,internal,854.2276,A1',0.6345574703873492,S,B,S,In-plane sym ring deformation,Par2018
-C10H8,13,internal,761.6029,AG,0.4739784302869582,S,B,S,Skeletal distortion,Lip1955
-C10H8,24,internal,1031.5824,AG,0.5378026765835757,S,B,S,CH bending,Lip1955
-C10H8,27,internal,1209.0796,B2U,0.7066178196727345,S,B,S,CH bending,Lip1955
-C10H8,7,internal,526.5777,AG,0.4485742127460548,S,B,S,Skeletal distortion,Lip1955
-C2H4,6,internal,1434.0945,AG,0.5729001689644194,S,B,S,CH2 scis,Shi1972
-C3H6,3,internal,856.1975,E',0.5772992614124517,S,B,S,CH2 wagging,Bak1955
-C3H6,4,internal,856.1975,E',0.6630145612343131,S,B,S,CH2 wagging,Bak1955
-C3O3H6,7,internal,891.7765,E,0.7147261042165418,S,B,S,CH2 rocking,Mas1966
-C3O3H6,8,internal,891.7765,E,0.7480306477071264,S,B,S,CH2 rocking,Mas1966
-C6H4F2,16,internal,1045.816,A1,0.5374474919945066,S,B,S,beta(CH),Gre1963
-B3N3H6,14,internal,957.6947,A1',0.4044306497152817,B,S,B,In-plane B-N sym stretch (ring breathe),Par2018
-C10H8,35,internal,1501.0181,B3G,0.2938491591096361,B,S,B,CC stretching,Lip1955
-C10H8,36,internal,1512.2086,AG,0.2763307347006118,B,S,B,Gamma C stretching,Lip1955
-C4H4,12,internal,1123.5841,T2,0.4021838452393893,B,S,B,Anti-symm. C-C stretch,Wes2022
-C6H4F2,23,internal,1504.022,B2,0.3065027073866178,B,S,B,nu(CC),Gre1963
-C7H8,13,internal,926.766,A',0.4143532962494401,B,S,B,C-C stretch,Jen2005
+molecule,mode_index,kind,freq,irrep,V_Stretch,predicted_label,ref_category,predicted_category,PED_Stretch_pct,PED_Bend_pct,description,ref
+B3N3H6,9,internal,854.2276,A1',0.6345574703873492,S,B,S,61.0,40.0,In-plane sym ring deformation,Par2018
+C10H8,13,internal,761.6029,AG,0.4739784302869582,S,B,S,25.0,74.0,Skeletal distortion,Lip1955
+C10H8,24,internal,1031.5824,AG,0.5378026765835757,S,B,S,72.0,27.0,CH bending,Lip1955
+C10H8,27,internal,1209.0796,B2U,0.7066178196727345,S,B,S,55.0,43.0,CH bending,Lip1955
+C10H8,7,internal,526.5777,AG,0.4485742127460548,S,B,S,36.0,63.0,Skeletal distortion,Lip1955
+C2H4,6,internal,1434.0945,AG,0.5729001689644194,S,B,S,55.0,45.0,CH2 scis,Shi1972
+C3H6,3,internal,856.1975,E',0.5772992614124517,S,B,S,12.0,88.0,CH2 wagging,Bak1955
+C3H6,4,internal,856.1975,E',0.6630145612343131,S,B,S,93.0,15.0,CH2 wagging,Bak1955
+C3O3H6,7,internal,891.7765,E,0.7147261042165418,S,B,S,89.0,7.0,CH2 rocking,Mas1966
+C3O3H6,8,internal,891.7765,E,0.7480306477071264,S,B,S,42.0,55.0,CH2 rocking,Mas1966
+C6H4F2,16,internal,1045.816,A1,0.5374474919945066,S,B,S,61.0,38.0,beta(CH),Gre1963
+B3N3H6,14,internal,957.6947,A1',0.4044306497152817,B,S,B,37.0,62.0,In-plane B-N sym stretch (ring breathe),Par2018
+C10H8,35,internal,1501.0181,B3G,0.2938491591096361,B,S,B,22.0,77.0,CC stretching,Lip1955
+C10H8,36,internal,1512.2086,AG,0.2763307347006118,B,S,B,13.0,88.0,Gamma C stretching,Lip1955
+C4H4,12,internal,1123.5841,T2,0.4021838452393893,B,S,B,41.0,58.0,Anti-symm. C-C stretch,Wes2022
+C6H4F2,23,internal,1504.022,B2,0.3065027073866178,B,S,B,5.0,94.0,nu(CC),Gre1963
+C7H8,13,internal,926.766,A',0.4143532962494401,B,S,B,56.0,43.0,C-C stretch,Jen2005
+B3N3H6,17,internal,1102.726,E',0.3461843950473938,B,SB,B,20.0,79.0,In-plane N-H + B-H bend + B-N stretch,Par2018
+B3N3H6,18,internal,1102.726,E',0.3459472692477822,B,SB,B,44.0,58.0,In-plane N-H + B-H bend + B-N stretch,Par2018
+C3O3H6,13,internal,1148.3891,E,0.3765614668458016,B,SB,B,19.0,78.0,COC stretching (69) + CH2 rocking (14),Mas1966
+C3O3H6,14,internal,1148.3891,E,0.3712961875975671,B,SB,B,29.0,71.0,COC stretching (69) + CH2 rocking (14),Mas1966
+C3O3H6,15,internal,1229.7826,A1,0.0616248166626503,B,SB,B,1.0,101.0,CH2 rocking (54) + COC bending (24) + COC stretching (14),Mas1966
+C6H4F2,13,internal,891.3749,B2,0.2015744087114099,B,SB,B,46.0,56.0,X-sens.; CC bend + CF stretch,Gre1963
+B3N3H6,12,internal,947.5772,E',0.4401151909375259,S,SB,S,47.0,54.0,In-plane N-H + B-H bend + B-N stretch,Par2018
+B3N3H6,13,internal,947.5773,E',0.4225086214008463,S,SB,S,19.0,79.0,In-plane N-H + B-H bend + B-N stretch,Par2018
+C3O3H6,10,internal,945.4483,A1,0.5673823097526598,S,SB,S,56.0,45.0,COC stretching (67) + OCO bending (19),Mas1966
+C3O3H6,6,internal,697.917,A1,0.4275768174890652,S,SB,S,38.0,62.0,OCO bending (46) + CH2 rocking (19) + COC stretching (16),Mas1966
+C6H4F2,19,internal,1258.976,B2,0.5498079714895013,S,SB,S,53.0,49.0,X-sens.; CH bend + CF stretch,Gre1963

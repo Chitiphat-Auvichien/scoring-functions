@@ -1376,12 +1376,21 @@ def plot_transferability_confusion_binary(
     ``fig_transferability_confusion`` name/output, the paper's default
     scheme). The same 18-molecule ``mol_type=='test'``
     tier, but a 4x4 joint confusion matrix (T, R, B, S) -- literal literature
-    "SB" reference rows are DROPPED entirely (a different question than a
-    binary S/B classifier answers -- "is this mode genuinely mixed?" -- not
-    folded into a bucket the way the three-way figure's "SB" column does),
-    and every internal prediction goes through
+    "SB" reference rows are DROPPED from this matrix (a different question
+    than a binary S/B classifier answers -- "is this mode genuinely mixed?"
+    -- not folded into a bucket the way the three-way figure's "SB" column
+    does), and every internal prediction goes through
     ``vib_label_binary(V_Stretch, tau_SB)`` instead of the three-way
     ``predicted_label``/``classification_bucket`` vocabulary.
+
+    Those same literature-"SB" rows ARE surfaced separately in the
+    misclassified CSV (``ref_category == "SB"``, always alongside the
+    binary classifier's own S/B call as ``predicted_category`` -- a binary
+    classifier can never itself predict "SB", so these rows exist to show
+    where a genuinely-mixed literature mode lands, evidenced by its real
+    PED_Stretch_pct/PED_Bend_pct) -- they are not counted toward
+    ``n_misclassified``'s precision/recall semantics, just appended for
+    inspection. See ``n_sb_rows_in_misclassified`` below.
 
     T/R ground truth/prediction: identical to the three-way figure
     (``external_axis()``, first character). tau_SB defaults to
@@ -1400,7 +1409,8 @@ def plot_transferability_confusion_binary(
     ext_mask = df["kind"] == "external"
     # No "SB" entry (unlike the three-way figure's ref_internal_map) -- a
     # literal literature "SB" row maps to NaN here and is dropped by `keep`
-    # below, not folded into any bucket.
+    # below, not folded into any bucket. (These rows are re-added to the
+    # misclassified CSV further down, just not to this matrix.)
     ref_internal_map = {"bend": "B", "stretch": "S"}
     ref_cat = pd.Series(index=df.index, dtype=object)
     ref_cat[ext_mask] = df.loc[ext_mask, "mode_index"].astype(str).str[0]
@@ -1448,16 +1458,44 @@ def plot_transferability_confusion_binary(
                              "irrep", "V_Stretch", "predicted_label"]].copy()
     mis["ref_category"] = ref_cat[mis_mask]
     mis["predicted_category"] = pred_cat[mis_mask]
+
+    # Literal literature "SB" rows (dropped from the matrix above, per
+    # ref_internal_map) are appended here separately -- a binary classifier
+    # can never predict "SB" itself, so these always disagree with
+    # predicted_category by construction; they exist to show where a
+    # genuinely-mixed literature mode lands under the binary S/B call,
+    # evidenced by PED_Stretch_pct/PED_Bend_pct below.
+    sb_ref_mask = ~ext_mask & (df["ref_label"] == "SB")
+    sb_rows = df.loc[sb_ref_mask, ["molecule", "mode_index", "kind", "freq",
+                                    "irrep", "V_Stretch", "predicted_label"]].copy()
+    sb_rows["ref_category"] = "SB"
+    sb_rows["predicted_category"] = pred_cat[sb_ref_mask]
+    n_sb_rows_in_misclassified = len(sb_rows)
+
+    mis = pd.concat([mis, sb_rows], ignore_index=True)
     mis["mode_index_numeric"] = pd.to_numeric(mis["mode_index"], errors="coerce")
     mis = mis.merge(
         cm, how="left", left_on=["molecule", "mode_index_numeric"],
         right_on=["molecule", "mode"],
     ).drop(columns=["mode_index_numeric", "mode"])
+
+    from ped.merge_ped_scores import load_ped_lookup
+    ped_lookup = load_ped_lookup()
+    ped_pairs = mis.apply(
+        lambda r: ped_lookup.get((r["molecule"], int(r["mode_index"])), (np.nan, np.nan))
+        if r["kind"] == "internal" else (np.nan, np.nan),
+        axis=1, result_type="expand")
+    mis["PED_Stretch_pct"] = ped_pairs[0]
+    mis["PED_Bend_pct"] = ped_pairs[1]
+
+    mis = mis[["molecule", "mode_index", "kind", "freq", "irrep", "V_Stretch",
+               "predicted_label", "ref_category", "predicted_category",
+               "PED_Stretch_pct", "PED_Bend_pct", "description", "ref"]]
     mis = mis.sort_values(
         ["ref_category", "predicted_category", "molecule", "mode_index"]
     ).reset_index(drop=True)
     mis.to_csv(misclassified_csv_path, index=False)
-    n_misclassified = len(mis)
+    n_misclassified = len(mis) - n_sb_rows_in_misclassified
 
     per_molecule_n = df.groupby("molecule").size().to_dict()
 
@@ -1471,6 +1509,7 @@ def plot_transferability_confusion_binary(
         "n_molecules": len(test_mols),
         "per_molecule_n": per_molecule_n,
         "n_dropped_sb_ref": n_dropped_sb_ref,
+        "n_sb_rows_in_misclassified": n_sb_rows_in_misclassified,
         "n_dropped_missing_ground_truth": n_dropped_missing_ground_truth,
         "n_folded_mixed_external": n_folded_mixed_external,
         "confusion_table": tbl.to_dict(),
@@ -1479,8 +1518,11 @@ def plot_transferability_confusion_binary(
         "framing": ("Binary sibling of fig:transferabilityconfusion -- same "
                      "genuinely non-circular 18-molecule test tier, but "
                      "literal literature 'SB' reference rows are DROPPED "
-                     "(not bucketed) and internal predictions come from "
-                     "vib_label_binary(V_Stretch, tau_SB), never 'SB'."),
+                     "from the matrix (not bucketed) and internal predictions "
+                     "come from vib_label_binary(V_Stretch, tau_SB), never "
+                     "'SB'. Those SB rows are surfaced separately in the "
+                     "misclassified CSV (ref_category=='SB'), evidenced by "
+                     "PED_Stretch_pct/PED_Bend_pct."),
     }
     return summary
 

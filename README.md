@@ -114,6 +114,16 @@ this file in Excel.
 
 **Note:** This repository is designed to facilitate calculations of scores for vibrational modes from the Gaussian program or for EMIT modes. However, the user can calculate scores for modes of motion obtained from any programs or methods by adapting the output format to suit this program.
 
+### The web app
+
+The browser front-end that used to live in `vscore-webapp/` now has its own
+repository: <https://github.com/ThanchonBK/vscore-webapp> (deployed at
+<https://vscore.vercel.app>). It vendors `src/{scoring,utils,classifier}.py`
+and `data/results/thresholds.json` as verbatim copies, so a change to the
+classification scheme here needs re-syncing there — that repo's README carries
+the commands, and its test suite compares every score and label against this
+repository's `data/results/*.csv` when checked out alongside it.
+
 ## Developer / maintainer workflow (CLI flags)
 
 Steps 1-5 above (`-m`/`--molecule` + `--mode`) are the whole job for ordinary use. `main.py` also exposes

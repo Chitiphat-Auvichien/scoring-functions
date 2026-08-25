@@ -3283,7 +3283,11 @@ def plot_ped_vs_vscore(
 
     ``tau_SB``/``label_source_csv`` only affect "predicted" coloring
     (accepted but unused when color_by="reference", since reference labels
-    are fixed ground truth, not derived from V_Stretch).
+    are fixed ground truth, not derived from V_Stretch). ``tau_SB`` always
+    still positions the horizontal tau_SB reference line (this framework's
+    own bend/stretch cutoff on the y-axis s[V_S] score, default
+    ``Thresholds.calibrated().tau_SB``), drawn regardless of ``color_by``
+    -- same axhline+text convention as plot_boxplots.
 
     Scoped to mol_type=='test' molecules only (the 9-molecule held-out
     transferability set): combined_ped_vs_scores.csv also happens to carry
@@ -3365,6 +3369,10 @@ def plot_ped_vs_vscore(
     df = _collapse_degenerate_freqs(
         df, value_cols=["PED_Stretch_pct", "V_Stretch"], label_col="label")
 
+    th = Thresholds.calibrated()
+    if tau_SB is not None:
+        th = dataclasses.replace(th, tau_SB=tau_SB)
+
     color_map = REF_CATEGORY_COLOR if color_by == "reference" else None
     fig, ax = plt.subplots(figsize=(6.2, 3.4))
     for code, cat in _LABEL_CODE_TO_CATEGORY.items():
@@ -3374,6 +3382,15 @@ def plot_ped_vs_vscore(
         kw = _marker_kwargs(cat, marker="o", color_map=color_map)
         ax.scatter(sub["PED_Stretch_pct"], sub["V_Stretch"], s=16,
                    zorder=3, label=CATEGORY_LABEL[cat], **kw)
+
+    # tau_SB reference line (this framework's own bend/stretch cutoff on the
+    # y-axis quantity s[V_S]) -- same axhline + text convention as every
+    # other tau_SB-annotated figure (e.g. plot_boxplots), NOT added to the
+    # legend (in-axes text label instead, left of the y-axis at the line's
+    # own height).
+    ax.axhline(th.tau_SB, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
+    ax.text(0.01, th.tau_SB, r"$\tau_{\mathrm{SB}}$", ha="left", va="bottom",
+            color=COLORS["threshold"], transform=ax.get_yaxis_transform())
 
     x = df["PED_Stretch_pct"].to_numpy(float)
     y = df["V_Stretch"].to_numpy(float)
@@ -3404,10 +3421,7 @@ def plot_ped_vs_vscore(
         "fit_coeffs": tuple(float(c) for c in coeffs),
         "r2": float(r2),
         "color_by": color_by,
-        "tau_SB": (
-            None if color_by == "reference"
-            else tau_SB if tau_SB is not None else Thresholds.calibrated().tau_SB
-        ),
+        "tau_SB": th.tau_SB,
     }
 
 

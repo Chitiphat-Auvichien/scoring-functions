@@ -499,32 +499,61 @@ def sweep_tau_sb(lib_df, tau_grid=DEFAULT_TAU_SB_GRID, data_dir="data"):
     return pd.DataFrame(records)
 
 
-def _error_plateau(sweep_df, error_col):
-    """Longest contiguous run of grid points within 1e-9 of `error_col`'s
-    minimum (mirrors find_plateau's contiguous-run logic, but keyed off
-    minimum error rather than the tau_TR sweep's change-fraction+accuracy
-    criterion, since this sweep has no "label-change" signal of its own).
+def _error_plateau(sweep_df, error_col, reference_tau=None):
+    """Plateau of grid points within 1e-9 of `error_col`'s minimum (mirrors
+    find_plateau's contiguous-run logic, but keyed off minimum error rather
+    than the tau_TR sweep's change-fraction+accuracy criterion, since this
+    sweep has no "label-change" signal of its own).
+
+    The tied-minimum set can be split across more than one disjoint
+    contiguous run (a single grid point elsewhere ties the minimum but
+    isn't adjacent to the main run -- e.g. error_test's minimum is hit by
+    both tau_SB in [0.38, 0.40] AND the isolated point tau_SB=0.42, with
+    0.41 alone sitting strictly above the minimum). Simply taking the
+    LONGEST run silently discards an equally-valid tied point elsewhere,
+    which can make one scope's reported "optimal" tau disagree with
+    another scope's even though both are genuinely tied for the best error.
+    Instead, among all tied runs, the one whose midpoint is CLOSEST to
+    `reference_tau` (default: Thresholds.calibrated().tau_SB, the active
+    frozen default) is reported; ties in distance fall back to the longer
+    run, then the leftmost. This costs nothing when there is only one tied
+    run (the common case) and otherwise favors agreement with the active
+    default -- and hence with other scopes' own optimum -- whenever the
+    data leaves that choice open.
+
     Returns (tau_lo, tau_hi, midpoint, min_error).
     """
+    if reference_tau is None:
+        reference_tau = Thresholds.calibrated().tau_SB
     min_error = sweep_df[error_col].min()
     ok = sweep_df[error_col] <= min_error + 1e-9
 
-    best_start = best_len = cur_start = cur_len = 0
+    runs = []
+    cur_start = cur_len = 0
     for i, v in enumerate(ok.tolist()):
         if v:
             if cur_len == 0:
                 cur_start = i
             cur_len += 1
-            if cur_len > best_len:
-                best_len, best_start = cur_len, cur_start
         else:
+            if cur_len > 0:
+                runs.append((cur_start, cur_len))
             cur_len = 0
-    if best_len == 0:
+    if cur_len > 0:
+        runs.append((cur_start, cur_len))
+    if not runs:
         raise ValueError(f"No plateau found for {error_col}: this should be unreachable "
                           "since the grid's own minimum always satisfies its own tolerance.")
-    lo = float(sweep_df["tau_SB"].iloc[best_start])
-    hi = float(sweep_df["tau_SB"].iloc[best_start + best_len - 1])
-    midpoint = round((lo + hi) / 2, 4)
+
+    best = None
+    for start, length in runs:
+        lo = float(sweep_df["tau_SB"].iloc[start])
+        hi = float(sweep_df["tau_SB"].iloc[start + length - 1])
+        midpoint = round((lo + hi) / 2, 4)
+        key = (abs(midpoint - reference_tau), -length, start)
+        if best is None or key < best[0]:
+            best = (key, (lo, hi, midpoint))
+    (lo, hi, midpoint) = best[1]
     return lo, hi, midpoint, float(min_error)
 
 

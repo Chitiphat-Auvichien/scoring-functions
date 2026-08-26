@@ -23,7 +23,7 @@
     "optimal_tau_all": 0.42,
     "min_error_all": 0.02284263959390863,
     "n_all": 788,
-    "optimal_tau_test": 0.39,
+    "optimal_tau_test": 0.42,
     "min_error_test": 0.044854881266490766,
     "n_test": 379,
     "optimal_tau_single_centre": 0.425,

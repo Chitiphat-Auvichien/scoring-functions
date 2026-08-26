@@ -2768,9 +2768,9 @@ def plot_stretch_predictor_sensitivity(
     l1, = ax.plot(sweep["tau_pct"], sweep["error_PED"], color=COLORS["sens_accuracy"],
                   marker="s", markersize=2.5, lw=1.1, zorder=3, label="PED")
     l2, = ax.plot(sweep["tau_pct"], sweep["error_weighted_sVS"], color=COLORS["sens_change"],
-                  marker="o", markersize=2.5, lw=1.1, zorder=3, label="weighted")
+                  marker="o", markersize=2.5, lw=1.1, zorder=3, label=r"$s[\mathrm{V_S}]$")
     l3, = ax.plot(sweep["tau_pct"], sweep["error_unweighted_sVS"], color=COLORS["sens_single_centre"],
-                  marker="^", markersize=2.5, lw=1.1, zorder=3, label="unweighted")
+                  marker="^", markersize=2.5, lw=1.1, zorder=3, label=r"unweighted $s[\mathrm{V_S}]$")
 
     ax.set_xlabel(r"$\tau$ (%)")
     ax.set_ylabel("Classification error")

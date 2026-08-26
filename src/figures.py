@@ -2761,9 +2761,9 @@ def plot_stretch_predictor_sensitivity(
     ax.axvline(mid_p, color=COLORS["sens_accuracy"], ls=":", lw=1.0, zorder=2,
                label=f"PED opt.={mid_p:g}%")
     ax.axvline(mid_w, color=COLORS["sens_change"], ls=":", lw=1.0, zorder=2,
-               label=f"$s[V_S]$={mid_w:g}%")
+               label=r"$s[\mathrm{V_S}]$ opt.=" + f"{mid_w:g}%")
     ax.axvline(mid_u, color=COLORS["sens_single_centre"], ls=":", lw=1.0, zorder=2,
-               label=f"unweighted $s[V_S]$={mid_u:g}%")
+               label=r"unweighted $s[\mathrm{V_S}]$ opt.=" + f"{mid_u:g}%")
 
     l1, = ax.plot(sweep["tau_pct"], sweep["error_PED"], color=COLORS["sens_accuracy"],
                   marker="s", markersize=2.5, lw=1.1, zorder=3, label="PED")

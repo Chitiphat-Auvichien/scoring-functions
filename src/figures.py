@@ -2568,18 +2568,20 @@ def plot_tau_sb_sensitivity(
 # --------------------------------------------------------------------------
 # Independent-predictor sibling of plot_tau_sb_sensitivity: sweeps a 0-100%
 # stretch-character cutoff against classification error relative to the
-# literature reference S/B label, for TWO predictors that are NOT this
-# framework's own (current, mu-weighted) V_Stretch:
+# literature reference S/B label, for THREE predictors:
 #   - VEDA4's own PED_Stretch_pct ("%nu" from PED).
+#   - This framework's CURRENT (mu-weighted, active default) s[V_S].
 #   - This framework's ORIGINAL (pre-2026-08-14) unweighted s[V_S], frozen
 #     in data/results/archive_unweighted/ before the mu-weighting switch.
-# Both series share identical axis semantics (a %-scale stretch cutoff vs.
-# test-set-only classification error), so they are overlaid in ONE panel
-# with a legend -- same convention plot_tau_sb_sensitivity itself uses to
-# overlay error_all/error_test/error_single_centre rather than splitting
-# into (a)/(b) subfigures. Exploratory (not a manuscript figure, no .tex
-# label yet); not wired into reproduce.py's calibrate stage -- no code path
-# actually classifies off either predictor, so there is nothing to freeze.
+# All three series share identical axis semantics (a %-scale stretch cutoff
+# vs. test-set-only classification error), so they are overlaid in ONE
+# panel with a legend -- same convention plot_tau_sb_sensitivity itself
+# uses to overlay error_all/error_test/error_single_centre rather than
+# splitting into (a)/(b)/(c) subfigures. Exploratory (not a manuscript
+# figure, no .tex label yet); not wired into reproduce.py's calibrate stage
+# -- no code path actually classifies off PED or the unweighted score, so
+# there is nothing to freeze for those two (the weighted s[V_S] curve is
+# just this sweep applied to the SAME V_Stretch tau_SB already calibrates).
 # --------------------------------------------------------------------------
 
 DEFAULT_TAU_NU_GRID = tuple(round(x, 2) for x in np.arange(0.0, 100.001, 1.0))
@@ -2677,6 +2679,7 @@ def _sweep_error_vs_threshold(values, ref_labels, tau_grid):
 
 def plot_stretch_predictor_sensitivity(
     ped_csv="data/results/combined_ped_vs_scores.csv",
+    weighted_csv="data/results/combined_ped_vs_scores.csv",
     unweighted_csv="data/results/archive_unweighted/combined_ped_vs_scores_test18.csv",
     mol_list_csv="data/mol_list_method.csv",
     characterised_modes_csv="data/characterised_modes.csv",
@@ -2685,38 +2688,48 @@ def plot_stretch_predictor_sensitivity(
     tau_grid=DEFAULT_TAU_NU_GRID,
     sweep_csv_path="data/results/tau_stretch_predictor_sensitivity_sweep.csv",
 ):
-    """Overlay of two 0-100% stretch-cutoff sensitivity sweeps, test-set
+    """Overlay of three 0-100% stretch-cutoff sensitivity sweeps, test-set
     only (mol_type=='test', the 18-molecule held-out transferability tier;
     excludes C6H6, a PED cross-check run for a different purpose):
 
       - PED: VEDA4's own PED_Stretch_pct ("%nu"), from `ped_csv`.
+      - Weighted s[V_S]: this framework's CURRENT (mu-weighted, active
+        default) V_Stretch score x100, from `weighted_csv` -- the SAME
+        file as `ped_csv` by default (combined_ped_vs_scores.csv carries
+        both PED_Stretch_pct and this framework's own V_Stretch per row).
       - Unweighted s[V_S]: this framework's ORIGINAL (pre-2026-08-14,
         mu-weighting-free) V_Stretch score x100, from the frozen
         `unweighted_csv` snapshot (data/results/archive_unweighted/
         combined_ped_vs_scores_test18.csv -- already test-only/no-C6H6,
         see IMPLEMENTATION_PLAN.md's 2026-08-14 mu-weighting-switch entry).
 
-    Both curves answer the same question ("if this predictor alone were
-    thresholded at tau, how often would it disagree with the literature S/B
-    call?") on the same [0, 100] x-axis and the same error y-axis, so they
-    are drawn as two colored/marker-distinguished series in ONE panel with
-    a legend -- not (a)/(b) subfigures -- mirroring how
-    plot_tau_sb_sensitivity itself overlays its three error curves.
+    All three curves answer the same question ("if this predictor alone
+    were thresholded at tau, how often would it disagree with the
+    literature S/B call?") on the same [0, 100] x-axis and the same error
+    y-axis, so they are drawn as three colored/marker-distinguished series
+    in ONE panel with a legend -- not (a)/(b)/(c) subfigures -- mirroring
+    how plot_tau_sb_sensitivity itself overlays its three error curves.
 
     Writes the combined per-threshold sweep table to `sweep_csv_path`
-    (columns: tau_pct, error_PED, error_unweighted_sVS, n_PED,
-    n_unweighted_sVS) -- one wide table rather than two separate CSVs.
+    (columns: tau_pct, error_PED, error_weighted_sVS,
+    error_unweighted_sVS, n_PED, n_weighted_sVS, n_unweighted_sVS) -- one
+    wide table rather than three separate CSVs.
     """
     _style()
     ped_df = _prep_predictor_vs_reference(
         ped_csv, "PED_Stretch_pct", mol_list_csv, characterised_modes_csv)
+    wt_df = _prep_predictor_vs_reference(
+        weighted_csv, "V_Stretch", mol_list_csv, characterised_modes_csv)
+    wt_df = wt_df.assign(V_Stretch_pct=wt_df["V_Stretch"] * 100)
     unw_df = _prep_predictor_vs_reference(
         unweighted_csv, "V_Stretch", mol_list_csv, characterised_modes_csv)
     unw_df = unw_df.assign(V_Stretch_pct=unw_df["V_Stretch"] * 100)
 
-    n_ped, n_unw = len(ped_df), len(unw_df)
+    n_ped, n_wt, n_unw = len(ped_df), len(wt_df), len(unw_df)
     ped_sweep = _sweep_error_vs_threshold(
         ped_df["PED_Stretch_pct"].to_numpy(float), ped_df["ref_label"], tau_grid)
+    wt_sweep = _sweep_error_vs_threshold(
+        wt_df["V_Stretch_pct"].to_numpy(float), wt_df["ref_label"], tau_grid)
     unw_sweep = _sweep_error_vs_threshold(
         unw_df["V_Stretch_pct"].to_numpy(float), unw_df["ref_label"], tau_grid)
 
@@ -2724,6 +2737,8 @@ def plot_stretch_predictor_sensitivity(
         "tau_pct": tau_grid,
         "error_PED": ped_sweep["error"],
         "n_PED": n_ped,
+        "error_weighted_sVS": wt_sweep["error"],
+        "n_weighted_sVS": n_wt,
         "error_unweighted_sVS": unw_sweep["error"],
         "n_unweighted_sVS": n_unw,
     })
@@ -2733,6 +2748,9 @@ def plot_stretch_predictor_sensitivity(
     lo_p, hi_p, mid_p, min_p = _error_plateau_by_col(
         ped_sweep.rename(columns={"tau": "tau_pct", "error": "error_PED"}),
         "error_PED", "tau_pct")
+    lo_w, hi_w, mid_w, min_w = _error_plateau_by_col(
+        wt_sweep.rename(columns={"tau": "tau_pct", "error": "error_weighted_sVS"}),
+        "error_weighted_sVS", "tau_pct")
     lo_u, hi_u, mid_u, min_u = _error_plateau_by_col(
         unw_sweep.rename(columns={"tau": "tau_pct", "error": "error_unweighted_sVS"}),
         "error_unweighted_sVS", "tau_pct")
@@ -2742,19 +2760,24 @@ def plot_stretch_predictor_sensitivity(
                label=r"$\tau$=50%")
     ax.axvline(mid_p, color=COLORS["sens_accuracy"], ls=":", lw=1.0, zorder=2,
                label=f"optimal PED={mid_p:g}%")
+    ax.axvline(mid_w, color=COLORS["sens_change"], ls=":", lw=1.0, zorder=2,
+               label=f"optimal weighted $s[V_S]$={mid_w:g}%")
     ax.axvline(mid_u, color=COLORS["sens_single_centre"], ls=":", lw=1.0, zorder=2,
                label=f"optimal unweighted $s[V_S]$={mid_u:g}%")
 
     l1, = ax.plot(sweep["tau_pct"], sweep["error_PED"], color=COLORS["sens_accuracy"],
                   marker="s", markersize=2.5, lw=1.1, zorder=3, label=r"PED $\%\nu$")
-    l2, = ax.plot(sweep["tau_pct"], sweep["error_unweighted_sVS"], color=COLORS["sens_single_centre"],
+    l2, = ax.plot(sweep["tau_pct"], sweep["error_weighted_sVS"], color=COLORS["sens_change"],
+                  marker="o", markersize=2.5, lw=1.1, zorder=3, label=r"weighted $s[V_S]$")
+    l3, = ax.plot(sweep["tau_pct"], sweep["error_unweighted_sVS"], color=COLORS["sens_single_centre"],
                   marker="^", markersize=2.5, lw=1.1, zorder=3, label=r"unweighted $s[V_S]$")
 
     ax.set_xlabel(r"stretch-character threshold $\tau$ (%)")
     ax.set_ylabel("Classification error (test set, vs. literature reference)")
     ax.set_xlim(0, 100)
     ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
-    y_max = max(0.05, float(sweep[["error_PED", "error_unweighted_sVS"]].max().max()) * 1.1)
+    error_cols = ["error_PED", "error_weighted_sVS", "error_unweighted_sVS"]
+    y_max = max(0.05, float(sweep[error_cols].max().max()) * 1.1)
     ax.set_ylim(-0.01, y_max)
     ax.legend(loc="best", frameon=False, fontsize=LEGEND_FONTSIZE,
               handletextpad=0.5, labelspacing=0.4)
@@ -2766,20 +2789,27 @@ def plot_stretch_predictor_sensitivity(
     summary = {
         "pdf": pdf_path, "png": png_path,
         "sweep_csv": sweep_csv_path,
-        "shared_categories": ("two independent-predictor error curves (PED vs. unweighted "
-                               "s[V_S]) overlaid in one panel rather than (a)/(b) subfigures, "
-                               "since both share the same [0,100]% x-axis and error y-axis; "
-                               "reuses COLORS['sens_accuracy']/marker='s' for PED and "
-                               "COLORS['sens_single_centre']/marker='^' for unweighted s[V_S], "
-                               "the same color/marker pairing plot_tau_sb_sensitivity uses for "
-                               "its own error(test)/error(single-centre) curves."),
+        "shared_categories": ("three independent-predictor error curves (PED, weighted "
+                               "s[V_S], unweighted s[V_S]) overlaid in one panel rather than "
+                               "(a)/(b)/(c) subfigures, since all three share the same "
+                               "[0,100]% x-axis and error y-axis; reuses "
+                               "COLORS['sens_accuracy']/marker='s' for PED, "
+                               "COLORS['sens_change']/marker='o' for weighted s[V_S], and "
+                               "COLORS['sens_single_centre']/marker='^' for unweighted s[V_S] "
+                               "-- the same three color/marker pairings plot_tau_sb_sensitivity "
+                               "uses for its own error(all)/error(test)/error(single-centre) "
+                               "curves."),
         "n_grid_points": len(sweep),
-        "n_PED": n_ped, "n_unweighted_sVS": n_unw,
+        "n_PED": n_ped, "n_weighted_sVS": n_wt, "n_unweighted_sVS": n_unw,
         "tau_range_pct": (float(sweep["tau_pct"].min()), float(sweep["tau_pct"].max())),
         "error_PED_range": (float(sweep["error_PED"].min()), float(sweep["error_PED"].max())),
+        "error_weighted_sVS_range": (float(sweep["error_weighted_sVS"].min()),
+                                      float(sweep["error_weighted_sVS"].max())),
         "error_unweighted_sVS_range": (float(sweep["error_unweighted_sVS"].min()),
                                         float(sweep["error_unweighted_sVS"].max())),
         "optimal_tau_PED": mid_p, "optimal_tau_PED_plateau": (lo_p, hi_p), "min_error_PED": min_p,
+        "optimal_tau_weighted_sVS": mid_w, "optimal_tau_weighted_sVS_plateau": (lo_w, hi_w),
+        "min_error_weighted_sVS": min_w,
         "optimal_tau_unweighted_sVS": mid_u, "optimal_tau_unweighted_sVS_plateau": (lo_u, hi_u),
         "min_error_unweighted_sVS": min_u,
     }
@@ -3396,8 +3426,8 @@ def regenerate_all(verbose=True):
         ("SI irrep-degeneracy coupling (no fig: label yet)", plot_irrep_coupling),
         ("fig:sensitivity", plot_sensitivity),
         ("fig:sensitivity binary scheme (no fig: label yet)", plot_tau_sb_sensitivity),
-        ("fig:sensitivity stretch predictors: PED vs unweighted s[V_S] (exploratory, no fig: label yet)",
-         plot_stretch_predictor_sensitivity),
+        ("fig:sensitivity stretch predictors: PED vs weighted vs unweighted s[V_S] "
+         "(exploratory, no fig: label yet)", plot_stretch_predictor_sensitivity),
         ("fig:cputime linear (proposed, not yet in .tex)",
          lambda: plot_cpu_time_benchmark(scale="linear")),
         ("fig:cputime log (proposed, not yet in .tex)",

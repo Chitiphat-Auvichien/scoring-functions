@@ -2566,15 +2566,20 @@ def plot_tau_sb_sensitivity(
 
 
 # --------------------------------------------------------------------------
-# PED-based sibling of plot_tau_sb_sensitivity: sweeps a %stretch-from-PED
-# cutoff (tau_nu_delta, 0-100%) against classification error relative to
-# the literature reference S/B label, using VEDA4's OWN PED_Stretch_pct as
-# the predictor instead of this framework's V_Stretch. Exploratory (not a
-# manuscript figure, no .tex label yet) -- answers "how well would
-# thresholding VEDA4's %PED alone reproduce the literature S/B call?",
-# independent of this framework's own scoring/tau_SB. PROPOSED LABEL, not
-# wired into reproduce.py's calibrate stage (unlike tau_SB, no code path
-# actually classifies off PED_Stretch_pct, so there is nothing to freeze).
+# Independent-predictor sibling of plot_tau_sb_sensitivity: sweeps a 0-100%
+# stretch-character cutoff against classification error relative to the
+# literature reference S/B label, for TWO predictors that are NOT this
+# framework's own (current, mu-weighted) V_Stretch:
+#   - VEDA4's own PED_Stretch_pct ("%nu" from PED).
+#   - This framework's ORIGINAL (pre-2026-08-14) unweighted s[V_S], frozen
+#     in data/results/archive_unweighted/ before the mu-weighting switch.
+# Both series share identical axis semantics (a %-scale stretch cutoff vs.
+# test-set-only classification error), so they are overlaid in ONE panel
+# with a legend -- same convention plot_tau_sb_sensitivity itself uses to
+# overlay error_all/error_test/error_single_centre rather than splitting
+# into (a)/(b) subfigures. Exploratory (not a manuscript figure, no .tex
+# label yet); not wired into reproduce.py's calibrate stage -- no code path
+# actually classifies off either predictor, so there is nothing to freeze.
 # --------------------------------------------------------------------------
 
 DEFAULT_TAU_NU_GRID = tuple(round(x, 2) for x in np.arange(0.0, 100.001, 1.0))
@@ -2586,8 +2591,8 @@ def _error_plateau_by_col(sweep_df, error_col, x_col):
     within 1e-9 of `error_col`'s minimum. Returns (x_lo, x_hi, midpoint,
     min_error). Kept local to this module (rather than importing
     calibrate._error_plateau, which hardcodes the 'tau_SB' column name) so
-    this PED sweep stays self-contained, matching plot_ped_vs_vscore's
-    style of not depending on calibrate.py's tau_SB machinery."""
+    this sweep stays self-contained, matching plot_ped_vs_vscore's style of
+    not depending on calibrate.py's tau_SB machinery."""
     min_error = sweep_df[error_col].min()
     ok = sweep_df[error_col] <= min_error + 1e-9
 
@@ -2607,44 +2612,30 @@ def _error_plateau_by_col(sweep_df, error_col, x_col):
     return lo, hi, midpoint, float(min_error)
 
 
-def plot_ped_tau_nu_sensitivity(
-    csv_input="data/results/combined_ped_vs_scores.csv",
-    mol_list_csv="data/mol_list_method.csv",
-    characterised_modes_csv="data/characterised_modes.csv",
-    out_dir="data/figures",
-    label="fig_sensitivity_ped_binary",
-    tau_grid=DEFAULT_TAU_NU_GRID,
-    sweep_csv_path="data/results/tau_nu_delta_sensitivity_sweep.csv",
-):
-    """Sweep a %stretch-from-PED cutoff tau_nu_delta over `tau_grid`
-    (default 0-100% step 1) and score classification error -- mode
-    predicted "stretch" iff PED_Stretch_pct >= tau_nu_delta, else "bend" --
-    against the literature reference S/B label from `characterised_modes_
-    csv`. Test-set only (mol_type=='test', the 18-molecule held-out
-    transferability tier): joined via `mol_list_csv`, excluding C6H6 (a PED
-    cross-check run for a different purpose, same scope as plot_ped_vs_
-    vscore) and single-centre/ideal/non-ideal calibration molecules.
+def _prep_predictor_vs_reference(csv_path, value_col, mol_list_csv, characterised_modes_csv):
+    """Shared per-predictor data prep for plot_stretch_predictor_sensitivity:
+    read a combined_ped_vs_scores.csv-shaped table, scope to mol_type=='test'
+    molecules (via `mol_list_csv` -- a no-op if the table is already
+    test-only, e.g. the archive_unweighted snapshot), drop rows missing
+    `value_col`, join the literature reference S/B/SB label from
+    `characterised_modes_csv` by Molecule+mode number (same convention as
+    plot_ped_vs_vscore's color_by="reference" path), average degenerate
+    modes together (_collapse_degenerate_freqs -- a single VEDA/engine
+    member's value is not physically meaningful alone), and restrict to a
+    binary (stretch/bend) reference label (drops literature 'SB' rows, same
+    as src.calibrate.sweep_tau_sb's _KNOWN_REF_LABELS convention).
 
-    Rows with a literature 'SB' (genuinely mixed) label are dropped -- this
-    is a binary S/B question only, mirroring src.calibrate.sweep_tau_sb's
-    _KNOWN_REF_LABELS-restricted-to-{stretch,bend} convention. Degenerate
-    modes (VEDA reports PED per individual member, not physically
-    meaningful alone) are averaged together first via
-    _collapse_degenerate_freqs, same as plot_ped_vs_vscore.
-
-    Writes the per-threshold sweep table to `sweep_csv_path` (tau_nu_delta,
-    error_test, accuracy_test, n_test) -- analogous to
-    data/results/tau_sb_sensitivity_sweep.csv but keyed on the independent
-    PED predictor rather than this framework's own V_Stretch.
+    Returns a DataFrame with columns [value_col, "ref_label"], one row per
+    physical frequency. Raises ValueError if any row fails the reference
+    join or if nothing survives the binary-label filter.
     """
-    _style()
-    df = pd.read_csv(csv_input)
+    df = pd.read_csv(csv_path)
     if "vib_label" in df.columns:
         df = df.rename(columns={"vib_label": "label"})
     roster = pd.read_csv(mol_list_csv)
     test_molecules = set(roster.loc[roster["mol_type"] == "test", "molecule"])
     df = df[df["Molecule"].isin(test_molecules)]
-    df = df.dropna(subset=["PED_Stretch_pct"]).copy()
+    df = df.dropna(subset=[value_col]).copy()
 
     cm = pd.read_csv(characterised_modes_csv)[["molecule", "mode", "type"]]
     cm = cm.assign(mode=pd.to_numeric(cm["mode"], errors="coerce"))
@@ -2655,53 +2646,118 @@ def plot_ped_tau_nu_sensitivity(
         missing = df.loc[df["type"].isna(), ["Molecule", "Mode"]]
         raise ValueError(
             f"characterised_modes_csv={characterised_modes_csv!r} has no "
-            f"Molecule+mode match for {len(missing)} row(s), e.g. "
-            f"{missing.iloc[0].to_dict()}")
+            f"Molecule+mode match for {len(missing)} row(s) of {csv_path!r}, "
+            f"e.g. {missing.iloc[0].to_dict()}")
     df["ref_label"] = df["type"].map(TYPE_TO_REF_LABEL).fillna(df["type"])
     df = df.drop(columns=["_mode_num", "molecule", "mode", "type"])
 
     df = _collapse_degenerate_freqs(
-        df, value_cols=["PED_Stretch_pct"], label_col="ref_label",
+        df, value_cols=[value_col], label_col="ref_label",
         extra_agg={"Mode": lambda s: "/".join(s.astype(str))})
 
     df = df[df["ref_label"].isin(("stretch", "bend"))]
-    n_test = len(df)
-    if n_test == 0:
-        raise ValueError("No test-set rows with a binary (stretch/bend) "
-                          "literature reference label were found -- check "
-                          f"{csv_input!r}/{characterised_modes_csv!r}.")
-    ref = df["ref_label"].to_numpy()
-    ped = df["PED_Stretch_pct"].to_numpy(dtype=float)
+    if len(df) == 0:
+        raise ValueError(f"No test-set rows with a binary (stretch/bend) "
+                          f"literature reference label survived for "
+                          f"{csv_path!r}/{characterised_modes_csv!r}.")
+    return df
 
+
+def _sweep_error_vs_threshold(values, ref_labels, tau_grid):
+    """Classification error at each tau in `tau_grid`: predicted "stretch"
+    iff `values` >= tau, else "bend", compared against `ref_labels`. Returns
+    a DataFrame with columns tau, error."""
+    ref = np.asarray(ref_labels)
     records = []
     for tau in tau_grid:
-        pred = np.where(ped >= tau, "stretch", "bend")
-        error = float((pred != ref).mean())
-        records.append({
-            "tau_nu_delta": tau, "error_test": error,
-            "accuracy_test": 1 - error, "n_test": n_test,
-        })
-    sweep = pd.DataFrame(records)
+        pred = np.where(values >= tau, "stretch", "bend")
+        records.append({"tau": tau, "error": float((pred != ref).mean())})
+    return pd.DataFrame(records)
+
+
+def plot_stretch_predictor_sensitivity(
+    ped_csv="data/results/combined_ped_vs_scores.csv",
+    unweighted_csv="data/results/archive_unweighted/combined_ped_vs_scores_test18.csv",
+    mol_list_csv="data/mol_list_method.csv",
+    characterised_modes_csv="data/characterised_modes.csv",
+    out_dir="data/figures",
+    label="fig_sensitivity_stretch_predictors",
+    tau_grid=DEFAULT_TAU_NU_GRID,
+    sweep_csv_path="data/results/tau_stretch_predictor_sensitivity_sweep.csv",
+):
+    """Overlay of two 0-100% stretch-cutoff sensitivity sweeps, test-set
+    only (mol_type=='test', the 18-molecule held-out transferability tier;
+    excludes C6H6, a PED cross-check run for a different purpose):
+
+      - PED: VEDA4's own PED_Stretch_pct ("%nu"), from `ped_csv`.
+      - Unweighted s[V_S]: this framework's ORIGINAL (pre-2026-08-14,
+        mu-weighting-free) V_Stretch score x100, from the frozen
+        `unweighted_csv` snapshot (data/results/archive_unweighted/
+        combined_ped_vs_scores_test18.csv -- already test-only/no-C6H6,
+        see IMPLEMENTATION_PLAN.md's 2026-08-14 mu-weighting-switch entry).
+
+    Both curves answer the same question ("if this predictor alone were
+    thresholded at tau, how often would it disagree with the literature S/B
+    call?") on the same [0, 100] x-axis and the same error y-axis, so they
+    are drawn as two colored/marker-distinguished series in ONE panel with
+    a legend -- not (a)/(b) subfigures -- mirroring how
+    plot_tau_sb_sensitivity itself overlays its three error curves.
+
+    Writes the combined per-threshold sweep table to `sweep_csv_path`
+    (columns: tau_pct, error_PED, error_unweighted_sVS, n_PED,
+    n_unweighted_sVS) -- one wide table rather than two separate CSVs.
+    """
+    _style()
+    ped_df = _prep_predictor_vs_reference(
+        ped_csv, "PED_Stretch_pct", mol_list_csv, characterised_modes_csv)
+    unw_df = _prep_predictor_vs_reference(
+        unweighted_csv, "V_Stretch", mol_list_csv, characterised_modes_csv)
+    unw_df = unw_df.assign(V_Stretch_pct=unw_df["V_Stretch"] * 100)
+
+    n_ped, n_unw = len(ped_df), len(unw_df)
+    ped_sweep = _sweep_error_vs_threshold(
+        ped_df["PED_Stretch_pct"].to_numpy(float), ped_df["ref_label"], tau_grid)
+    unw_sweep = _sweep_error_vs_threshold(
+        unw_df["V_Stretch_pct"].to_numpy(float), unw_df["ref_label"], tau_grid)
+
+    sweep = pd.DataFrame({
+        "tau_pct": tau_grid,
+        "error_PED": ped_sweep["error"],
+        "n_PED": n_ped,
+        "error_unweighted_sVS": unw_sweep["error"],
+        "n_unweighted_sVS": n_unw,
+    })
     os.makedirs(os.path.dirname(sweep_csv_path), exist_ok=True)
     sweep.to_csv(sweep_csv_path, index=False)
 
-    lo, hi, mid, min_error = _error_plateau_by_col(sweep, "error_test", "tau_nu_delta")
+    lo_p, hi_p, mid_p, min_p = _error_plateau_by_col(
+        ped_sweep.rename(columns={"tau": "tau_pct", "error": "error_PED"}),
+        "error_PED", "tau_pct")
+    lo_u, hi_u, mid_u, min_u = _error_plateau_by_col(
+        unw_sweep.rename(columns={"tau": "tau_pct", "error": "error_unweighted_sVS"}),
+        "error_unweighted_sVS", "tau_pct")
 
-    fig, ax1 = plt.subplots(figsize=(5.6, 4.6))
-    ax1.axvline(mid, color=COLORS["sens_accuracy"], ls=":", lw=1.0, zorder=2,
-                label=f"optimal (test)={mid:g}%")
-    ax1.axvline(50.0, color=COLORS["threshold"], ls="-.", lw=1.0, zorder=2,
-                label=r"$\tau_{\nu\delta}$=50%")
+    fig, ax = plt.subplots(figsize=(5.6, 4.6))
+    ax.axvline(50.0, color=COLORS["threshold"], ls="-.", lw=1.0, zorder=2,
+               label=r"$\tau$=50%")
+    ax.axvline(mid_p, color=COLORS["sens_accuracy"], ls=":", lw=1.0, zorder=2,
+               label=f"optimal PED={mid_p:g}%")
+    ax.axvline(mid_u, color=COLORS["sens_single_centre"], ls=":", lw=1.0, zorder=2,
+               label=f"optimal unweighted $s[V_S]$={mid_u:g}%")
 
-    l1, = ax1.plot(sweep["tau_nu_delta"], sweep["error_test"], color=COLORS["sens_accuracy"],
-                   marker="s", markersize=2.5, lw=1.1, zorder=3, label="error (test)")
-    ax1.set_xlabel(r"$\tau_{\nu\delta}$ (%stretch from PED)")
-    ax1.set_ylabel("Classification error (vs. literature reference)")
-    ax1.set_xlim(0, 100)
-    ax1.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
-    ax1.set_ylim(-0.01, max(0.05, float(sweep["error_test"].max()) * 1.1))
-    ax1.legend(loc="best", frameon=False, fontsize=LEGEND_FONTSIZE,
-               handletextpad=0.5, labelspacing=0.4)
+    l1, = ax.plot(sweep["tau_pct"], sweep["error_PED"], color=COLORS["sens_accuracy"],
+                  marker="s", markersize=2.5, lw=1.1, zorder=3, label=r"PED $\%\nu$")
+    l2, = ax.plot(sweep["tau_pct"], sweep["error_unweighted_sVS"], color=COLORS["sens_single_centre"],
+                  marker="^", markersize=2.5, lw=1.1, zorder=3, label=r"unweighted $s[V_S]$")
+
+    ax.set_xlabel(r"stretch-character threshold $\tau$ (%)")
+    ax.set_ylabel("Classification error (test set, vs. literature reference)")
+    ax.set_xlim(0, 100)
+    ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
+    y_max = max(0.05, float(sweep[["error_PED", "error_unweighted_sVS"]].max().max()) * 1.1)
+    ax.set_ylim(-0.01, y_max)
+    ax.legend(loc="best", frameon=False, fontsize=LEGEND_FONTSIZE,
+              handletextpad=0.5, labelspacing=0.4)
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
@@ -2710,18 +2766,22 @@ def plot_ped_tau_nu_sensitivity(
     summary = {
         "pdf": pdf_path, "png": png_path,
         "sweep_csv": sweep_csv_path,
-        "shared_categories": ("no classification-category colors here (tau_nu_delta "
-                               "error curve, not per-mode points); reuses the shared "
-                               "COLORS['sens_accuracy']/marker='s' convention plot_tau_sb_"
-                               "sensitivity uses for its 'error (test)' curve, since this "
-                               "is also a test-set-only error curve."),
+        "shared_categories": ("two independent-predictor error curves (PED vs. unweighted "
+                               "s[V_S]) overlaid in one panel rather than (a)/(b) subfigures, "
+                               "since both share the same [0,100]% x-axis and error y-axis; "
+                               "reuses COLORS['sens_accuracy']/marker='s' for PED and "
+                               "COLORS['sens_single_centre']/marker='^' for unweighted s[V_S], "
+                               "the same color/marker pairing plot_tau_sb_sensitivity uses for "
+                               "its own error(test)/error(single-centre) curves."),
         "n_grid_points": len(sweep),
-        "n_test": n_test,
-        "tau_nu_delta_range": (float(sweep["tau_nu_delta"].min()), float(sweep["tau_nu_delta"].max())),
-        "error_test_range": (float(sweep["error_test"].min()), float(sweep["error_test"].max())),
-        "optimal_tau_nu_delta": mid,
-        "optimal_tau_nu_delta_plateau": (lo, hi),
-        "min_error_test": min_error,
+        "n_PED": n_ped, "n_unweighted_sVS": n_unw,
+        "tau_range_pct": (float(sweep["tau_pct"].min()), float(sweep["tau_pct"].max())),
+        "error_PED_range": (float(sweep["error_PED"].min()), float(sweep["error_PED"].max())),
+        "error_unweighted_sVS_range": (float(sweep["error_unweighted_sVS"].min()),
+                                        float(sweep["error_unweighted_sVS"].max())),
+        "optimal_tau_PED": mid_p, "optimal_tau_PED_plateau": (lo_p, hi_p), "min_error_PED": min_p,
+        "optimal_tau_unweighted_sVS": mid_u, "optimal_tau_unweighted_sVS_plateau": (lo_u, hi_u),
+        "min_error_unweighted_sVS": min_u,
     }
     return summary
 
@@ -3336,8 +3396,8 @@ def regenerate_all(verbose=True):
         ("SI irrep-degeneracy coupling (no fig: label yet)", plot_irrep_coupling),
         ("fig:sensitivity", plot_sensitivity),
         ("fig:sensitivity binary scheme (no fig: label yet)", plot_tau_sb_sensitivity),
-        ("fig:sensitivity PED binary scheme (exploratory, no fig: label yet)",
-         plot_ped_tau_nu_sensitivity),
+        ("fig:sensitivity stretch predictors: PED vs unweighted s[V_S] (exploratory, no fig: label yet)",
+         plot_stretch_predictor_sensitivity),
         ("fig:cputime linear (proposed, not yet in .tex)",
          lambda: plot_cpu_time_benchmark(scale="linear")),
         ("fig:cputime log (proposed, not yet in .tex)",

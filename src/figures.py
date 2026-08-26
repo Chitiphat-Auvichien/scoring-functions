@@ -3292,6 +3292,7 @@ def plot_ped_vs_vscore(
     label_source_csv=None,
     color_by="reference",
     data_csv_path="data/results/ped_vs_vscore_data.csv",
+    show_tau_SB_line=True,
 ):
     """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
     molecule-level stretch score s[V_S] (``V_Stretch``, plotted as a
@@ -3359,6 +3360,11 @@ def plot_ped_vs_vscore(
     distinguish this from the canonical mu-weighted figure of the same
     name -- keep any override on the same x100 percentage scale as the
     plotted data).
+
+    ``show_tau_SB_line`` (default True) draws the horizontal tau_SB
+    reference line/label. archive_unweighted's figure sets this False --
+    its own tau_SB cutoff (calibrated on the mu-weighted score) isn't a
+    meaningful reference line against the unweighted-definition y-axis.
 
     ``label_source_csv``, if given, points at a DIFFERENT combined_ped_vs_
     scores.csv (matched to this one's rows by Molecule+Mode) whose own
@@ -3459,10 +3465,11 @@ def plot_ped_vs_vscore(
     # figure's dashed axhline) so it reads as distinct from the dashed y=x
     # parity line sharing this axes. NOT added to the legend (in-axes text
     # label instead, right of the plot at the line's own height).
-    tau_SB_pct = th.tau_SB * 100
-    ax.axhline(tau_SB_pct, color=COLORS["threshold"], ls="-", lw=0.8, zorder=1)
-    ax.text(0.98, tau_SB_pct, r"$\tau_{\mathrm{SB}}$", ha="right", va="bottom",
-            color=COLORS["threshold"], transform=ax.get_yaxis_transform())
+    if show_tau_SB_line:
+        tau_SB_pct = th.tau_SB * 100
+        ax.axhline(tau_SB_pct, color=COLORS["threshold"], ls="-", lw=0.8, zorder=1)
+        ax.text(0.98, tau_SB_pct, r"$\tau_{\mathrm{SB}}$", ha="right", va="bottom",
+                color=COLORS["threshold"], transform=ax.get_yaxis_transform())
 
     x = df["PED_Stretch_pct"].to_numpy(float)
     y = df["V_Stretch_pct"].to_numpy(float)

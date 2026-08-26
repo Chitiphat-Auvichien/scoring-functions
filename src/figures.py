@@ -2587,31 +2587,49 @@ def plot_tau_sb_sensitivity(
 DEFAULT_TAU_NU_GRID = tuple(round(x, 2) for x in np.arange(0.0, 100.001, 1.0))
 
 
-def _error_plateau_by_col(sweep_df, error_col, x_col):
+def _error_plateau_by_col(sweep_df, error_col, x_col, reference_x=None):
     """Generic (column-name-parameterized) sibling of
-    src.calibrate._error_plateau: longest contiguous run of grid points
-    within 1e-9 of `error_col`'s minimum. Returns (x_lo, x_hi, midpoint,
-    min_error). Kept local to this module (rather than importing
-    calibrate._error_plateau, which hardcodes the 'tau_SB' column name) so
-    this sweep stays self-contained, matching plot_ped_vs_vscore's style of
-    not depending on calibrate.py's tau_SB machinery."""
+    src.calibrate._error_plateau -- same tie-break rule, ported over so
+    this sweep stays self-contained (rather than importing
+    calibrate._error_plateau, which hardcodes the 'tau_SB' column name).
+
+    Reports the single grid point tied at `error_col`'s minimum (within
+    1e-9) that is CLOSEST to `reference_x` (default: Thresholds.calibrated
+    ().tau_SB * 100, on this figure's 0-100 percentage scale) -- not the
+    arithmetic midpoint of the longest contiguous tied run. Plain
+    longest-run reporting gets this wrong exactly like it did for
+    src.calibrate.sweep_tau_sb: e.g. error_PED here ties at 34% AND the
+    disjoint point 37% (35-36% sit strictly above the minimum), and
+    error_unweighted_sVS ties across [13,16]% AND the disjoint point 18%
+    -- taking the longest run silently discards the other equally-valid
+    tie. Ties in distance fall back to the smaller x.
+
+    Returns (x_lo, x_hi, x, min_error); x_lo/x_hi are the bounds of
+    whichever contiguous run contains the chosen point (context only, not
+    used to compute the reported x).
+    """
+    if reference_x is None:
+        reference_x = Thresholds.calibrated().tau_SB * 100
     min_error = sweep_df[error_col].min()
     ok = sweep_df[error_col] <= min_error + 1e-9
+    if not ok.any():
+        raise ValueError(f"No plateau found for {error_col}: this should be unreachable "
+                          "since the grid's own minimum always satisfies its own tolerance.")
 
-    best_start = best_len = cur_start = cur_len = 0
-    for i, v in enumerate(ok.tolist()):
-        if v:
-            if cur_len == 0:
-                cur_start = i
-            cur_len += 1
-            if cur_len > best_len:
-                best_len, best_start = cur_len, cur_start
-        else:
-            cur_len = 0
-    lo = float(sweep_df[x_col].iloc[best_start])
-    hi = float(sweep_df[x_col].iloc[best_start + best_len - 1])
-    midpoint = round((lo + hi) / 2, 4)
-    return lo, hi, midpoint, float(min_error)
+    tied = sweep_df.loc[ok, x_col]
+    best_idx = min(tied.index, key=lambda i: (abs(float(tied[i]) - reference_x), float(tied[i])))
+    x = float(tied[best_idx])
+
+    ok_list = ok.tolist()
+    pos = sweep_df.index.get_loc(best_idx)
+    lo_pos = hi_pos = pos
+    while lo_pos > 0 and ok_list[lo_pos - 1]:
+        lo_pos -= 1
+    while hi_pos < len(ok_list) - 1 and ok_list[hi_pos + 1]:
+        hi_pos += 1
+    lo = float(sweep_df[x_col].iloc[lo_pos])
+    hi = float(sweep_df[x_col].iloc[hi_pos])
+    return lo, hi, x, float(min_error)
 
 
 def _prep_predictor_vs_reference(csv_path, value_col, mol_list_csv, characterised_modes_csv):

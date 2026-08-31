@@ -2613,8 +2613,13 @@ def _error_plateau_by_col(sweep_df, error_col, x_col, reference_x=None):
     calibrate._error_plateau, which hardcodes the 'tau_SB' column name).
 
     Reports the single grid point tied at `error_col`'s minimum (within
-    1e-9) that is CLOSEST to `reference_x` (default: Thresholds.calibrated
-    ().tau_SB * 100, on this figure's 0-100 percentage scale) -- not the
+    1e-9) that is CLOSEST to `reference_x` (default: 50.0, the naive
+    midpoint cutoff on this figure's 0-100 percentage scale -- fixed, NOT
+    Thresholds.calibrated().tau_SB * 100, so this figure and
+    plot_tau_sb_sensitivity's thresholds.json-derived optimal points use
+    the identical tie-break rule; anchoring the reference to the active
+    default instead would make the two figures disagree on what "optimal"
+    means for no principled reason) -- not the
     arithmetic midpoint of the longest contiguous tied run. Plain
     longest-run reporting gets this wrong exactly like it did for
     src.calibrate.sweep_tau_sb: e.g. error_PED here ties at 34% AND the
@@ -2628,7 +2633,7 @@ def _error_plateau_by_col(sweep_df, error_col, x_col, reference_x=None):
     used to compute the reported x).
     """
     if reference_x is None:
-        reference_x = Thresholds.calibrated().tau_SB * 100
+        reference_x = 50.0
     min_error = sweep_df[error_col].min()
     ok = sweep_df[error_col] <= min_error + 1e-9
     if not ok.any():

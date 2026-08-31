@@ -506,9 +506,18 @@ def _error_plateau(sweep_df, error_col, reference_tau=None):
     criterion, since this sweep has no "label-change" signal of its own).
 
     The reported representative tau is the single TIED grid point CLOSEST
-    to `reference_tau` (default: Thresholds.calibrated().tau_SB, the active
-    frozen default), not the arithmetic midpoint of the longest contiguous
-    run -- run-midpoint tie-breaking gets this wrong two different ways:
+    to `reference_tau` (default: 0.5, the naive midpoint cutoff -- fixed,
+    NOT Thresholds.calibrated().tau_SB, so this advisory "optimal" tau is
+    computed by the same rule regardless of what the active frozen default
+    happens to be; using the active default as its own reference point
+    makes the tie-break circular -- it silently snaps to whatever tau_SB
+    already is instead of reporting an independent optimum, which is
+    exactly what happened here: all three of optimal_tau_all/test/
+    single_centre came out equal to tau_SB=0.42 even though
+    optimal_tau_single_centre's true tied set is [0.41, 0.44] and 0.44,
+    not 0.42, is the point closest to the neutral 0.5 reference), not the
+    arithmetic midpoint of the longest contiguous run -- run-midpoint
+    tie-breaking gets this wrong two different ways:
       1. The tied-minimum set can be split across disjoint runs (e.g.
          error_test's minimum is hit by both tau_SB in [0.38, 0.40] AND the
          isolated point 0.42, with 0.41 alone sitting strictly above the
@@ -528,7 +537,7 @@ def _error_plateau(sweep_df, error_col, reference_tau=None):
     Returns (tau_lo, tau_hi, tau, min_error).
     """
     if reference_tau is None:
-        reference_tau = Thresholds.calibrated().tau_SB
+        reference_tau = 0.5
     min_error = sweep_df[error_col].min()
     ok = sweep_df[error_col] <= min_error + 1e-9
     if not ok.any():

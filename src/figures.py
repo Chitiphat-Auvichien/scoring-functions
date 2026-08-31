@@ -1822,78 +1822,94 @@ def plot_benzene_emit_counts(
     out_dir="data/figures",
     label="fig_benzene_emit_counts",
 ):
-    """Build fig:benzeneemitcounts: an overview bar chart of how benzene's
-    36 EMIT modes classify -- one bar per clean/starred external axis
-    (Tx..Rz, Tx*..Rz*) and per internal bucket (S/B/SB).
+    """Build fig:benzeneemitcounts: benzene's 36 EMIT modes split into the
+    two Step-2 vibrational buckets (B, S) from ``vib_label`` (binary scheme,
+    ``tau_SB``), each bar topped with a gray sub-segment counting how many
+    of that bucket's modes were ALSO selected as one of the 6 best T/R
+    candidates by the independent Step-3 Hungarian assignment (``tr_label``
+    non-null).
+
+    Step 2 and Step 3 are decoupled in the current algorithm (see
+    classifier.py's module docstring): a mode's vibrational label and its
+    T/R-candidate status are independent facts, not mutually exclusive
+    categories, so this figure does NOT use ``predicted_category_column``
+    (that merge forces mutual exclusivity between the two and is reserved
+    for the reference/library-comparison figures elsewhere in this file).
 
     Presentation only: reads ``emit_csv``'s ``vib_label``/``tr_label``
-    columns (2026-08-25 schema), recombined into the single display string
-    via the canonical ``predicted_category`` rule, via ``value_counts()`` --
-    never recomputes scores. Categories plotted are exactly whatever is
-    present in the data (not a hardcoded set), so the chart stays correct
-    if the classification changes as more EMIT diagnostics land. The
-    starred ("Tx*") entries in ``canonical_order`` below are retired
-    (Step 3 no longer produces them) but kept harmlessly in the list --
-    they simply never appear in ``present`` on fresh data.
+    columns -- never recomputes scores.
     """
     _style()
     df = pd.read_csv(emit_csv)
-    df["label"] = predicted_category_column(df["tr_label"], df["vib_label"])
-    counts = df["label"].value_counts()
+    counts = df["vib_label"].value_counts()
+    has_tr = df["tr_label"].notna() & (df["tr_label"].astype(str).str.strip() != "")
+    tr_overlap = df[has_tr]["vib_label"].value_counts()
 
-    # Canonical order: T-axis, then R-axis (clean before starred within an
-    # axis -- starred entries retired 2026-08-25, kept only so any leftover
-    # legacy data still renders), then internal B/SB/S in ascending-
-    # frequency order (bending is lowest frequency, stretching highest) --
-    # filtered to categories present.
-    canonical_order = [
-        "Tx", "Tx*", "Ty", "Ty*", "Tz", "Tz*",
-        "Rx", "Rx*", "Ry", "Ry*", "Rz", "Rz*",
-        "B", "SB", "S",
-    ]
-    present = [c for c in canonical_order if c in counts.index]
-    unexpected = [c for c in counts.index if c not in canonical_order]
+    cats = [c for c in ("B", "S") if c in counts.index]
+    unexpected = [c for c in counts.index if c not in ("B", "S")]
     if unexpected:
         raise ValueError(
-            f"benzene EMIT label(s) not in the canonical T/R/S/B/SB order: "
-            f"{unexpected} -- extend canonical_order, don't silently drop them."
+            f"benzene EMIT vib_label(s) outside the binary S/B scheme: "
+            f"{unexpected} -- this figure assumes classify_all_modes(scheme='binary')."
         )
 
-    # T/R (clean or starred) share one gray; S/B/SB use the classification-
-    # algorithm's own predicted-label colors (not the *_ref literature pair).
-    internal_color = {
-        "S": COLORS["stretching"], "B": COLORS["bending"], "SB": COLORS["mixed"],
-    }
-    bar_colors = [internal_color.get(c, COLORS["external"]) for c in present]
-    bar_counts = [int(counts[c]) for c in present]
+    bar_color = {"B": COLORS["bending"], "S": COLORS["stretching"]}
+    base_counts = [int(counts[c]) for c in cats]
+    grey_counts = [int(tr_overlap.get(c, 0)) for c in cats]
 
-    fig, ax = plt.subplots(figsize=(6.2, 3.8))
-    x = np.arange(len(present))
-    ax.bar(x, bar_counts, color=bar_colors)
+    fig, ax = plt.subplots(figsize=(4.2, 3.8))
+    x = np.arange(len(cats))
+    colored_h = [b - g for b, g in zip(base_counts, grey_counts)]
+    ax.bar(x, colored_h, 0.5, color=[bar_color[c] for c in cats],
+           edgecolor="black", linewidth=0.5)
+    ax.bar(x, grey_counts, 0.5, bottom=colored_h,
+           color=COLORS["external"], alpha=0.85, edgecolor="black", linewidth=0.5)
+
+    THIN = 0.08  # T/R sub-segments smaller than this fraction of their bar get an outside label
+    for xi, ch, grey, base in zip(x, colored_h, grey_counts, base_counts):
+        if ch > 0:
+            ax.text(xi, ch / 2, str(ch), ha="center", va="center", color="white",
+                     fontweight="bold", fontsize=ANNOTATION_FONTSIZE)
+        if grey > 0:
+            if base and grey / base >= THIN:
+                ax.text(xi, ch + grey / 2, str(grey), ha="center", va="center",
+                         color="white", fontweight="bold", fontsize=ANNOTATION_FONTSIZE)
+            else:
+                ax.text(xi, base + max(base_counts) * 0.03, str(grey), ha="center",
+                         va="bottom", color=COLORS["external"], fontweight="bold",
+                         fontsize=ANNOTATION_FONTSIZE)
+
     ax.set_xticks(x)
-    ax.set_xticklabels(present)  # matches canonical_order left-to-right
+    ax.set_xticklabels(cats)
     ax.set_ylabel("Number of EMIT modes")
     ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
-    ax.set_ylim(0, max(bar_counts) * 1.18)
-    for xi, n in zip(x, bar_counts):
-        ax.text(xi, n + max(bar_counts) * 0.02, str(n), va="bottom", ha="center",
-                 fontsize=ANNOTATION_FONTSIZE)
+    ax.set_ylim(0, max(base_counts) * 1.18)
+    ax.legend(handles=[Patch(color=COLORS["external"], alpha=0.85,
+                              label="also best T/R candidate")],
+              loc="upper right", frameon=False, fontsize=ANNOTATION_FONTSIZE)
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)
     plt.close(fig)
 
-    n_total = int(sum(bar_counts))
+    n_total = int(sum(base_counts))
     if n_total != len(df):
         raise ValueError(
             f"plotted EMIT mode count {n_total} != len(df) {len(df)} -- "
             "a category/counting bug in this function, not a data change."
         )
+    n_tr = int(sum(grey_counts))
+    if n_tr != int(has_tr.sum()):
+        raise ValueError(
+            f"plotted T/R-overlap count {n_tr} != has_tr.sum() {int(has_tr.sum())} -- "
+            "a counting bug in this function, not a data change."
+        )
 
     summary_dict = {
         "pdf": pdf_path, "png": png_path,
         "n_total": n_total,
-        "counts": {c: int(counts[c]) for c in present},
+        "counts": {c: int(counts[c]) for c in cats},
+        "tr_overlap_counts": {c: int(tr_overlap.get(c, 0)) for c in cats},
     }
     return summary_dict
 

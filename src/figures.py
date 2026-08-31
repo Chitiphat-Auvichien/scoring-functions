@@ -1824,10 +1824,11 @@ def plot_benzene_emit_counts(
 ):
     """Build fig:benzeneemitcounts: benzene's 36 EMIT modes split into the
     two Step-2 vibrational buckets (B, S) from ``vib_label`` (binary scheme,
-    ``tau_SB``), each bar topped with a gray sub-segment counting how many
-    of that bucket's modes were ALSO selected as one of the 6 best T/R
-    candidates by the independent Step-3 Hungarian assignment (``tr_label``
-    non-null).
+    ``tau_SB``), each bar topped with a gray sub-segment -- labeled with the
+    actual T/R slot names (e.g. "Tz, Ry, Rz"), not just a count -- for
+    however many of that bucket's modes were ALSO selected as one of the 6
+    best T/R candidates by the independent Step-3 Hungarian assignment
+    (``tr_label`` non-null).
 
     Step 2 and Step 3 are decoupled in the current algorithm (see
     classifier.py's module docstring): a mode's vibrational label and its
@@ -1857,35 +1858,36 @@ def plot_benzene_emit_counts(
     base_counts = [int(counts[c]) for c in cats]
     grey_counts = [int(tr_overlap.get(c, 0)) for c in cats]
 
+    # Axis-canonical order for listing which T/R slots landed in each bar.
+    axis_order = ["Tx", "Ty", "Tz", "Rx", "Ry", "Rz"]
+    tr_names = {
+        c: sorted(df[has_tr & (df["vib_label"] == c)]["tr_label"].tolist(),
+                   key=axis_order.index)
+        for c in cats
+    }
+
     fig, ax = plt.subplots(figsize=(4.2, 3.8))
     x = np.arange(len(cats))
     colored_h = [b - g for b, g in zip(base_counts, grey_counts)]
-    ax.bar(x, colored_h, 0.5, color=[bar_color[c] for c in cats],
-           edgecolor="black", linewidth=0.5)
-    ax.bar(x, grey_counts, 0.5, bottom=colored_h,
-           color=COLORS["external"], alpha=0.85, edgecolor="black", linewidth=0.5)
+    ax.bar(x, colored_h, 0.5, color=[bar_color[c] for c in cats])
+    ax.bar(x, grey_counts, 0.5, bottom=colored_h, color=COLORS["external"], alpha=0.85)
+    ax.set_xlim(-0.55, len(cats) - 1 + 0.55)
 
-    THIN = 0.08  # T/R sub-segments smaller than this fraction of their bar get an outside label
-    for xi, ch, grey, base in zip(x, colored_h, grey_counts, base_counts):
+    for xi, ch, grey, base, c in zip(x, colored_h, grey_counts, base_counts, cats):
         if ch > 0:
             ax.text(xi, ch / 2, str(ch), ha="center", va="center", color="white",
                      fontweight="bold", fontsize=ANNOTATION_FONTSIZE)
         if grey > 0:
-            if base and grey / base >= THIN:
-                ax.text(xi, ch + grey / 2, str(grey), ha="center", va="center",
-                         color="white", fontweight="bold", fontsize=ANNOTATION_FONTSIZE)
-            else:
-                ax.text(xi, base + max(base_counts) * 0.03, str(grey), ha="center",
-                         va="bottom", color=COLORS["external"], fontweight="bold",
-                         fontsize=ANNOTATION_FONTSIZE)
+            ax.text(xi, base + max(base_counts) * 0.03, ", ".join(tr_names[c]),
+                     ha="center", va="bottom", color=COLORS["external"],
+                     fontweight="bold", fontsize=ANNOTATION_FONTSIZE)
 
     ax.set_xticks(x)
     ax.set_xticklabels(cats)
     ax.set_ylabel("Number of EMIT modes")
     ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
-    ax.set_ylim(0, max(base_counts) * 1.18)
-    ax.legend(handles=[Patch(color=COLORS["external"], alpha=0.85,
-                              label="also best T/R candidate")],
+    ax.set_ylim(0, max(base_counts) * 1.28)
+    ax.legend(handles=[Patch(color=COLORS["external"], alpha=0.85, label="T/R")],
               loc="upper right", frameon=False, fontsize=ANNOTATION_FONTSIZE)
 
     fig.tight_layout()
@@ -1910,6 +1912,7 @@ def plot_benzene_emit_counts(
         "n_total": n_total,
         "counts": {c: int(counts[c]) for c in cats},
         "tr_overlap_counts": {c: int(tr_overlap.get(c, 0)) for c in cats},
+        "tr_overlap_labels": tr_names,
     }
     return summary_dict
 

@@ -85,9 +85,15 @@ def build_label_lookup(tables):
         if pd.isna(r["mode"]):
             continue
         key = (r["molecule"], int(r["mode"]))
+        ref_key = r.get("ref")
         lookup[key] = {
             "ref_label": _filtered_ref_label(r.get("type")),
-            "ref_key": r.get("ref"),
+            # DataFrame.iterrows() boxes a mixed-dtype row into one Series;
+            # depending on pandas version this can turn a genuine None into
+            # NaN when the row also holds a float column (e.g. 'mode' after
+            # pd.to_numeric above) -- normalize back to None so downstream
+            # consumers get a real missing-value sentinel either way.
+            "ref_key": None if pd.isna(ref_key) else ref_key,
         }
     return lookup
 

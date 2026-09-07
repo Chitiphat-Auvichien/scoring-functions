@@ -109,6 +109,16 @@ def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
         raw["modes"] = EMITParser(emit_path, len(raw["atoms"])).parse()
 
     IntermediateIO.save(raw, inter_path)
+    # A fresh write's mtime is "now", which can be *behind* a source's mtime
+    # if that source was stamped into the future (clock skew, or -- as
+    # test_stale_source_forces_reparse exercises -- deliberately, to force
+    # this reparse in the first place) and the write itself was fast. Bump
+    # the intermediate's mtime to at least the newest source's so
+    # _cache_is_fresh() sees this cache as fresh immediately, not just after
+    # real wall-clock time catches up to the forged timestamp.
+    newest_source_mtime = max(os.path.getmtime(p) for p in source_paths)
+    target_mtime = max(os.path.getmtime(inter_path), newest_source_mtime)
+    os.utime(inter_path, (target_mtime, target_mtime))
     return raw, dirs
 
 

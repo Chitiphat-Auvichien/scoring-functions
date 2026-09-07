@@ -1,5 +1,11 @@
-## Sample Pull Request Template Description
+## Summary
 
-This is a sample pull request template. You can customize it to fit your project's needs.
+<!-- What does this change, and why? -->
 
-Don't forget to commit your template file to the repository so that it can be used for future pull requests!
+## Checklist
+
+- [ ] `pytest` passes locally (see `docs/DEVELOPMENT.md#tests`)
+- [ ] If any `data/results/*.csv` or `data/figures/*` output changed, `python reproduce.py` was rerun and
+      the regenerated outputs are included in this PR
+- [ ] If classifier/scoring behavior changed, `IMPLEMENTATION_PLAN.md` and `README.md`/`docs/DEVELOPMENT.md`
+      were updated to match

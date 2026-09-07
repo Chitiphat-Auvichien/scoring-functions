@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "scoring-functions: A displacement-based framework for classifying modes of molecular motion"
+type: software
+license: MIT
+repository-code: "https://github.com/Chitiphat-Auvichien/scoring-functions"
+authors:
+  - given-names: Chitiphat
+    family-names: Auvichien
+    affiliation: "Department of Chemistry, Faculty of Science, Chulalongkorn University"
+  - given-names: Nathani
+    family-names: Therdpraisan
+    affiliation: "Department of Chemistry, Massachusetts Institute of Technology"
+  - given-names: Phitchanaka
+    family-names: Lertmankha
+    affiliation: "Department of Chemistry, Massachusetts Institute of Technology"
+  - given-names: Thanchon
+    family-names: Boonkrong
+    affiliation: "Department of Chemistry, Massachusetts Institute of Technology"
+  - given-names: Viwat
+    family-names: Vchirawongkwin
+    affiliation: "Department of Chemistry, Faculty of Science, Chulalongkorn University"
+  - given-names: Nattapong
+    family-names: Paiboonvorachat
+    affiliation: "Department of Chemistry, Faculty of Science, Chulalongkorn University"
+preferred-citation:
+  type: article
+  status: submitted
+  title: "A Unified, Displacement-Based Framework for Classifying Modes of Molecular Motion"
+  authors:
+    - given-names: Chitiphat
+      family-names: Auvichien
+    - given-names: Nathani
+      family-names: Therdpraisan
+    - given-names: Phitchanaka
+      family-names: Lertmankha
+    - given-names: Thanchon
+      family-names: Boonkrong
+    - given-names: Viwat
+      family-names: Vchirawongkwin
+    - given-names: Nattapong
+      family-names: Paiboonvorachat
+  journal: "Journal of Computational Chemistry"
+  notes: "Submitted; citation details (volume/pages/DOI) to be added upon acceptance."

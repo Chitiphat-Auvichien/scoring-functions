@@ -1,5 +1,5 @@
 # Scoring Functions for Classifying Modes of Molecular Motion
-![Figure abstract](https://github.com/Chitiphat-Auvichien/scoring-functions/blob/main/Abstract.jpg)
+![Figure abstract](https://github.com/Chitiphat-Auvichien/scoring-functions/blob/main/Abstract.pdf)
 
 ## Overview
 

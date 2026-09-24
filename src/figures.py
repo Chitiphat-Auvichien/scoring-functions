@@ -3596,28 +3596,31 @@ def plot_ped_vs_vscore(
     out_dir="data/figures",
     label="fig_ped_vs_vscore",
     tau_SB=None,
-    ylabel=r"$s[\mathrm{V_S}]$ (%)",
+    ylabel=r"$s[\mathrm{V_S}]$",
     label_source_csv=None,
     color_by="reference",
     data_csv_path="data/results/ped_vs_vscore_data.csv",
     show_tau_SB_line=True,
 ):
-    """VEDA4's PED-based %nu (``PED_Stretch_pct``) vs. this framework's own
-    molecule-level stretch score s[V_S] (``V_Stretch``, plotted as a
-    percentage -- ``100 * V_Stretch`` -- so both axes share the same 0-100
-    scale), one point per physical frequency (degenerate modes averaged
-    together via _collapse_degenerate_freqs -- see its docstring) of
-    combined_ped_vs_scores.csv. A parity (y=x) line replaces a fitted
-    trend -- this is an agreement/calibration check against an independent
-    ground truth (see ``color_by`` below), not a correlation to be fit --
-    annotated with the mean absolute error (MAE, in percentage points),
-    ML-parity-plot style, instead of R^2. The axes share identical limits
-    and the axes box is forced square (``ax.set_aspect("equal")``) so the
-    y=x line is visually a true 45 degrees and reads as "perfect
-    agreement". One marker shape (circle) for all points -- color alone
-    distinguishes the category, so varying marker shape too would be a
-    redundant second encoding of the same distinction (matches
-    fig:bondscores' marker="o" override).
+    """VEDA4's PED-based %nu (``PED_Stretch_pct``, 0-100) vs. this
+    framework's own molecule-level stretch score s[V_S] (``V_Stretch``,
+    plotted on its own native 0-1 scale -- the manuscript convention as of
+    2026-09 is s[V_S] is always shown raw/0-1, never x100, so the two axes
+    now have DIFFERENT native ranges), one point per physical frequency
+    (degenerate modes averaged together via _collapse_degenerate_freqs --
+    see its docstring) of combined_ped_vs_scores.csv. A parity line
+    (``y = x/100``, mapping %nu onto the 0-1 s[V_S] scale) replaces a
+    fitted trend -- this is an agreement/calibration check against an
+    independent ground truth (see ``color_by`` below), not a correlation to
+    be fit -- annotated with the mean absolute error (MAE, in percentage
+    points, computed on the x100 scale internally -- see the ``mae``
+    calculation below -- and left as-is even though the y-axis itself is no
+    longer x100; the "%" in the annotation is enough context). The axes no
+    longer share identical limits/aspect (that only made sense back when
+    both were forced onto the same 0-100 scale). One marker shape (circle)
+    for all points -- color alone distinguishes the category, so varying
+    marker shape too would be a redundant second encoding of the same
+    distinction (matches fig:bondscores' marker="o" override).
 
     ``color_by`` selects what the point color/legend encodes:
       - "reference" (default): the literature/PED ground-truth S/B/SB label,
@@ -3663,11 +3666,11 @@ def plot_ped_vs_vscore(
     vote sees the overridden per-row labels, matching how the canonical path
     already collapses labels baked in at tau_SB=0.50.
 
-    ``ylabel`` overrides the y-axis label (default "s[V_S] (%)"; e.g.
-    archive_unweighted callers pass a label that says "Unweighted" to
+    ``ylabel`` overrides the y-axis label (default "s[V_S]", raw 0-1 scale;
+    e.g. archive_unweighted callers pass a label that says "Unweighted" to
     distinguish this from the canonical mu-weighted figure of the same
-    name -- keep any override on the same x100 percentage scale as the
-    plotted data).
+    name -- keep any override on the same raw 0-1 scale as the plotted
+    data).
 
     ``show_tau_SB_line`` (default True) draws the horizontal tau_SB
     reference line/label. archive_unweighted's figure sets this False --
@@ -3764,19 +3767,19 @@ def plot_ped_vs_vscore(
         if sub.empty:
             continue
         kw = _marker_kwargs(cat, marker="o", color_map=color_map)
-        ax.scatter(sub["PED_Stretch_pct"], sub["V_Stretch_pct"], s=16,
+        ax.scatter(sub["PED_Stretch_pct"], sub["V_Stretch"], s=16,
                    zorder=3, label=CATEGORY_LABEL[cat], **kw)
 
     # tau_SB reference line (this framework's own bend/stretch cutoff on the
-    # y-axis quantity s[V_S], rescaled to the same x100 percentage scale as
-    # the plotted data) -- a solid line (unlike every other tau_SB-annotated
-    # figure's dashed axhline) so it reads as distinct from the dashed y=x
-    # parity line sharing this axes. NOT added to the legend (in-axes text
-    # label instead, right of the plot at the line's own height).
+    # y-axis quantity s[V_S], on its native raw 0-1 scale -- NOT rescaled,
+    # unlike before this axis switched off x100) -- a solid line (unlike
+    # every other tau_SB-annotated figure's dashed axhline) so it reads as
+    # distinct from the dashed y=x/100 parity line sharing this axes. NOT
+    # added to the legend (in-axes text label instead, right of the plot at
+    # the line's own height).
     if show_tau_SB_line:
-        tau_SB_pct = th.tau_SB * 100
-        ax.axhline(tau_SB_pct, color=COLORS["threshold"], ls="-", lw=0.8, zorder=1)
-        ax.text(0.98, tau_SB_pct, r"$\tau_{\mathrm{SB}}$", ha="right", va="bottom",
+        ax.axhline(th.tau_SB, color=COLORS["threshold"], ls="-", lw=0.8, zorder=1)
+        ax.text(0.98, th.tau_SB, r"$\tau_{\mathrm{SB}}$", ha="right", va="bottom",
                 color=COLORS["threshold"], transform=ax.get_yaxis_transform())
 
     x = df["PED_Stretch_pct"].to_numpy(float)
@@ -3796,21 +3799,26 @@ def plot_ped_vs_vscore(
     os.makedirs(os.path.dirname(data_csv_path), exist_ok=True)
     point_data.to_csv(data_csv_path, index=False)
 
-    # y=x parity line (not a fit): both axes are the same 0-100 percentage
-    # quantity, so exact agreement with the independent PED reference is
-    # the diagonal, not a fitted trend. MAE (mean absolute error, in
-    # percentage points) reported ML-parity-plot style instead of R^2.
-    lims = (-3, 103)
-    ax.plot(lims, lims, ls="--", lw=1.2, color=COLORS["threshold"], zorder=4,
-            label=r"$y=x$" + f" (MAE = {mae:.1f}%)")
+    # y=x/100 parity line (not a fit): x is %nu (0-100) and y is the raw
+    # s[V_S] (0-1), so exact agreement with the independent PED reference is
+    # this shallow-slope line, not a 45-degree diagonal -- since the two
+    # axes no longer share a scale, forcing an equal/square aspect (as the
+    # old x100-on-both-axes version did) would no longer make the line read
+    # as "agreement" and is dropped. MAE (mean absolute error, in
+    # percentage points, computed above on the x100 scale and left
+    # unrescaled -- see docstring) reported ML-parity-plot style instead of R^2.
+    x_lims = (-3, 103)
+    y_lims = (-0.03, 1.03)
+    ax.plot(x_lims, [v / 100 for v in x_lims], ls="--", lw=1.2,
+            color=COLORS["threshold"], zorder=4,
+            label=r"$y=x/100$" + f" (MAE = {mae:.1f}%)")
 
     ax.set_xlabel(r"$\%\nu$")
     ax.set_ylabel(ylabel)
-    ax.set_xlim(*lims)
-    ax.set_ylim(*lims)
-    ax.set_aspect("equal", adjustable="box")
-    # Full 4-sided border on this square parity plot -- _style() turns off
-    # the top/right spines globally, override back on for this figure only.
+    ax.set_xlim(*x_lims)
+    ax.set_ylim(*y_lims)
+    # Full 4-sided border -- _style() turns off the top/right spines
+    # globally, override back on for this figure only.
     ax.spines["top"].set_visible(True)
     ax.spines["right"].set_visible(True)
     ax.legend(loc="upper left", frameon=False, handletextpad=0.4,

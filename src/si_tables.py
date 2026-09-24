@@ -335,31 +335,26 @@ def benzene_emit_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR)
 
 # Vib-N (internal 1..30 numbering used throughout this repo's CSVs, in
 # ascending-frequency order -- see data/results/C6H6_normal.csv) -> literature
-# Shimanouchi reference-mode number,\cite{Shi1972} raw LaTeX math ready to
-# drop into a cell verbatim (NOT run through _esc()). Notation matches Table
-# 4/tab:emitselected's own "Ref. mode" row exactly: italic Latin "v" (e.g.
-# "$v_{13}$"), NOT the Greek "\nu" -- the main text's own LaTeX source uses
-# "$v_{13}$", not "$\nu_{13}$", despite both being read aloud as "nu". ONLY
-# the pairs independently established either by the main-text Table
-# \ref{tab:benzenemixed} footnote (six "medium vibrational score" rows,
-# matched by frequency) or by this module's own sanity check against the
-# eight EMIT modes already published in Table \ref{tab:emitselected} (see
-# si_tables benzene_emit_summary_table() docstring for the check and its one
-# flagged discrepancy) are included here. Degenerate pairs (E1u/E2g/E1g, each
-# spanning two adjacent Vib-N) share one reference-mode number, matching how
-# the manuscript itself treats degenerate modes.
-_BENZENE_VIB_TO_NU = {
-    6: r"$v_{4}$",
-    7: r"$v_{11}$", 8: r"$v_{11}$",
-    13: r"$v_{14}$", 14: r"$v_{14}$",
-    16: r"$v_{10}$",
-    17: r"$v_{17}$", 18: r"$v_{17}$",
-    19: r"$v_{9}$",
-    21: r"$v_{13}$", 22: r"$v_{13}$",
-    23: r"$v_{16}$", 24: r"$v_{16}$",
-    26: r"$v_{15}$", 27: r"$v_{15}$",
-    28: r"$v_{12}$", 29: r"$v_{12}$",
-}
+# Shimanouchi reference-mode number,\cite{Shi1972}, read from the
+# author-maintained "νₖ" column of data/characterised_modes.csv (now filled in
+# for all 30 C6H6 rows -- see csv_label_ingest.py's module docstring for what
+# this file is/who maintains it). "mode" in that CSV is the same 1-based
+# internal index as Vib-N here (confirmed: e.g. mode 13/14 there share
+# freq=1056.3901, matching Vib 13/14 in C6H6_normal.csv exactly), so no
+# frequency re-matching is needed, just a direct int-keyed join.
+def _load_benzene_vib_to_nu(data_dir):
+    """{Vib-N int -> "$v_{K}$"} for every C6H6 row in characterised_modes.csv
+    that has a νₖ value filled in (blank/NaN νₖ cells, if any remain, are
+    skipped rather than fabricated -- see benzene_emit_summary_table())."""
+    df = pd.read_csv(os.path.join(data_dir, "characterised_modes.csv"))
+    df = df[df["molecule"] == "C6H6"]
+    out = {}
+    for _, row in df.iterrows():
+        nu = row["νₖ"]
+        if pd.isna(nu):
+            continue
+        out[int(row["mode"])] = f"$v_{{{int(nu)}}}$"
+    return out
 
 
 def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
@@ -411,20 +406,21 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     -- that description is now stale, since Table 4/tab:emitselected's O[...]
     values ARE the Cartesian pathway's output. Left for lead-author to
     reconcile the prose; not touched by this function.
-    One discrepancy remains unresolved and is NOT papered over: EMIT 19's
-    published Ref. mode is v13, but v13 is independently pinned (via
-    EMIT 34/35 and the tab:benzenemixed footnote) to Vib 21/22 (E1u, 1532.85
-    cm^-1) -- EMIT 19 actually has ~0 overlap with those two normal modes.
-    EMIT 19's true largest-magnitude overlap is Vib 20 (A2g, 1435.48 cm^-1,
-    value 0.743, matching the published O[vm]=0.74 in magnitude), which is
-    symmetry-consistent (Rz transforms as A2g in D6h) but has no established
-    literature nu-number in this study's data -- likely a labeling
-    transcription slip in the main text rather than a data-regeneration
-    issue, since every one of EMIT 19's other published numbers (O[Rz]=0.65,
-    s[Rz]=0.33, etc.) matches exactly. _BENZENE_VIB_TO_NU is left without a
-    Vib-20 entry rather than propagating that label, so this row's "nu (lit.)"
-    cell comes out blank automatically -- consistent with the "no fabricated
-    assignments" rule below.
+    One discrepancy, now resolved by the complete nu-k column added to
+    characterised_modes.csv: EMIT 19's published Ref. mode is v13, but v13 is
+    independently pinned (via EMIT 34/35 and the tab:benzenemixed footnote)
+    to Vib 21/22 (E1u, 1532.85 cm^-1) -- EMIT 19 actually has ~0 overlap with
+    those two normal modes. EMIT 19's true largest-magnitude overlap is
+    Vib 20 (A2g, 1435.48 cm^-1, value 0.743, matching the published
+    O[vm]=0.74 in magnitude), which is symmetry-consistent (Rz transforms as
+    A2g in D6h). characterised_modes.csv's nu-k column (author-filled in for
+    all 30 C6H6 rows) confirms mode 20 = v3, not v13 -- so this table now
+    displays "v3" for EMIT 19 rather than leaving it blank, which
+    contradicts Table 4's published "v13". This is very likely a
+    transcription slip in the main text's Table 4 rather than a
+    data-regeneration issue, since every one of EMIT 19's other published
+    numbers (O[Rz]=0.65, s[Rz]=0.33, etc.) matches exactly -- worth the
+    authors double-checking Table 4 itself against this.
     """
     df = pd.read_csv(os.path.join(data_dir, "results", "C6H6_EMIT.csv"))
     df_full = pd.read_csv(os.path.join(data_dir, "results", "C6H6_EMIT_full_cartesian.csv"))
@@ -437,8 +433,8 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     # lowercase "o" here (not Table 4's own capital "O") -- an intentional
     # departure from Table 4, per explicit request. "Ref. mode" is Table 4's
     # own row (literature Shimanouchi numbering, italic Latin "v" per
-    # _BENZENE_VIB_TO_NU above); the internal Vib-N index used to find it
-    # (best_col below) is not itself shown as its own row here.
+    # _load_benzene_vib_to_nu() above); the internal Vib-N index used to
+    # find it (best_col below) is not itself shown as its own row here.
     row_labels = ["Eigenvalue",
                   "$o[\\mathrm{T_x}]$", "$o[\\mathrm{T_y}]$", "$o[\\mathrm{T_z}]$",
                   "$o[\\mathrm{R_x}]$", "$o[\\mathrm{R_y}]$", "$o[\\mathrm{R_z}]$", "$o[v_m]$",
@@ -461,6 +457,7 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     # not a bug (see merge_ped_scores.py's module docstring).
     df_normal = pd.read_csv(os.path.join(data_dir, "results", "C6H6_normal.csv"))
     pednu_by_vib = dict(zip(df_normal["Mode"], df_normal["PED_Stretch_pct"]))
+    vib_to_nu = _load_benzene_vib_to_nu(data_dir)
 
     mode_names = []
     data = {}
@@ -471,7 +468,7 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         best_col = vib_vals.abs().idxmax()
         best_val = vib_vals[best_col]
         vib_n = int(best_col.split(" ")[1])
-        nu_lit = _BENZENE_VIB_TO_NU.get(vib_n, "")
+        nu_lit = vib_to_nu.get(vib_n, "")
         pednu_cell = _fmt(pednu_by_vib.get(best_col), 0)
 
         tr_label = row["tr_label"]

@@ -396,8 +396,8 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         "without a published Shimanouchi assignment in this study. "
         + _RAW_DATA_FOOTNOTE)
     caption = ("Full listing of all 36 EMIT modes of C$_6$H$_6$ (benzene), extending "
-               "the 8-mode Table~\\ref{tab:emitselected} in the main text to the "
-               "complete EMIT eigenbasis.")
+               "the 8-mode Table~4 (\\texttt{tab:emitselected}) in the main text to "
+               "the complete EMIT eigenbasis.")
     return _write_longtable(rows, headers, col_spec, caption, "tab:benzeneemitsummary",
                              os.path.join(out_dir, "tab_benzene_emit_summary.tex"),
                              footnote=footnote, fontsize="\\tiny", landscape=True)

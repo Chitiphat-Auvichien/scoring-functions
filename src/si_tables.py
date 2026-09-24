@@ -3,10 +3,11 @@ the program's own data/results/*.csv -- for lead-author's JCC_SI_main.tex to
 \\input{}. Pure formatting: no new scoring/classification logic and no
 recomputation, every number here already exists in a results CSV.
 
-    python -m src.si_tables            # regenerate all four fragments
+    python -m src.si_tables            # regenerate all fragments
 
 One function per dataset (`water_table`, `library_table`,
-`benzene_normal_table`, `benzene_emit_table`), each:
+`benzene_normal_table`, `benzene_emit_table`, `benzene_emit_summary_table`,
+`transferability_misclassified_table`), each:
   1. reads the corresponding CSV with pandas,
   2. trims to a human-readable column subset -- molecule/mode label, freq,
      predicted label, the relevant s[T]/s[R]/s[V_S]/s^{AB} scores, irrep --
@@ -261,6 +262,147 @@ def benzene_emit_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR)
                              landscape=True)
 
 
+# --- (B) Benzene EMIT summary (all 36 modes, Table 4 format) ---------------
+
+# Vib-N (internal 1..30 numbering used throughout this repo's CSVs, in
+# ascending-frequency order -- see data/results/C6H6_normal.csv) -> literature
+# Shimanouchi nu-number,\cite{Shi1972} raw LaTeX math ready to drop into a
+# cell verbatim (NOT run through _esc()). ONLY the pairs independently
+# established either by the main-text Table \ref{tab:benzenemixed} footnote
+# (six "medium vibrational score" rows, matched by frequency) or by this
+# module's own sanity check against the eight EMIT modes already published in
+# Table \ref{tab:emitselected} (see si_tables benzene_emit_summary_table()
+# docstring for the check and its one flagged discrepancy) are included here.
+# Degenerate pairs (E1u/E2g/E1g, each spanning two adjacent Vib-N) share one
+# nu-number, matching how the manuscript itself treats degenerate modes.
+_BENZENE_VIB_TO_NU = {
+    6: r"$\nu_{4}$",
+    7: r"$\nu_{11}$", 8: r"$\nu_{11}$",
+    13: r"$\nu_{14}$", 14: r"$\nu_{14}$",
+    16: r"$\nu_{10}$",
+    17: r"$\nu_{17}$", 18: r"$\nu_{17}$",
+    19: r"$\nu_{9}$",
+    21: r"$\nu_{13}$", 22: r"$\nu_{13}$",
+    23: r"$\nu_{16}$", 24: r"$\nu_{16}$",
+    26: r"$\nu_{15}$", 27: r"$\nu_{15}$",
+    28: r"$\nu_{12}$", 29: r"$\nu_{12}$",
+}
+
+
+def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
+    """All 36 EMIT modes of C6H6 in the same per-mode format as the main
+    text's 8-mode Table \\ref{tab:emitselected} -- tab_benzene_emit_summary.tex
+    (tab:benzeneemitsummary).
+
+    Column sourcing, per mode:
+      O[Tx..Rz]   <- data/results/C6H6_EMIT.csv "Ocart_Tx".."Ocart_Rz"
+                     (src.projection.project_emit_cartesian's raw signed,
+                     plain-Cartesian overlap; see the sanity-check note below
+                     for why this pathway, not the mass-weighted eq:emitproj
+                     one, is the one that reproduces Table 4/tab:emitselected).
+      O[vm], Vib N <- data/results/C6H6_EMIT_full_cartesian.csv "Vib 1".."Vib
+                     30" (same plain-Cartesian pathway's per-reference-mode
+                     detail): the signed value of largest magnitude and its
+                     index.
+      nu (lit.)   <- _BENZENE_VIB_TO_NU, keyed on that Vib-N index; blank for
+                     every Vib-N not in the dict (no fabricated assignments).
+      s[Tx..Rz], s[Vs], Label, T/R label
+                  <- data/results/C6H6_EMIT.csv "Tx".."Rz" (classify_all_modes'
+                     own scores, distinct from the Ocart_* overlap columns
+                     above despite the shared "Tx" name), "V_Stretch",
+                     "vib_label", "tr_label" (blank -> "-").
+
+    Sanity check performed during development (per the task that added this
+    function): for the 8 modes already published in Table
+    \\ref{tab:emitselected} (EMIT 34,35,36,18,13,19,16,33), O[Tx..Rz], s[Tx..
+    Rz], and |O[vm]| all reproduce the published values to ~0.01 using the
+    plain-Cartesian "Ocart_*"/project_emit_cartesian() pathway -- e.g. EMIT
+    34's Ocart_Tx=0.876 matches the published O[Tx]=0.88, matching
+    IMPLEMENTATION_PLAN.md's own pinned ground truth for that value; EMIT 18's
+    Ocart_Rx=-0.680 matches O[Rx]=-0.68 and its top Vib-8 overlap (-0.721)
+    matches O[vm]=-0.72 (Ref. mode v11). The mass-weighted eq:emitproj
+    pathway (src.projection.project_emit's Theta_tilde, squared into the
+    "C2_*" columns) does NOT reproduce these numbers (e.g. its unsquared
+    signed value for EMIT 18's Rx-overlap comes out -0.357, not -0.68) --
+    expected, since Table \\ref{tab:emitselected}'s own caption states it
+    projects onto "Cartesian normal coordinates", i.e. the unweighted
+    pathway. This function therefore deliberately joins against
+    Ocart_*/EMIT_full_cartesian.csv (already produced by the existing
+    project_emit_cartesian() call in main.run_projection_pipeline -- no new
+    projection logic was needed), so the SI table's 8 previously-published
+    rows stay numerically identical to the main text.
+    NOTE (flagged, not fixed here): JCC_SI_main.tex si:projection currently
+    frames the mass-weighted pathway as primary and the Cartesian one as "a
+    diagnostic point of comparison ... not used as an alternative to
+    Equation (eq:emitproj) in any of the results reported in the main text"
+    -- that description is now stale, since Table 4/tab:emitselected's O[...]
+    values ARE the Cartesian pathway's output. Left for lead-author to
+    reconcile the prose; not touched by this function.
+    One discrepancy remains unresolved and is NOT papered over: EMIT 19's
+    published Ref. mode is v13, but v13 is independently pinned (via
+    EMIT 34/35 and the tab:benzenemixed footnote) to Vib 21/22 (E1u, 1532.85
+    cm^-1) -- EMIT 19 actually has ~0 overlap with those two normal modes.
+    EMIT 19's true largest-magnitude overlap is Vib 20 (A2g, 1435.48 cm^-1,
+    value 0.743, matching the published O[vm]=0.74 in magnitude), which is
+    symmetry-consistent (Rz transforms as A2g in D6h) but has no established
+    literature nu-number in this study's data -- likely a labeling
+    transcription slip in the main text rather than a data-regeneration
+    issue, since every one of EMIT 19's other published numbers (O[Rz]=0.65,
+    s[Rz]=0.33, etc.) matches exactly. _BENZENE_VIB_TO_NU is left without a
+    Vib-20 entry rather than propagating that label, so this row's "nu (lit.)"
+    cell comes out blank automatically -- consistent with the "no fabricated
+    assignments" rule below.
+    """
+    df = pd.read_csv(os.path.join(data_dir, "results", "C6H6_EMIT.csv"))
+    df_full = pd.read_csv(os.path.join(data_dir, "results", "C6H6_EMIT_full_cartesian.csv"))
+    vib_cols = [c for c in df_full.columns if c.startswith("Vib ")]
+    full_by_mode = {row["Mode"]: row for _, row in df_full.iterrows()}
+
+    headers = ["Mode", "Eigenvalue",
+               "$O[T_x]$", "$O[T_y]$", "$O[T_z]$",
+               "$O[R_x]$", "$O[R_y]$", "$O[R_z]$", "$O[v_m]$",
+               "Vib N", "$\\nu$ (lit.)",
+               "$s[T_x]$", "$s[T_y]$", "$s[T_z]$",
+               "$s[R_x]$", "$s[R_y]$", "$s[R_z]$", "$s[V_S]$",
+               "Label", "T/R label"]
+    col_spec = "lr" + "rrrrrr" + "r" + "ll" + "rrrrrrr" + "ll"
+
+    rows = []
+    for _, row in df.iterrows():
+        full_row = full_by_mode[row["Mode"]]
+        vib_vals = full_row[vib_cols].astype(float)
+        best_col = vib_vals.abs().idxmax()
+        best_val = vib_vals[best_col]
+        vib_n = int(best_col.split(" ")[1])
+        nu_lit = _BENZENE_VIB_TO_NU.get(vib_n, "")
+
+        tr_label = row["tr_label"]
+        tr_cell = "-" if pd.isna(tr_label) or str(tr_label).strip() == "" else _esc(tr_label)
+
+        rows.append([
+            _esc(row["Mode"]), _fmt(row["Eigenvalue"], 2),
+            _fmt(row["Ocart_Tx"]), _fmt(row["Ocart_Ty"]), _fmt(row["Ocart_Tz"]),
+            _fmt(row["Ocart_Rx"]), _fmt(row["Ocart_Ry"]), _fmt(row["Ocart_Rz"]),
+            _fmt(best_val), _esc(best_col), nu_lit,
+            _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
+            _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
+            _esc(row["vib_label"]), tr_cell,
+        ])
+
+    footnote = (
+        "$O$ denotes an overlap from each type of normal modes, including "
+        "translation [T], rotation [R], and the highest-overlapped "
+        "vibrational mode(s) [$v_m$]. Blank $\\nu$ (lit.) cells are modes "
+        "without a published Shimanouchi assignment in this study. "
+        + _RAW_DATA_FOOTNOTE)
+    caption = ("Full listing of all 36 EMIT modes of C$_6$H$_6$ (benzene), extending "
+               "the 8-mode Table~\\ref{tab:emitselected} in the main text to the "
+               "complete EMIT eigenbasis.")
+    return _write_longtable(rows, headers, col_spec, caption, "tab:benzeneemitsummary",
+                             os.path.join(out_dir, "tab_benzene_emit_summary.tex"),
+                             footnote=footnote, fontsize="\\tiny", landscape=True)
+
+
 def transferability_misclassified_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
     """transferability_confusion_misclassified.csv -> tab_transferability_misclassified.tex
     (tab:transfermisclassified). Full mode-by-mode listing of the 17 modes
@@ -304,6 +446,7 @@ def run_all(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
         library_table(data_dir, out_dir),
         benzene_normal_table(data_dir, out_dir),
         benzene_emit_table(data_dir, out_dir),
+        benzene_emit_summary_table(data_dir, out_dir),
         transferability_misclassified_table(data_dir, out_dir),
     ]
 

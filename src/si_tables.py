@@ -135,7 +135,7 @@ _RAW_DATA_FOOTNOTE = (
 
 def _write_column_block_table(mode_names, row_labels, data, caption, label,
                                out_path, footnote=None, fontsize="\\small",
-                               landscape=True, modes_per_block=9):
+                               landscape=True, modes_per_block=9, midrule_after=None):
     """Write a table with items as COLUMNS -- Table 4's own orientation --
     tiled across multiple fixed-size blocks stacked down the page, for a
     dataset with too many items to fit as columns in one block (36 EMIT
@@ -149,9 +149,12 @@ def _write_column_block_table(mode_names, row_labels, data, caption, label,
     place across a landscape page.
 
     mode_names : list of str, one per item (column), in order.
-    row_labels : list of str, already LaTeX-ready (e.g. "$O[T_x]$").
+    row_labels : list of str, already LaTeX-ready (e.g. "$O[\\mathrm{T_x}]$").
     data : dict {mode_name: [formatted str, ...]}, one list per mode with
         one entry per row_labels, in the same order.
+    midrule_after : int, optional -- 0-based row_labels index after which to
+        insert an extra `\\midrule` inside each block (Table 4 itself has one
+        between its O[...]/Ref.-mode block and its s[...]/Label block).
     """
     blocks = [mode_names[i:i + modes_per_block]
               for i in range(0, len(mode_names), modes_per_block)]
@@ -180,6 +183,8 @@ def _write_column_block_table(mode_names, row_labels, data, caption, label,
         for ri, rlabel in enumerate(row_labels):
             cells = [data[m][ri] for m in block_modes]
             lines.append(rlabel + " & " + " & ".join(cells) + r" \\")
+            if midrule_after is not None and ri == midrule_after:
+                lines.append("\\midrule")
         lines.append("\\bottomrule")
         lines.append("\\end{tabular}")
         lines.append("\\end{center}")
@@ -330,26 +335,30 @@ def benzene_emit_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR)
 
 # Vib-N (internal 1..30 numbering used throughout this repo's CSVs, in
 # ascending-frequency order -- see data/results/C6H6_normal.csv) -> literature
-# Shimanouchi nu-number,\cite{Shi1972} raw LaTeX math ready to drop into a
-# cell verbatim (NOT run through _esc()). ONLY the pairs independently
-# established either by the main-text Table \ref{tab:benzenemixed} footnote
-# (six "medium vibrational score" rows, matched by frequency) or by this
-# module's own sanity check against the eight EMIT modes already published in
-# Table \ref{tab:emitselected} (see si_tables benzene_emit_summary_table()
-# docstring for the check and its one flagged discrepancy) are included here.
-# Degenerate pairs (E1u/E2g/E1g, each spanning two adjacent Vib-N) share one
-# nu-number, matching how the manuscript itself treats degenerate modes.
+# Shimanouchi reference-mode number,\cite{Shi1972} raw LaTeX math ready to
+# drop into a cell verbatim (NOT run through _esc()). Notation matches Table
+# 4/tab:emitselected's own "Ref. mode" row exactly: italic Latin "v" (e.g.
+# "$v_{13}$"), NOT the Greek "\nu" -- the main text's own LaTeX source uses
+# "$v_{13}$", not "$\nu_{13}$", despite both being read aloud as "nu". ONLY
+# the pairs independently established either by the main-text Table
+# \ref{tab:benzenemixed} footnote (six "medium vibrational score" rows,
+# matched by frequency) or by this module's own sanity check against the
+# eight EMIT modes already published in Table \ref{tab:emitselected} (see
+# si_tables benzene_emit_summary_table() docstring for the check and its one
+# flagged discrepancy) are included here. Degenerate pairs (E1u/E2g/E1g, each
+# spanning two adjacent Vib-N) share one reference-mode number, matching how
+# the manuscript itself treats degenerate modes.
 _BENZENE_VIB_TO_NU = {
-    6: r"$\nu_{4}$",
-    7: r"$\nu_{11}$", 8: r"$\nu_{11}$",
-    13: r"$\nu_{14}$", 14: r"$\nu_{14}$",
-    16: r"$\nu_{10}$",
-    17: r"$\nu_{17}$", 18: r"$\nu_{17}$",
-    19: r"$\nu_{9}$",
-    21: r"$\nu_{13}$", 22: r"$\nu_{13}$",
-    23: r"$\nu_{16}$", 24: r"$\nu_{16}$",
-    26: r"$\nu_{15}$", 27: r"$\nu_{15}$",
-    28: r"$\nu_{12}$", 29: r"$\nu_{12}$",
+    6: r"$v_{4}$",
+    7: r"$v_{11}$", 8: r"$v_{11}$",
+    13: r"$v_{14}$", 14: r"$v_{14}$",
+    16: r"$v_{10}$",
+    17: r"$v_{17}$", 18: r"$v_{17}$",
+    19: r"$v_{9}$",
+    21: r"$v_{13}$", 22: r"$v_{13}$",
+    23: r"$v_{16}$", 24: r"$v_{16}$",
+    26: r"$v_{15}$", 27: r"$v_{15}$",
+    28: r"$v_{12}$", 29: r"$v_{12}$",
 }
 
 
@@ -422,13 +431,23 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     vib_cols = [c for c in df_full.columns if c.startswith("Vib ")]
     full_by_mode = {row["Mode"]: row for _, row in df_full.iterrows()}
 
+    # Notation matches Table 4/tab:emitselected exactly: T_x/R_x/V_S set in
+    # \mathrm{} (upright, per the main text's own "$O[\mathrm{T_x}]$"/
+    # "$s[\mathrm{T_x}]$"), so they no longer render in math-italic the way a
+    # bare "$O[T_x]$" would; "Vib N" is this study's own 1..30 index (not in
+    # Table 4), kept separate from "Ref. mode" (Table 4's own row, literature
+    # Shimanouchi numbering, italic Latin "v" per _BENZENE_VIB_TO_NU above).
     row_labels = ["Eigenvalue",
-                  "$O[T_x]$", "$O[T_y]$", "$O[T_z]$",
-                  "$O[R_x]$", "$O[R_y]$", "$O[R_z]$", "$O[v_m]$",
-                  "Vib N", "$\\nu$ (lit.)",
-                  "$s[T_x]$", "$s[T_y]$", "$s[T_z]$",
-                  "$s[R_x]$", "$s[R_y]$", "$s[R_z]$", "$s[V_S]$",
+                  "$O[\\mathrm{T_x}]$", "$O[\\mathrm{T_y}]$", "$O[\\mathrm{T_z}]$",
+                  "$O[\\mathrm{R_x}]$", "$O[\\mathrm{R_y}]$", "$O[\\mathrm{R_z}]$", "$O[v_m]$",
+                  "Vib N", "Ref. mode\\cite{Shi1972}",
+                  "$s[\\mathrm{T_x}]$", "$s[\\mathrm{T_y}]$", "$s[\\mathrm{T_z}]$",
+                  "$s[\\mathrm{R_x}]$", "$s[\\mathrm{R_y}]$", "$s[\\mathrm{R_z}]$", "$s[\\mathrm{V_S}]$",
                   "Label", "T/R label"]
+    # Index (0-based) of the last row before the s[...] block starts, for the
+    # extra \midrule Table 4 itself has between its O[...]/Ref.-mode block
+    # and its s[...]/Label/T-R-label block.
+    _MIDRULE_AFTER = 9
 
     mode_names = []
     data = {}
@@ -444,12 +463,17 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         tr_label = row["tr_label"]
         tr_cell = "-" if pd.isna(tr_label) or str(tr_label).strip() == "" else _esc(tr_label)
 
+        # This study's own Vib-N index, in the same "$v_{N}$" math notation
+        # as the literature Ref.-mode row (row label alone disambiguates the
+        # two numbering systems) rather than the plain-text "Vib 24".
+        vib_n_cell = f"$v_{{{vib_n}}}$"
+
         mode_names.append(mode)
         data[mode] = [
             _fmt(row["Eigenvalue"], 2),
             _fmt(row["Ocart_Tx"]), _fmt(row["Ocart_Ty"]), _fmt(row["Ocart_Tz"]),
             _fmt(row["Ocart_Rx"]), _fmt(row["Ocart_Ry"]), _fmt(row["Ocart_Rz"]),
-            _fmt(best_val), _esc(best_col), nu_lit,
+            _fmt(best_val), vib_n_cell, nu_lit,
             _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
             _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
             _esc(row["vib_label"]), tr_cell,
@@ -458,7 +482,7 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     footnote = (
         "$O$ denotes an overlap from each type of normal modes, including "
         "translation [T], rotation [R], and the highest-overlapped "
-        "vibrational mode(s) [$v_m$]. Blank $\\nu$ (lit.) cells are modes "
+        "vibrational mode(s) [$v_m$]. Blank Ref.-mode cells are modes "
         "without a published Shimanouchi assignment in this study. "
         + _RAW_DATA_FOOTNOTE)
     caption = ("Full listing of all 36 EMIT modes of C$_6$H$_6$ (benzene), tiled in "
@@ -469,7 +493,8 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
                                       "tab:benzeneemitsummary",
                                       os.path.join(out_dir, "tab_benzene_emit_summary.tex"),
                                       footnote=footnote, fontsize="\\small",
-                                      landscape=True, modes_per_block=9)
+                                      landscape=True, modes_per_block=9,
+                                      midrule_after=_MIDRULE_AFTER)
 
 
 def transferability_misclassified_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):

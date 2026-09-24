@@ -485,21 +485,15 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     # extra \midrule Table 4 itself has between its o[...]/Ref.-mode block
     # and its s[...]/Label/T-R-label block.
     _MIDRULE_AFTER = 9
-    # Rows that carry a distinct SECOND value for a mode whose second-best
-    # overlap is comparably large to its best one (see below) -- Table 4's
-    # own merged-column convention for EMIT 16/33, extended here to every
-    # mode meeting the ratio threshold rather than two hand-picked examples.
+    # Rows that carry a distinct SECOND value, for every mode -- Table 4's
+    # own merged-column convention for EMIT 16/33, extended here to all 36
+    # modes rather than two hand-picked examples, per explicit request (an
+    # earlier revision gated this on a >=80% second/best overlap-ratio
+    # threshold, showing it only for the 13 modes with a genuine near-tie;
+    # now every mode always reports its runner-up match, however small, so
+    # the reader can judge comparability themselves rather than have it
+    # pre-filtered).
     _WIDE_ROWS = {7, 8, 9}  # o[v_m], Ref. mode, %nu
-    # A mode's second-best overlap is reported alongside the best one
-    # whenever it is at least this fraction of the best one's magnitude --
-    # i.e. the EMIT mode genuinely can't be explained by a single normal
-    # mode. 0.80 chosen per explicit request; Table 4's own two hand-picked
-    # examples (EMIT 16, ratio 0.90; EMIT 33, ratio 0.72) straddle this
-    # threshold, so EMIT 33 does NOT get a second column here even though
-    # Table 4 itself shows one for it (different selection criteria -- Table
-    # 4 picked EMIT 33 to illustrate a clean pure-stretch case, not because
-    # of a tie).
-    _SECOND_BEST_RATIO_THRESHOLD = 0.80
 
     # %nu: this study's own real PED analysis (VEDA4, via ped/merge_ped_scores.py
     # -- see JCC_SI_main.tex si:ped), already merged into C6H6_normal.csv's
@@ -538,23 +532,18 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         abs_sorted = vib_vals.abs().sort_values(ascending=False)
         best_col, second_col = abs_sorted.index[0], abs_sorted.index[1]
         best_val, second_val = vib_vals[best_col], vib_vals[second_col]
-        ratio = abs(second_val) / abs(best_val) if best_val != 0 else 0.0
-        is_wide = ratio >= _SECOND_BEST_RATIO_THRESHOLD
 
         nu_lit, pednu_cell = _nu_and_pednu(best_col)
-        if is_wide:
-            nu_lit2, pednu_cell2 = _nu_and_pednu(second_col)
-            ovm_cell = [_fmt(best_val), _fmt(second_val)]
-            nu_cell = [nu_lit, nu_lit2]
-            pednu_full_cell = [pednu_cell, pednu_cell2]
-        else:
-            ovm_cell, nu_cell, pednu_full_cell = _fmt(best_val), nu_lit, pednu_cell
+        nu_lit2, pednu_cell2 = _nu_and_pednu(second_col)
+        ovm_cell = [_fmt(best_val), _fmt(second_val)]
+        nu_cell = [nu_lit, nu_lit2]
+        pednu_full_cell = [pednu_cell, pednu_cell2]
 
         tr_label = row["tr_label"]
         tr_cell = "-" if pd.isna(tr_label) or str(tr_label).strip() == "" else _esc(tr_label)
 
         mode_names.append(mode)
-        mode_widths[mode] = 2 if is_wide else 1
+        mode_widths[mode] = 2
         data[mode] = [
             _fmt(row["Eigenvalue"], 2),
             _fmt(row["Ocart_Tx"]), _fmt(row["Ocart_Ty"]), _fmt(row["Ocart_Tz"]),
@@ -574,11 +563,11 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         "contribution (Section~\\ref{si:ped}) of the matched Vib-$N$ normal "
         "mode, averaged over degenerate partners as in Figure~7; values "
         "above 100 reflect this molecule's redundant internal-coordinate "
-        "set and are not an error. Modes whose second-best overlap is at "
-        f"least {int(_SECOND_BEST_RATIO_THRESHOLD * 100)}\\% of the best one's "
-        "magnitude (i.e.\\ genuinely not explained by a single normal mode) "
-        "report both matches side by side, as Table~4 itself does for "
-        "EMIT~16/33. "
+        "set and are not an error. Every mode reports its best- and "
+        "second-best-overlapped normal mode side by side, as Table~4 itself "
+        "does for EMIT~16/33 -- the two need not be comparable in magnitude; "
+        "compare the two $o[v_m]$ values to judge how cleanly (or not) a "
+        "single normal mode explains the EMIT mode. "
         + _RAW_DATA_FOOTNOTE)
     caption = ("Full listing of all 36 EMIT modes of C$_6$H$_6$ (benzene), tiled in "
                "the same per-mode-as-column format as the main text's 8-mode Table~4 "

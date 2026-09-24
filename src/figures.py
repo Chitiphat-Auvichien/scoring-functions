@@ -1866,7 +1866,18 @@ def plot_benzene_emit_counts(
         for c in cats
     }
 
-    fig, ax = plt.subplots(figsize=(4.2, 3.8))
+    # Sized to print at 1/3 of the manuscript's 6.5in page width (~2.2in),
+    # not the ~6.2-6.5in main-text single-panel width -- so it needs its
+    # own (smaller) local font sizes rather than the shared ANNOTATION_FONTSIZE/
+    # rcParams defaults from _style(), which are tuned for full-width figures
+    # and would print oversized/cramped at this figure's much narrower
+    # \includegraphics width.
+    FS_TICK = 7
+    FS_LABEL = 7.5
+    FS_ANNOT = 6
+    FS_LEGEND = 6
+
+    fig, ax = plt.subplots(figsize=(2.2, 2.5))
     x = np.arange(len(cats))
     colored_h = [b - g for b, g in zip(base_counts, grey_counts)]
     ax.bar(x, colored_h, 0.5, color=[bar_color[c] for c in cats])
@@ -1876,19 +1887,21 @@ def plot_benzene_emit_counts(
     for xi, ch, grey, base, c in zip(x, colored_h, grey_counts, base_counts, cats):
         if ch > 0:
             ax.text(xi, ch / 2, str(ch), ha="center", va="center", color="white",
-                     fontweight="bold", fontsize=ANNOTATION_FONTSIZE)
+                     fontweight="bold", fontsize=FS_ANNOT)
         if grey > 0:
             ax.text(xi, base + max(base_counts) * 0.03, ", ".join(tr_names[c]),
                      ha="center", va="bottom", color=COLORS["external"],
-                     fontweight="bold", fontsize=ANNOTATION_FONTSIZE)
+                     fontweight="bold", fontsize=FS_ANNOT)
 
     ax.set_xticks(x)
-    ax.set_xticklabels(cats)
-    ax.set_ylabel("Number of EMIT modes")
+    ax.set_xticklabels(cats, fontsize=FS_TICK)
+    ax.set_ylabel("Number of EMIT modes", fontsize=FS_LABEL)
+    ax.tick_params(axis="both", labelsize=FS_TICK)
     ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
     ax.set_ylim(0, max(base_counts) * 1.28)
     ax.legend(handles=[Patch(color=COLORS["external"], alpha=0.85, label="T/R")],
-              loc="upper right", frameon=False, fontsize=ANNOTATION_FONTSIZE)
+              loc="upper right", frameon=False, fontsize=FS_LEGEND,
+              handlelength=1.2, handletextpad=0.4, borderaxespad=0.2)
 
     fig.tight_layout()
     pdf_path, png_path = _savefig(fig, out_dir, label)

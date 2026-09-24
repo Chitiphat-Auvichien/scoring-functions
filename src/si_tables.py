@@ -440,14 +440,25 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     row_labels = ["Eigenvalue",
                   "$O[\\mathrm{T_x}]$", "$O[\\mathrm{T_y}]$", "$O[\\mathrm{T_z}]$",
                   "$O[\\mathrm{R_x}]$", "$O[\\mathrm{R_y}]$", "$O[\\mathrm{R_z}]$", "$O[v_m]$",
-                  "Vib N", "Ref. mode\\cite{Shi1972}",
+                  "Vib N", "Ref. mode\\cite{Shi1972}", "\\%$\\nu$",
                   "$s[\\mathrm{T_x}]$", "$s[\\mathrm{T_y}]$", "$s[\\mathrm{T_z}]$",
                   "$s[\\mathrm{R_x}]$", "$s[\\mathrm{R_y}]$", "$s[\\mathrm{R_z}]$", "$s[\\mathrm{V_S}]$",
                   "Label", "T/R label"]
     # Index (0-based) of the last row before the s[...] block starts, for the
     # extra \midrule Table 4 itself has between its O[...]/Ref.-mode block
     # and its s[...]/Label/T-R-label block.
-    _MIDRULE_AFTER = 9
+    _MIDRULE_AFTER = 10
+
+    # %nu: this study's own real PED analysis (VEDA4, via ped/merge_ped_scores.py
+    # -- see JCC_SI_main.tex si:ped), already merged into C6H6_normal.csv's
+    # "PED_Stretch_pct" column and keyed on the same "Vib N" identifier as
+    # best_col below -- no re-derivation or fresh frequency-matching needed.
+    # Every one of benzene's 30 normal modes has a PED row (unlike the sparse
+    # literature nu-numbering above), so this is never blank. Values can
+    # exceed 100 (e.g. 108) -- expected for this redundant-coordinate PED set,
+    # not a bug (see merge_ped_scores.py's module docstring).
+    df_normal = pd.read_csv(os.path.join(data_dir, "results", "C6H6_normal.csv"))
+    pednu_by_vib = dict(zip(df_normal["Mode"], df_normal["PED_Stretch_pct"]))
 
     mode_names = []
     data = {}
@@ -459,6 +470,7 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         best_val = vib_vals[best_col]
         vib_n = int(best_col.split(" ")[1])
         nu_lit = _BENZENE_VIB_TO_NU.get(vib_n, "")
+        pednu_cell = _fmt(pednu_by_vib.get(best_col), 0)
 
         tr_label = row["tr_label"]
         tr_cell = "-" if pd.isna(tr_label) or str(tr_label).strip() == "" else _esc(tr_label)
@@ -473,7 +485,7 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
             _fmt(row["Eigenvalue"], 2),
             _fmt(row["Ocart_Tx"]), _fmt(row["Ocart_Ty"]), _fmt(row["Ocart_Tz"]),
             _fmt(row["Ocart_Rx"]), _fmt(row["Ocart_Ry"]), _fmt(row["Ocart_Rz"]),
-            _fmt(best_val), vib_n_cell, nu_lit,
+            _fmt(best_val), vib_n_cell, nu_lit, pednu_cell,
             _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
             _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
             _esc(row["vib_label"]), tr_cell,
@@ -484,6 +496,10 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         "translation [T], rotation [R], and the highest-overlapped "
         "vibrational mode(s) [$v_m$]. Blank Ref.-mode cells are modes "
         "without a published Shimanouchi assignment in this study. "
+        "\\%$\\nu$ is the real VEDA4 PED-derived total stretching "
+        "contribution (Section~\\ref{si:ped}) of the matched Vib-$N$ normal "
+        "mode; values above 100 reflect this molecule's redundant internal- "
+        "coordinate set and are not an error. "
         + _RAW_DATA_FOOTNOTE)
     caption = ("Full listing of all 36 EMIT modes of C$_6$H$_6$ (benzene), tiled in "
                "the same per-mode-as-column format as the main text's 8-mode Table~4 "

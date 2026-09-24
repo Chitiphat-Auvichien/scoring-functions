@@ -455,8 +455,18 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     # literature nu-numbering above), so this is never blank. Values can
     # exceed 100 (e.g. 108) -- expected for this redundant-coordinate PED set,
     # not a bug (see merge_ped_scores.py's module docstring).
+    # Degenerate pairs (identical Freq, e.g. Vib 21/22) are AVERAGED before
+    # use -- matching the main text's own stated convention for %nu
+    # (Section 3.3/fig:modemixing: "all values for degenerate modes are
+    # averaged ... to compensate their arbitrary linear combinations").
+    # Individual PED_Stretch_pct values within one degenerate pair can differ
+    # wildly (e.g. Vib 21/22 are 15.0/0.0) purely from the arbitrary rotation
+    # freedom VEDA4 has within a degenerate eigenspace -- reporting either one
+    # alone, rather than their average, would misrepresent the physical mode.
     df_normal = pd.read_csv(os.path.join(data_dir, "results", "C6H6_normal.csv"))
-    pednu_by_vib = dict(zip(df_normal["Mode"], df_normal["PED_Stretch_pct"]))
+    df_normal["_PED_Stretch_avg"] = (
+        df_normal.groupby("Freq")["PED_Stretch_pct"].transform("mean"))
+    pednu_by_vib = dict(zip(df_normal["Mode"], df_normal["_PED_Stretch_avg"]))
     vib_to_nu = _load_benzene_vib_to_nu(data_dir)
 
     mode_names = []
@@ -492,8 +502,9 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         "without a published Shimanouchi assignment in this study. "
         "\\%$\\nu$ is the real VEDA4 PED-derived total stretching "
         "contribution (Section~\\ref{si:ped}) of the matched Vib-$N$ normal "
-        "mode; values above 100 reflect this molecule's redundant internal- "
-        "coordinate set and are not an error. "
+        "mode, averaged over degenerate partners as in Figure~7; values "
+        "above 100 reflect this molecule's redundant internal-coordinate "
+        "set and are not an error. "
         + _RAW_DATA_FOOTNOTE)
     caption = ("Full listing of all 36 EMIT modes of C$_6$H$_6$ (benzene), tiled in "
                "the same per-mode-as-column format as the main text's 8-mode Table~4 "

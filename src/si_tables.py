@@ -551,7 +551,7 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
 
         nu_lit, pednu_cell = _nu_and_pednu(best_col)
         nu_lit2, pednu_cell2 = _nu_and_pednu(second_col)
-        ovm_cell = [_fmt(best_val), _fmt(second_val)]
+        ovm_cell = [_fmt(best_val, 2), _fmt(second_val, 2)]
         nu_cell = [nu_lit, nu_lit2]
         pednu_full_cell = [pednu_cell, pednu_cell2]
 
@@ -562,11 +562,11 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         mode_widths[mode] = 2
         data[mode] = [
             _fmt(row["Eigenvalue"], 2),
-            _fmt(row["Ocart_Tx"]), _fmt(row["Ocart_Ty"]), _fmt(row["Ocart_Tz"]),
-            _fmt(row["Ocart_Rx"]), _fmt(row["Ocart_Ry"]), _fmt(row["Ocart_Rz"]),
+            _fmt(row["Ocart_Tx"], 2), _fmt(row["Ocart_Ty"], 2), _fmt(row["Ocart_Tz"], 2),
+            _fmt(row["Ocart_Rx"], 2), _fmt(row["Ocart_Ry"], 2), _fmt(row["Ocart_Rz"], 2),
             ovm_cell, nu_cell, pednu_full_cell,
-            _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
-            _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
+            _fmt(row["Tx"], 2), _fmt(row["Ty"], 2), _fmt(row["Tz"], 2),
+            _fmt(row["Rx"], 2), _fmt(row["Ry"], 2), _fmt(row["Rz"], 2), _fmt(row["V_Stretch"], 2),
             _esc(row["vib_label"]), tr_cell,
         ]
 

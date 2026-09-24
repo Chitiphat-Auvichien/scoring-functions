@@ -492,8 +492,8 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     return _write_column_block_table(mode_names, row_labels, data, caption,
                                       "tab:benzeneemitsummary",
                                       os.path.join(out_dir, "tab_benzene_emit_summary.tex"),
-                                      footnote=footnote, fontsize="\\small",
-                                      landscape=True, modes_per_block=9,
+                                      footnote=footnote, fontsize="\\footnotesize",
+                                      landscape=True, modes_per_block=12,
                                       midrule_after=_MIDRULE_AFTER)
 
 

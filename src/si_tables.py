@@ -431,23 +431,25 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
     vib_cols = [c for c in df_full.columns if c.startswith("Vib ")]
     full_by_mode = {row["Mode"]: row for _, row in df_full.iterrows()}
 
-    # Notation matches Table 4/tab:emitselected exactly: T_x/R_x/V_S set in
-    # \mathrm{} (upright, per the main text's own "$O[\mathrm{T_x}]$"/
-    # "$s[\mathrm{T_x}]$"), so they no longer render in math-italic the way a
-    # bare "$O[T_x]$" would; "Vib N" is this study's own 1..30 index (not in
-    # Table 4), kept separate from "Ref. mode" (Table 4's own row, literature
-    # Shimanouchi numbering, italic Latin "v" per _BENZENE_VIB_TO_NU above).
+    # T_x/R_x/V_S set in \mathrm{} (upright, per the main text's own
+    # "$O[\mathrm{T_x}]$"/"$s[\mathrm{T_x}]$"), so they no longer render in
+    # math-italic the way a bare "$o[T_x]$" would. Overlap notation uses
+    # lowercase "o" here (not Table 4's own capital "O") -- an intentional
+    # departure from Table 4, per explicit request. "Ref. mode" is Table 4's
+    # own row (literature Shimanouchi numbering, italic Latin "v" per
+    # _BENZENE_VIB_TO_NU above); the internal Vib-N index used to find it
+    # (best_col below) is not itself shown as its own row here.
     row_labels = ["Eigenvalue",
-                  "$O[\\mathrm{T_x}]$", "$O[\\mathrm{T_y}]$", "$O[\\mathrm{T_z}]$",
-                  "$O[\\mathrm{R_x}]$", "$O[\\mathrm{R_y}]$", "$O[\\mathrm{R_z}]$", "$O[v_m]$",
-                  "Vib N", "Ref. mode\\cite{Shi1972}", "\\%$\\nu$",
+                  "$o[\\mathrm{T_x}]$", "$o[\\mathrm{T_y}]$", "$o[\\mathrm{T_z}]$",
+                  "$o[\\mathrm{R_x}]$", "$o[\\mathrm{R_y}]$", "$o[\\mathrm{R_z}]$", "$o[v_m]$",
+                  "Ref. mode\\cite{Shi1972}", "\\%$\\nu$",
                   "$s[\\mathrm{T_x}]$", "$s[\\mathrm{T_y}]$", "$s[\\mathrm{T_z}]$",
                   "$s[\\mathrm{R_x}]$", "$s[\\mathrm{R_y}]$", "$s[\\mathrm{R_z}]$", "$s[\\mathrm{V_S}]$",
                   "Label", "T/R label"]
     # Index (0-based) of the last row before the s[...] block starts, for the
-    # extra \midrule Table 4 itself has between its O[...]/Ref.-mode block
+    # extra \midrule Table 4 itself has between its o[...]/Ref.-mode block
     # and its s[...]/Label/T-R-label block.
-    _MIDRULE_AFTER = 10
+    _MIDRULE_AFTER = 9
 
     # %nu: this study's own real PED analysis (VEDA4, via ped/merge_ped_scores.py
     # -- see JCC_SI_main.tex si:ped), already merged into C6H6_normal.csv's
@@ -475,24 +477,19 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
         tr_label = row["tr_label"]
         tr_cell = "-" if pd.isna(tr_label) or str(tr_label).strip() == "" else _esc(tr_label)
 
-        # This study's own Vib-N index, in the same "$v_{N}$" math notation
-        # as the literature Ref.-mode row (row label alone disambiguates the
-        # two numbering systems) rather than the plain-text "Vib 24".
-        vib_n_cell = f"$v_{{{vib_n}}}$"
-
         mode_names.append(mode)
         data[mode] = [
             _fmt(row["Eigenvalue"], 2),
             _fmt(row["Ocart_Tx"]), _fmt(row["Ocart_Ty"]), _fmt(row["Ocart_Tz"]),
             _fmt(row["Ocart_Rx"]), _fmt(row["Ocart_Ry"]), _fmt(row["Ocart_Rz"]),
-            _fmt(best_val), vib_n_cell, nu_lit, pednu_cell,
+            _fmt(best_val), nu_lit, pednu_cell,
             _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
             _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
             _esc(row["vib_label"]), tr_cell,
         ]
 
     footnote = (
-        "$O$ denotes an overlap from each type of normal modes, including "
+        "$o$ denotes an overlap from each type of normal modes, including "
         "translation [T], rotation [R], and the highest-overlapped "
         "vibrational mode(s) [$v_m$]. Blank Ref.-mode cells are modes "
         "without a published Shimanouchi assignment in this study. "

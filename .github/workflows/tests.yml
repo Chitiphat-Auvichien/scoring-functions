@@ -18,10 +18,4 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - name: Run tests
-        # test_veda_fmt_regression.py has 2 pre-existing, understood failures unrelated to ordinary use
-        # (stale .fchk-presence assumption + a small Hessian-reconstruction numeric drift) -- see
-        # docs/DEVELOPMENT.md#tests. Deselected here so CI stays a meaningful green/red signal.
-        run: >
-          pytest
-          --deselect tests/test_veda_fmt_regression.py::test_resolve_molecule_no_fchk_present
-          --deselect tests/test_veda_fmt_regression.py::test_framework1_c6h6_round_trip_and_matches_reference
+        run: pytest

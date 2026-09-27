@@ -154,8 +154,7 @@ def parse_fchk_masses(fchk_path, natoms):
 
 def build_hessian(mol, symbols, vibfreq, masses):
     """Orchestrate Framework 2: parse .fchk -> validate against the .log's
-    own frequencies (the only sanity check available until real .fchk data
-    exists). Returns (H_AU, max_diff_cm1)."""
+    own frequencies. Returns (H_AU, max_diff_cm1)."""
     if not mol.fchk_path:
         raise FileNotFoundError(
             f"No .fchk resolved for molecule {mol.name!r}; Framework 2 "

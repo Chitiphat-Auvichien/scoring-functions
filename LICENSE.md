@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Chitiphat Auvichien, Nathani Therdpraisan, Phitchanaka Lertmankha, and Nattapong Paiboonvorachat
+Copyright (c) 2026 Chitiphat Auvichien, Nathani Therdpraisan, Phitchanaka Lertmankha, Thanchon Boonkrong, Viwat Vchirawongkwin, and Nattapong Paiboonvorachat
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

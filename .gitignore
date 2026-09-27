@@ -35,6 +35,10 @@ ped/archive_python_ped/inspect_coord_*.png
 ped/output/*
 !ped/output/.gitkeep
 
+# Internal planning log -- kept locally only, not published (still in
+# git history from before it was untracked)
+IMPLEMENTATION_PLAN.md
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db

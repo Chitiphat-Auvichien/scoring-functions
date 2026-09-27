@@ -138,6 +138,4 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-No `conftest.py`/`pytest.ini` — plain pytest auto-discovery over `tests/`. Two pre-existing failures in
-`tests/test_veda_fmt_regression.py` are expected (stale `.fchk`-presence assumption + a small
-Hessian-reconstruction numeric drift, unrelated to ordinary use of the pipeline).
+No `conftest.py`/`pytest.ini` — plain pytest auto-discovery over `tests/`. All tests should pass.

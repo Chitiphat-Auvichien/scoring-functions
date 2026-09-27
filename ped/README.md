@@ -28,13 +28,14 @@ framework. Only block 3 (the Hessian) differs:
 | `reconstruct` (Framework 1) | Recovers the full Cartesian Hessian purely from the log's own printed frequencies + Cartesian displacement eigenvectors (mass-weighted eigendecomposition inversion) | `data/logs/<mol>.log` only |
 | `fchk` (Framework 2) | Parses the Hessian directly out of a Gaussian formatted checkpoint | `data/logs/<mol>.log` **and** `data/fchk/<mol>.fchk` (or `data/logs/<mol>.fchk`) |
 
-**Honest caveat:** Framework 2 has **zero real test data** in this repo right
-now -- no `.fchk` file exists anywhere in it. Its parsing logic is only
-exercised by a synthetic, hand-built fixture in
-`tests/test_veda_fmt_regression.py`. Treat it with suspicion on first real use,
-until it's been run against a genuine Gaussian `.fchk` and independently
-cross-checked (e.g. against Framework 1's reconstruction for the same job, or
-against VEDA4's own recomputed frequencies).
+`data/fchk/` ships a real `.fchk` for every molecule that has a `data/logs/`
+entry, so Framework 2 can be exercised end-to-end. Its parser-level unit
+tests in `tests/test_veda_fmt_regression.py` still use a synthetic,
+hand-built fixture rather than one of these real files. If you haven't
+independently cross-checked a given molecule's Framework 2 output yet (e.g.
+against Framework 1's reconstruction for the same job, or against VEDA4's own
+recomputed frequencies), treat it with the same suspicion as any first real
+use.
 
 ## How to produce a `.fchk`
 

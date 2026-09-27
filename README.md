@@ -20,9 +20,8 @@ Concretely, the code covers:
   * **Translational scores (Tx, Ty, Tz):** does the whole molecule move along the X/Y/Z axis?
   * **Rotational scores (Rx, Ry, Rz):** does the whole molecule rotate about the X/Y/Z axis?
   * **Vibrational score (`V_Stretch`):** is the internal motion bond **stretching** (high score) or
-    **bending** (low score)? Each bond is weighted by its reduced mass `μ_AB = m_A·m_B/(m_A+m_B)`, so a
-    bond counts for as much as the kinetic energy its stretching motion actually carries. Since `μ`
-    divides out when every bond is the same (an AB_n molecule like H₂O or CH₄), this only changes
+    **bending** (low score)? Each bond is weighted by its reduced mass `μ_AB = m_A·m_B/(m_A+m_B)`. Since
+    `μ` divides out when every bond is the same (an AB_n molecule like H₂O or CH₄), this only changes
     molecules with mixed bond types. `--v-weighting none` restores the original unweighted definition.
 * **Step 2 — vibrational classification.** Every one of the `3N` candidate modes gets a `vib_label`
   from `V_Stretch` alone: `"S"` (stretching) or `"B"` (bending) under the default binary scheme, via a

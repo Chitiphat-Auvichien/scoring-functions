@@ -2537,23 +2537,24 @@ def plot_tau_sb_sensitivity(
         result = json.load(f)
     sb_sweep_info = result.get("tau_SB_error_sweep", {})
     opt_all = sb_sweep_info.get("optimal_tau_all")
+    opt_all_lo = sb_sweep_info.get("optimal_tau_all_lo")
+    opt_all_hi = sb_sweep_info.get("optimal_tau_all_hi")
     opt_test = sb_sweep_info.get("optimal_tau_test")
+    opt_test_lo = sb_sweep_info.get("optimal_tau_test_lo")
+    opt_test_hi = sb_sweep_info.get("optimal_tau_test_hi")
     opt_sc = sb_sweep_info.get("optimal_tau_single_centre")
+    opt_sc_lo = sb_sweep_info.get("optimal_tau_single_centre_lo")
+    opt_sc_hi = sb_sweep_info.get("optimal_tau_single_centre_hi")
 
     fig, ax1 = plt.subplots(figsize=(5.6, 4.6))
     ax1.axvline(tau_SB_active, color=COLORS["threshold"], ls="--", lw=1.2, zorder=2,
                 label=r"active $\tau_{\mathrm{SB}}$" + f"={tau_SB_active:g}")
     ax1.axvline(0.5, color=COLORS["threshold"], ls="-.", lw=1.0, zorder=2,
-                label=r"$\tau_{\mathrm{SB}}$=0.5")
-    if opt_all is not None:
-        ax1.axvline(opt_all, color=COLORS["sens_change"], ls=":", lw=1.0, zorder=2,
-                    label=f"optimal (all)={opt_all:g}")
-    if opt_test is not None:
-        ax1.axvline(opt_test, color=COLORS["sens_accuracy"], ls=":", lw=1.0, zorder=2,
-                    label=f"optimal (test)={opt_test:g}")
-    if opt_sc is not None:
-        ax1.axvline(opt_sc, color=COLORS["sens_single_centre"], ls=":", lw=1.0, zorder=2,
-                    label=f"optimal (single-centre)={opt_sc:g}")
+                label=r"$\tau_{\mathrm{SB}}$=0.50")
+    _draw_optimal(ax1, COLORS["sens_change"], "optimal (all)", opt_all, opt_all_lo, opt_all_hi)
+    _draw_optimal(ax1, COLORS["sens_accuracy"], "optimal (test)", opt_test, opt_test_lo, opt_test_hi)
+    _draw_optimal(ax1, COLORS["sens_single_centre"], "optimal (single-center)",
+                  opt_sc, opt_sc_lo, opt_sc_hi)
 
     l1, = ax1.plot(sweep["tau_SB"], sweep["error_all"], color=COLORS["sens_change"],
                    marker="o", markersize=2.5, lw=1.1, zorder=3, label="error (all)")
@@ -2562,7 +2563,7 @@ def plot_tau_sb_sensitivity(
     l3, = ax1.plot(sweep["tau_SB"], sweep["error_single_centre"],
                    color=COLORS["sens_single_centre"],
                    marker="^", markersize=2.5, lw=1.1, zorder=3,
-                   label="error (single-centre)")
+                   label="error (single-center)")
     ax1.set_xlabel(r"$\tau_{\mathrm{SB}}$")
     ax1.set_ylabel("Classification error")
     ax1.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
@@ -2591,8 +2592,11 @@ def plot_tau_sb_sensitivity(
         "tau_SB_active": tau_SB_active,
         "tau_SB_fixed_reference": 0.5,
         "optimal_tau_SB_all": opt_all,
+        "optimal_tau_SB_all_range": (opt_all_lo, opt_all_hi),
         "optimal_tau_SB_test": opt_test,
+        "optimal_tau_SB_test_range": (opt_test_lo, opt_test_hi),
         "optimal_tau_SB_single_centre": opt_sc,
+        "optimal_tau_SB_single_centre_range": (opt_sc_lo, opt_sc_hi),
     }
     return summary
 
@@ -2617,6 +2621,27 @@ def plot_tau_sb_sensitivity(
 # --------------------------------------------------------------------------
 
 DEFAULT_TAU_NU_GRID = tuple(round(x, 2) for x in np.arange(0.0, 100.001, 1.0))
+
+
+def _draw_optimal(ax, color, name, mid, lo, hi, fmt="{:g}"):
+    """Mark a scope's tied-minimum-error point on a sensitivity sweep: a
+    shaded span over [lo, hi] labeled "lo--hi" when the tied run spans more
+    than one grid point, else a single dotted line at `mid` labeled with
+    that one value -- so the legend always states exactly the same tied
+    set the caller's lo/hi (from _error_plateau / _error_plateau_by_col)
+    describe, never just the single closest-to-reference representative
+    point. Shared by plot_tau_sb_sensitivity (fig:sensitivity_binary) and
+    plot_stretch_predictor_sensitivity (fig:sensitivity_stretch_predictors),
+    which both use that same tie-break rule. `fmt` formats each bound/mid
+    value (e.g. "{:g}%" for the percent-scale figure)."""
+    if mid is None:
+        return
+    if lo is not None and hi is not None and hi > lo:
+        ax.axvspan(lo, hi, color=color, alpha=0.15, lw=0, zorder=1,
+                   label=f"{name}=" + f"{fmt.format(lo)}–{fmt.format(hi)}")
+    else:
+        ax.axvline(mid, color=color, ls=":", lw=1.0, zorder=2,
+                   label=f"{name}={fmt.format(mid)}")
 
 
 def _error_plateau_by_col(sweep_df, error_col, x_col, reference_x=None):
@@ -2813,19 +2838,20 @@ def plot_stretch_predictor_sensitivity(
     fig, ax = plt.subplots(figsize=(5.6, 4.6))
     ax.axvline(50.0, color=COLORS["threshold"], ls="-.", lw=1.0, zorder=2,
                label=r"$\tau$=50%")
-    ax.axvline(mid_p, color=COLORS["sens_accuracy"], ls=":", lw=1.0, zorder=2,
-               label=f"PED opt.={mid_p:g}%")
-    ax.axvline(mid_w, color=COLORS["sens_change"], ls=":", lw=1.0, zorder=2,
-               label=r"$s[\mathrm{V_S}]$ opt.=" + f"{mid_w:g}%")
-    ax.axvline(mid_u, color=COLORS["sens_single_centre"], ls=":", lw=1.0, zorder=2,
-               label=r"unweighted $s[\mathrm{V_S}]$ opt.=" + f"{mid_u:g}%")
+    _draw_optimal(ax, COLORS["sens_accuracy"], "PED opt.", mid_p, lo_p, hi_p, fmt="{:g}%")
+    _draw_optimal(ax, COLORS["sens_change"], r"$s[\mathrm{V_S}]$ opt.",
+                  mid_w, lo_w, hi_w, fmt="{:g}%")
+    _draw_optimal(ax, COLORS["sens_single_centre"], r"unweighted $s[\mathrm{V_S}]$ opt.",
+                  mid_u, lo_u, hi_u, fmt="{:g}%")
 
     l1, = ax.plot(sweep["tau_pct"], sweep["error_PED"], color=COLORS["sens_accuracy"],
                   marker="s", markersize=2.5, lw=1.1, zorder=3, label="PED")
     l2, = ax.plot(sweep["tau_pct"], sweep["error_weighted_sVS"], color=COLORS["sens_change"],
-                  marker="o", markersize=2.5, lw=1.1, zorder=3, label=r"$s[\mathrm{V_S}]$")
+                  marker="o", markersize=2.5, lw=1.1, zorder=3,
+                  label=r"$s[\mathrm{V_S}]\times100$")
     l3, = ax.plot(sweep["tau_pct"], sweep["error_unweighted_sVS"], color=COLORS["sens_single_centre"],
-                  marker="^", markersize=2.5, lw=1.1, zorder=3, label=r"unweighted $s[\mathrm{V_S}]$")
+                  marker="^", markersize=2.5, lw=1.1, zorder=3,
+                  label=r"unweighted $s[\mathrm{V_S}]\times100$")
 
     ax.set_xlabel(r"$\tau$ (%)")
     ax.set_ylabel("Classification error")

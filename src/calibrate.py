@@ -569,6 +569,16 @@ def run_tau_sb_error_analysis(data_dir="data", tau_grid=DEFAULT_TAU_SB_GRID, wri
     this analysis only reports where the error is minimized, it does not
     silently adopt that value).
 
+    Each scope's JSON entry carries both the single closest-to-0.5
+    representative point (``optimal_tau_<scope>``, kept for backward
+    compatibility) AND the full tied-minimum contiguous run containing it
+    (``optimal_tau_<scope>_lo``/``_hi``, from _error_plateau's tau_lo/tau_hi
+    -- equal to each other, and to the representative point, when that run
+    is a single grid point). fig:sensitivity_binary's legend reads the
+    lo/hi pair and renders a "lo--hi" range whenever they differ, so the
+    figure and this JSON always describe the same tied set rather than the
+    figure silently collapsing it to one number.
+
     Returns (sweep_df, plateau_all, plateau_test, path_sweep,
     plateau_single_centre), where plateau_all/plateau_test/
     plateau_single_centre are (tau_lo, tau_hi, midpoint, min_error) tuples
@@ -594,11 +604,17 @@ def run_tau_sb_error_analysis(data_dir="data", tau_grid=DEFAULT_TAU_SB_GRID, wri
         lo_sc, hi_sc, mid_sc, err_sc = plateau_single_centre
         result["tau_SB_error_sweep"] = {
             "grid": "0.00-1.00 step 0.01",
-            "optimal_tau_all": mid_all, "min_error_all": err_all,
+            "optimal_tau_all": mid_all,
+            "optimal_tau_all_lo": lo_all, "optimal_tau_all_hi": hi_all,
+            "min_error_all": err_all,
             "n_all": int(sweep_df["n_all"].iloc[0]) if len(sweep_df) else 0,
-            "optimal_tau_test": mid_test, "min_error_test": err_test,
+            "optimal_tau_test": mid_test,
+            "optimal_tau_test_lo": lo_test, "optimal_tau_test_hi": hi_test,
+            "min_error_test": err_test,
             "n_test": int(sweep_df["n_test"].iloc[0]) if len(sweep_df) else 0,
-            "optimal_tau_single_centre": mid_sc, "min_error_single_centre": err_sc,
+            "optimal_tau_single_centre": mid_sc,
+            "optimal_tau_single_centre_lo": lo_sc, "optimal_tau_single_centre_hi": hi_sc,
+            "min_error_single_centre": err_sc,
             "n_single_centre": int(sweep_df["n_single_centre"].iloc[0]) if len(sweep_df) else 0,
         }
         with open(path_json, "w") as f:

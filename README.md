@@ -33,13 +33,15 @@ Concretely, the code covers:
   with no purity gate. This step is independent of Step 2 and mainly useful when the input is an
   arbitrary/non-normal-mode basis (e.g. EMIT modes) where translation/rotation aren't already known by
   construction. Pass `--no-identify-tr` to skip it.
-* **EMIT-mode projection.** Raw EMIT eigenvectors can be projected onto a mass-weighted normal-mode
-  reference basis (ideal T/R + real vibrational modes) to get fractional T/R/stretch/bend contributions
-  per EMIT mode.
-* **Library calibration.** `tau_SB` is fixed by author calibration against a hydride-library dataset
-  built directly from the Gaussian files in `data/logs/`+`data/gjf/` (every score is computed by this
-  program's own engine; a reference spreadsheet supplies only the literature stretch/bend ground-truth
-  labels, never the scores themselves), validated with a confusion matrix and a threshold-sensitivity
+* **EMIT-mode overlaps.** EMIT modes can be compared against the molecule's normal modes (ideal T/R +
+  real vibrational modes). Two pathways are computed: plain **Cartesian** overlaps (`Ocart_*` — the
+  `o[...]` values in the manuscript's Table 4 for benzene) and a mass-weighted projection (`C2_*`).
+* **Library calibration.** `tau_SB` is fixed by author calibration against the single-center (SC)
+  molecule set (66 molecules: 10 "ideal" + 56 "non-ideal"; the `ideal`/`non-ideal` rows of
+  `data/mol_list_method.csv`) and its transferability is checked on an 18-molecule `test` set, both
+  scored directly from the Gaussian files in `data/logs/`+`data/gjf/` (every score is computed by this
+  program's own engine; `data/characterised_modes.csv` + `data/ref-label_citation.csv` supply only the
+  literature stretch/bend reference labels, never the scores themselves), validated with a confusion matrix and a threshold-sensitivity
   sweep. `tau_TR`/`tau_S`/`tau_B` are also calibrated but are diagnostic-only — they no longer gate any
   classification decision.
 * **Figures.** All of the manuscript's data-driven figures can be regenerated from the pipeline's own
@@ -73,23 +75,23 @@ The program is designed to be simple. You provide a molecule name, and it looks 
 
 ### Step 1: Prepare Your Files
 1.  Run optimization + frequency calculations in Gaussian (e.g., `freq=hpmodes`).
-2.  Rename your files to the molecule name (e.g., `benzene.com` and `benzene.log`). The name must be **consistent**.
+2.  Rename your files to the molecule name (e.g., `C6H6.com` and `C6H6.log`, as shipped in this repo). The name must be **consistent**.
 3.  Place the Gaussian input file (`.com` or `.gjf`) in the **`data/gjf/`** folder and the Gaussian output file (`.log`) in the **`data/logs/`** folder.
 
-*(Optional)* If you have EMIT mode files, place them in `data/EMIT/` named `benzene_EMIT.txt`.
+*(Optional)* If you have EMIT mode files, place them in `data/EMIT/` named `<molecule>_EMIT.txt` (e.g. `C6H6_EMIT.txt`).
 
 ### Step 2: Run the Script
-In your terminal, run the following command (replace `benzene` with your molecule name):
+In your terminal, run the following command (replace `C6H6` with your molecule name):
 
 ```bash
-python main.py -m benzene
+python main.py -m C6H6
 ```
 ### Step 3: Choose Calculation Mode
 The program will ask you to choose a mode:
 * **Type** `1`: To calculate scores for **Normal Modes** (standard Gaussian output).
 * **Type** `2`: To calculate scores for **EMIT Modes** (advanced user option).
 
-You can skip the interactive prompt with `--mode {normal,emit}`, e.g. `python main.py -m benzene --mode normal`.
+You can skip the interactive prompt with `--mode {normal,emit}`, e.g. `python main.py -m C6H6 --mode normal`.
 
 ### Step 4: Verify Bonds
 The program generates a text file in `data/intermediate/` containing the molecule's geometry and the mode vectors.

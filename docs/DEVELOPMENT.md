@@ -36,22 +36,14 @@ and `data/figures/archive_unweighted/`; `python scripts/compare_weighting.py` di
 
 ## Per-molecule flags (`-m`/`--molecule` required; each needs its prerequisite CSV to already exist)
 
-Compare EMIT modes against the normal-mode reference basis (ideal T/R + real vibrational modes).
-Requires `data/results/<mol>_EMIT.csv` to already exist (run `--mode emit` first). Two pathways run
-together and both merge into that file **in place**:
-
-* **Plain Cartesian overlaps** — `Ocart_Tx`..`Ocart_Rz` (raw signed overlaps), `Ocart_VS`/`Ocart_VB`,
-  `Ocart_Sum`; per-reference-mode detail in `data/results/<mol>_EMIT_full_cartesian.csv`. **This is the
-  pathway the manuscript uses**: the `o[...]` rows of Table 4 (`tab:emitselected`) and SI Table S8
-  come from it.
-* **Mass-weighted projection** — grouped `C2_Tx`..`C2_VMix` fractions; per-reference-mode detail in
-  `data/results/<mol>_EMIT_full.csv`. Kept as a comparison (orthonormal basis, so the fractions sum to 1).
-
-Fails loudly with a clear message if a prerequisite is missing.
+Project raw EMIT eigenvectors onto the mass-weighted normal-mode reference basis. Requires
+`data/results/<mol>_EMIT.csv` to already exist (run `--mode emit` first); merges the grouped
+`C2_Tx`..`C2_VMix` fractions into that file **in place** and writes `data/results/<mol>_EMIT_full.csv`
+(per-reference-mode detail). Fails loudly with a clear message if a prerequisite is missing.
 
 ```bash
-python main.py -m water --mode emit
-python main.py -m water --emit-projection
+python main.py -m H2O --mode emit
+python main.py -m H2O --emit-projection
 ```
 
 Merge real VEDA4 PED (Potential Energy Distribution) output into one molecule's `<mol>_normal.csv`,
@@ -68,7 +60,8 @@ python main.py -m CH4 --ped-merge
 
 ## Global flags (molecule-independent; `-m` is ignored if supplied alongside them)
 
-Build the hydride-library dataset from `data/logs/`+`data/gjf/` into `data/results/library_scores.csv`.
+Build the library dataset (every molecule in `data/mol_list_method.csv`) from `data/logs/`+`data/gjf/`
+into `data/results/library_scores.csv`.
 Grows automatically as more molecule files are added; can be slow once the library is large, since every
 molecule is scored from scratch.
 
@@ -95,9 +88,9 @@ python main.py --figures
 Run `--ped-merge` for every molecule in `data/mol_list_method.csv`'s roster, skipping (with a message)
 any missing its `<mol>_normal.csv` or `data/ved/` pair, and write one combined table across all matched
 molecules for correlating `V_Stretch` against real PED %stretch (default
-`data/results/combined_ped_vs_scores.csv`, override with `--combined-output`). Note: this roster is the
-hydride calibration library, not any transferability-test molecule set you may be tracking separately —
-use `ped/merge_ped_scores.py --molecules ...` directly (see `ped/README.md`) to merge PED for an explicit
+`data/results/combined_ped_vs_scores.csv`, override with `--combined-output`). Note: this roster is every
+molecule in `data/mol_list_method.csv` (the calibration set and the `test` set alike) — use
+`ped/merge_ped_scores.py --molecules ...` directly (see `ped/README.md`) to merge PED for an explicit
 list of molecules instead.
 
 ```bash
@@ -109,35 +102,6 @@ Every manuscript figure is also a standalone function in `src/figures.py` (e.g.
 `plot_mode_mixing`, `plot_sensitivity`, `plot_benzene_normal_modes`) if you need to regenerate just one
 of them from a Python session; `python main.py --figures` (or `python -m src.figures`) regenerates all
 of them in one go.
-
-## Manuscript ↔ code map (submitted JCC version, 2026-10-05)
-
-Which artifact produces each data-driven item of *"A Unified, Displacement-Based Framework for
-Classifying Modes of Molecular Motion"*. Figure files land in `data/figures/`; the manuscript's own
-copies are separate (several were hand-annotated afterwards, e.g. `*_annot.pdf`), so regenerating a
-figure here does not update the manuscript.
-
-| Manuscript item | Producer | Output |
-|---|---|---|
-| Table 2 `tab:water` (H₂O scores) | `main.py -m H2O --mode normal` | `results/H2O_normal.csv` |
-| Fig. 3 `fig:bondscores` | `plot_bond_scores` | `fig_bondscores` |
-| Fig. 4 `fig:boxplots` | `plot_boxplots` | `fig_boxplots` |
-| Fig. 5 `fig:modemixing` | `plot_mode_mixing` | `fig_modemixing` |
-| Fig. 6 `fig:transferability_confusion` (18-molecule test set) | `plot_transferability_confusion_binary` | `fig_transferability_confusion`, `results/transferability_confusion_*.csv` |
-| Fig. 7 `fig:ped_vs_vscore` (MAE vs PED %ν) | `plot_ped_vs_vscore` | `fig_ped_vs_vscore`, `results/ped_vs_vscore_data.csv` |
-| Fig. 8 `fig:benzenenormal`, Table 3 `tab:benzenemixed` | `plot_benzene_normal_modes`, `--ped-merge` | `fig_benzene_normal`, `results/C6H6_normal.csv` |
-| Fig. 9 `fig:benzene_emit_counts`, Table 4 `tab:emitselected` | `plot_benzene_emit_counts`, `--emit-projection` (`Ocart_*`) | `fig_benzene_emit_counts`, `results/C6H6_EMIT.csv` |
-| SI Fig. S1 (error vs τ_SB) | `plot_tau_sb_sensitivity` | `fig_sensitivity_binary`, `results/tau_sb_sensitivity_sweep.csv` |
-| SI Fig. S2 (SC non-ideal confusion) | `plot_confusion_matrix_binary` | `fig_confusion` |
-| SI Fig. S3 (unweighted s[V_S] vs PED) | `plot_ped_vs_vscore` under `--v-weighting none` | `figures/archive_unweighted/fig_ped_vs_vscore` |
-| SI Fig. S4 / Table S6 (s[V_S] vs PED %ν as stretch predictors) | `plot_stretch_predictor_sensitivity` | `fig_sensitivity_stretch_predictors`, `results/tau_stretch_predictor_sensitivity_sweep.csv` |
-| SI Fig. S5 (benzene confusion) | `plot_benzene_internal_confusion_binary` | `fig_benzene_confusion` |
-| SI Fig. S7 (CPU time) | `scripts/benchmark_cpu_time.py` + `plot_cpu_time_benchmark` | `fig_cputime_bw`, `results/cpu_time_benchmark.csv` |
-| SI Table S4 (misclassified test modes) | `plot_transferability_confusion_binary` | `results/transferability_confusion_misclassified.csv` |
-| SI Table S8 (all 36 benzene EMIT modes) | `src/si_tables.py` (`reproduce.py --only si_tables`) | `JCC/JCC_SI/tables/` |
-
-Fig. 1 (flowchart), Fig. 2 (H₂O mode drawings), and Figs. 10–11 (Vscore screenshots) are not
-generated by this repo; the Vscore web app lives in the companion repo linked from `README.md`.
 
 ## `scripts/` (maintainer-only, not needed for ordinary use)
 

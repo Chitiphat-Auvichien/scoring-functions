@@ -1,0 +1,22 @@
+# divinylbenzene bonds, atom order of dvb_ir_g16.out
+# (generated once from covalent radii for this fixture; the app never infers bonds)
+1 2
+1 14
+1 19
+2 3
+2 6
+3 4
+3 7
+4 5
+4 9
+5 8
+5 19
+9 10
+9 12
+10 11
+10 13
+14 15
+14 16
+16 17
+16 18
+19 20

@@ -77,6 +77,8 @@ The program is designed to be simple. You provide a molecule name, and it looks 
 2.  Rename your files to the molecule name (e.g., `benzene.com` and `benzene.log`). The name must be **consistent**.
 3.  Place the Gaussian input file (`.com` or `.gjf`) in the **`data/gjf/`** folder and the Gaussian output file (`.log`) in the **`data/logs/`** folder.
 
+**ORCA or Molpro instead of Gaussian.** Put an ORCA `.hess` (written by any `! Freq` job) or a Molden file (Molpro: `put,molden,benzene.molden` after `frequencies`) in `data/logs/` as `benzene.hess` / `benzene.molden`. Neither format carries connectivity, so add `data/gjf/benzene.bonds`: one bond per line as `i j` (1-based atom indices, `#` for comments; write a bond order as `2.0`, since a bare `2` reads as an atom index). Coordinates are converted from bohr, the zero-frequency translations/rotations are dropped, and mass-weighted vectors are detected and converted to Cartesian, so the rest of the pipeline is unchanged (`src/orca_molden.py`).
+
 *(Optional)* If you have EMIT mode files, place them in `data/EMIT/` named `benzene_EMIT.txt`.
 
 ### Step 2: Run the Script

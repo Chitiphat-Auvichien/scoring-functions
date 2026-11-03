@@ -1,0 +1,22 @@
+# divinylbenzene bonds, atom order of dvb_ir_orca6.hess
+# (generated once from covalent radii for this fixture; the app never infers bonds)
+1 3
+1 6
+1 12
+2 4
+2 5
+2 11
+3 5
+3 7
+4 6
+4 8
+5 9
+6 10
+11 13
+11 15
+12 14
+12 16
+15 17
+15 19
+16 18
+16 20

@@ -3,7 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from src.parser import GaussianParser, EMITParser, IntermediateIO
+from src.parser import GaussianParser, QCFileParser, EMITParser, IntermediateIO
 from src.scoring import ModeScorer, V_WEIGHTINGS, DEFAULT_V_WEIGHTING, set_v_weighting
 from src.classifier import classify_all_modes, classify_to_rows, is_linear, Thresholds
 from src.projection import (build_reference_basis, project_emit,
@@ -21,10 +21,20 @@ def resolve_dirs(data_dir="data"):
 
 
 def _find_log(logs_dir, mol_name):
-    p = find_file(logs_dir, mol_name, (".log", ".out"))
+    """The molecule's frequency output: a Gaussian .log/.out, or an ORCA .hess
+    or Molden file (QCFileParser). Gaussian wins if both exist."""
+    p = find_file(logs_dir, mol_name, (".log", ".out") + QCFileParser.EXTENSIONS)
     if p is None:
-        raise FileNotFoundError(f"No log file for '{mol_name}' in {logs_dir} (expected .log or .out)")
+        raise FileNotFoundError(
+            f"No frequency file for '{mol_name}' in {logs_dir} (expected a Gaussian "
+            ".log/.out, an ORCA .hess, or a .molden)")
     return p
+
+
+def _parser_for(path):
+    if path.lower().endswith(QCFileParser.EXTENSIONS):
+        return QCFileParser(path)
+    return GaussianParser(path)
 
 
 def _find_emit(emit_dir, mol_name):
@@ -37,7 +47,9 @@ def _find_emit(emit_dir, mol_name):
 
 
 def _find_gjf(gjf_dir, mol_name):
-    return find_file(gjf_dir, mol_name, (".com", ".gjf"))
+    """Connectivity source: a Gaussian deck, or a plain .bonds list (the only
+    option for ORCA/Molden input, which carries no connectivity)."""
+    return find_file(gjf_dir, mol_name, (".com", ".gjf", ".bonds"))
 
 
 def intermediate_path(dirs, mol_name, mode_type):
@@ -101,7 +113,7 @@ def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
     if cache_fresh:
         return IntermediateIO.load(inter_path), dirs
 
-    gp = GaussianParser(log_path)
+    gp = _parser_for(log_path)
     if mode_type == "normal":
         raw = gp.parse(parse_modes=True)
     else:
@@ -151,8 +163,9 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
     """
     if not raw["bonds"]:
         raise ValueError(
-            "No bond connectivity available; provide a .com/.gjf file in data/gjf/ "
-            "or add bonds to the intermediate file before scoring.")
+            "No bond connectivity available; provide a .com/.gjf (or, for ORCA/"
+            "Molden input, a .bonds list) in data/gjf/, or add bonds to the "
+            "intermediate file before scoring.")
     rotate = (mode_type == "normal")
     scorer = ModeScorer(raw["atoms"], raw["coords"], raw["bonds"],
                         v_weighting=v_weighting)

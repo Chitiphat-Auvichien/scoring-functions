@@ -3,6 +3,12 @@ import os
 import numpy as np
 import pandas as pd
 
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: import QCFileParser so ORCA .hess / Molden files can be loaded (JCC reviewer 1:
+#          support quantum-chemistry packages other than Gaussian).
+# Previous version (inactive, kept for reference):
+#     from src.parser import GaussianParser, EMITParser, IntermediateIO
+# [END EDIT NOTE]
 from src.parser import GaussianParser, QCFileParser, EMITParser, IntermediateIO
 from src.scoring import ModeScorer, V_WEIGHTINGS, DEFAULT_V_WEIGHTING, set_v_weighting
 from src.classifier import classify_all_modes, classify_to_rows, is_linear, Thresholds
@@ -20,6 +26,16 @@ def resolve_dirs(data_dir="data"):
     return dirs
 
 
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: also find data/logs/<mol>.hess (ORCA) and <mol>.molden (Molpro and others);
+#          Gaussian .log/.out still wins if both exist.
+# Previous version (inactive, kept for reference):
+#     def _find_log(logs_dir, mol_name):
+#         p = find_file(logs_dir, mol_name, (".log", ".out"))
+#         if p is None:
+#             raise FileNotFoundError(f"No log file for '{mol_name}' in {logs_dir} (expected .log or .out)")
+#         return p
+# [END EDIT NOTE]
 def _find_log(logs_dir, mol_name):
     """The molecule's frequency output: a Gaussian .log/.out, or an ORCA .hess
     or Molden file (QCFileParser). Gaussian wins if both exist."""
@@ -31,6 +47,10 @@ def _find_log(logs_dir, mol_name):
     return p
 
 
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: pick GaussianParser or QCFileParser from the file extension.
+# Previous version: none -- new code.
+# [END EDIT NOTE]
 def _parser_for(path):
     if path.lower().endswith(QCFileParser.EXTENSIONS):
         return QCFileParser(path)
@@ -46,6 +66,13 @@ def _find_emit(emit_dir, mol_name):
         f"No EMIT file for '{mol_name}' in {emit_dir} (expected {mol_name}_EMIT.txt)")
 
 
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: accept data/gjf/<mol>.bonds (plain 'i j' list) -- ORCA/Molden files carry no
+#          connectivity, so the bonds must come from a separate file.
+# Previous version (inactive, kept for reference):
+#     def _find_gjf(gjf_dir, mol_name):
+#         return find_file(gjf_dir, mol_name, (".com", ".gjf"))
+# [END EDIT NOTE]
 def _find_gjf(gjf_dir, mol_name):
     """Connectivity source: a Gaussian deck, or a plain .bonds list (the only
     option for ORCA/Molden input, which carries no connectivity)."""
@@ -113,6 +140,11 @@ def load_inputs(mol_name, mode_type, data_dir="data", use_cache=True):
     if cache_fresh:
         return IntermediateIO.load(inter_path), dirs
 
+    # [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+    # Purpose: route .hess/.molden to QCFileParser instead of always GaussianParser.
+    # Previous version (inactive, kept for reference):
+    #     gp = GaussianParser(log_path)
+    # [END EDIT NOTE]
     gp = _parser_for(log_path)
     if mode_type == "normal":
         raw = gp.parse(parse_modes=True)
@@ -162,6 +194,13 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
     slot claims it) into Step 4 and be mislabeled BENDING (V=0 <= tau_B).
     """
     if not raw["bonds"]:
+        # [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+        # Purpose: mention the .bonds option in the no-bonds error.
+        # Previous version (inactive, kept for reference):
+        #     raise ValueError(
+        #         "No bond connectivity available; provide a .com/.gjf file in data/gjf/ "
+        #         "or add bonds to the intermediate file before scoring.")
+        # [END EDIT NOTE]
         raise ValueError(
             "No bond connectivity available; provide a .com/.gjf (or, for ORCA/"
             "Molden input, a .bonds list) in data/gjf/, or add bonds to the "

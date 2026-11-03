@@ -1,3 +1,8 @@
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: new tests for the ORCA .hess / Molden input path (src/orca_molden.py,
+#          QCFileParser, the .bonds file, and the lossless intermediate cache).
+# Previous version: none -- this whole file is new.
+# [END EDIT NOTE]
 """ORCA .hess and Molden input to the pipeline (src/orca_molden.py, QCFileParser).
 
 The same molecule must score the same whichever program wrote it. Two kinds

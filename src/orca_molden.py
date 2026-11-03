@@ -1,3 +1,8 @@
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: new module -- ORCA .hess / Molden readers, so the pipeline accepts
+#          non-Gaussian programs (JCC reviewer 1). Ported from the vscore web app.
+# Previous version: none -- this whole file is new.
+# [END EDIT NOTE]
 """ORCA .hess and Molden readers -- the non-Gaussian inputs to the pipeline.
 
 Each returns ``{'atoms', 'coords', 'modes'}`` in exactly the shape

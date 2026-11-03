@@ -3,6 +3,11 @@ import os
 import warnings
 import numpy as np
 from .utils import get_symbol, get_atomic_number, find_file
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: import the ORCA .hess / Molden readers (JCC reviewer 1: support quantum-chemistry
+#          packages other than Gaussian).
+# Previous version: none -- new code.
+# [END EDIT NOTE]
 from .orca_molden import ParseError, parse_frequency_file, read_bond_file
 
 # --- Shared Gaussian frequency-block helpers ---------------------------
@@ -80,6 +85,12 @@ def _parse_hp_mode_vectors(lines, data_start, natoms, num_modes_in_block):
     return temp_data, current_line
 
 
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: the gjf connectivity reader, moved verbatim out of
+#          GaussianParser._parse_connectivity so QCFileParser can share it, plus .bonds
+#          list support for ORCA/Molden input. Previous code: see _parse_connectivity below.
+# Previous version: none -- new code.
+# [END EDIT NOTE]
 def _read_connectivity(source_path, natoms):
     """Bonds for the molecule whose data file is `source_path`, from the file
     of the same stem in the sibling data/gjf/ directory.
@@ -204,6 +215,54 @@ class GaussianParser:
         self.atom_symbols = symbols
         self.coordinates = coords
 
+    # [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+    # Purpose: body moved to module-level _read_connectivity (shared with QCFileParser);
+    #          Gaussian .com/.gjf parsing is unchanged.
+    # Previous version (inactive, kept for reference):
+    #     def _parse_connectivity(self):
+    #         """Looks for .com/.gjf file in data/gjf/ matching the log filename."""
+    #         base_name = os.path.splitext(os.path.basename(self.filepath))[0]
+    #         data_dir = os.path.dirname(os.path.dirname(self.filepath))
+    #         gjf_dir = os.path.join(data_dir, "gjf")
+    #
+    #         input_file = find_file(gjf_dir, base_name, ('.com', '.gjf'))
+    #         if not input_file: return
+    #
+    #         try:
+    #             with open(input_file, 'r') as f:
+    #                 lines = [l.strip() for l in f.readlines()]
+    #
+    #             idx = 0
+    #             found_charge = False
+    #             for i in range(len(lines)):
+    #                 parts = lines[i].split()
+    #                 if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+    #                     idx = i + 1
+    #                     found_charge = True
+    #                     break
+    #
+    #             if not found_charge: return
+    #
+    #             while idx < len(lines) and lines[idx]: idx += 1
+    #             idx += 1
+    #
+    #             while idx < len(lines):
+    #                 line = lines[idx]
+    #                 if not line: break
+    #                 parts = line.split()
+    #                 if len(parts) >= 2 and parts[0].isdigit():
+    #                     center = int(parts[0]) - 1
+    #                     for k in range(1, len(parts), 2):
+    #                         try:
+    #                             neighbor = int(parts[k]) - 1
+    #                             pair = tuple(sorted((center, neighbor)))
+    #                             if pair not in self.bonds:
+    #                                 self.bonds.append(pair)
+    #                         except ValueError: pass
+    #                 idx += 1
+    #         except (OSError, UnicodeDecodeError, IndexError) as e:
+    #             warnings.warn(f"Failed to parse connectivity from {input_file}: {e}")
+    # [END EDIT NOTE]
     def _parse_connectivity(self):
         """Looks for .com/.gjf (or .bonds) in data/gjf/ matching the log filename."""
         self.bonds = _read_connectivity(self.filepath, self.natoms)
@@ -300,6 +359,11 @@ class GaussianParser:
                         "reduced_mass": mus[m], "force_constant": ks[m], "irrep": irreps[m],
                     })
 
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: new ORCA .hess / Molden parser with the same parse() interface and return
+#          shape as GaussianParser.
+# Previous version: none -- new code.
+# [END EDIT NOTE]
 class QCFileParser:
     """ORCA .hess / Molden counterpart of GaussianParser: same parse()
     signature, same return shape. Geometry and modes come from
@@ -411,6 +475,11 @@ class EMITParser:
         return self.modes
 
 
+# [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+# Purpose: new helper for IntermediateIO._save_normal -- chooses enough decimals to
+#          store ORCA/Molden data losslessly (Gaussian data still gets 6/5 dp).
+# Previous version: none -- new code.
+# [END EDIT NOTE]
 def _needed_dp(arrays, least, most=15):
     """Fewest decimals in [least, most] that reproduce every value exactly
     (15 is lossless for any coordinate or displacement this pipeline sees)."""
@@ -478,6 +547,10 @@ class IntermediateIO:
         # truncating it would make the cached run differ from the first one:
         # T/R move on a 1e-6 A geometry change for symmetric molecules (the
         # principal-axis frame is ill-conditioned there), so keep what's needed.
+        # [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+        # Purpose: pick per-file precision (see the comment above and _needed_dp).
+        # Previous version: none -- new code.
+        # [END EDIT NOTE]
         cdp = _needed_dp([coords], 6)
         vdp = _needed_dp([np.asarray(m['vector']) for m in modes], 5)
 
@@ -508,6 +581,13 @@ class IntermediateIO:
             for i in range(natoms):
                 atomic_num = get_atomic_number(atoms[i]) or 0
                 x, y, z = coords[i]
+                # [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+                # Purpose: write coordinates at cdp decimals (6 for Gaussian, so byte-identical);
+                #          fixed 6 dp truncated ORCA/Molden geometry, so the cached run differed from the first.
+                # Previous version (inactive, kept for reference):
+                #     f.write(f"{i + 1:>7d}{atomic_num:>11d}{0:>12d}"
+                #             f"{x:>16.6f}{y:>12.6f}{z:>12.6f}\n")
+                # [END EDIT NOTE]
                 f.write(f"{i + 1:>7d}{atomic_num:>11d}{0:>12d}"
                         f"{x:>{cdp + 10}.{cdp}f}{y:>{cdp + 6}.{cdp}f}{z:>{cdp + 6}.{cdp}f}\n")
 
@@ -526,6 +606,15 @@ class IntermediateIO:
                     f"{(m.get('irrep') or 'NA'):>{VAL_W}s}" for m in block_modes)
                 f.write(" " * LABEL_W + irrep_row + "\n")
 
+                # [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+                # Purpose: write an absent mu/k as 'NA' (read back as None) instead of an invented 0.0.
+                # Previous version (inactive, kept for reference):
+                #     def _num_row(label, vals):
+                #         line = f"{label:>{LABEL_W}}"
+                #         for v in vals:
+                #             line += f"{(0.0 if v is None else v):>{VAL_W}.4f}"
+                #         return line + "\n"
+                # [END EDIT NOTE]
                 def _num_row(label, vals):
                     # An absent value (ORCA/Molden carry no mu/k) is written
                     # 'NA', which _parse_freq_block_header reads back as None;
@@ -545,6 +634,12 @@ class IntermediateIO:
                     atomic_num = get_atomic_number(atoms[a]) or 0
                     for c in range(3):
                         line = f"{c + 1:>4d}{a + 1:>6d}{atomic_num:>6d}"
+                        # [EDIT 2026-11-02 | by Claude (AI assistant) for Than (ThanchonBK)]
+                        # Purpose: write vectors at vdp decimals (5 for Gaussian, so byte-identical).
+                        # Previous version (inactive, kept for reference):
+                        #     for m in block_modes:
+                        #         line += f"{m['vector'][a][c]:>{VAL_W}.5f}"
+                        # [END EDIT NOTE]
                         for m in block_modes:
                             line += f"{m['vector'][a][c]:>{vdp + 5}.{vdp}f}"
                         f.write(line + "\n")

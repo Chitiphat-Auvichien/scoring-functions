@@ -6,6 +6,11 @@ from .utils import atomicMass
 EPS_DISP = 1e-8    # spec eps_disp: |d_A| <= this -> zero-motion (unit(0):=0)
 EPS_NORM = 1e-9    # vector-normalization guard (unit(0):=0)
 EPS_DENOM = 1e-6   # V-score denominator guard (Sigma|db|^2 near zero -> score 0)
+# On-axis cut-off for N_Q in eq:rscore (Angstrom): atom A lies on the Q-axis if |r_Q^A| <= ON_AXIS_TOL.
+# Gaussian prints coordinates to 6 decimals, so an atom on a C3/C6 axis by symmetry can sit up to
+# 3.5e-6 A off it (worst rounding, roster); the closest atom off an axis by symmetry is 1.33e-5 A
+# (OBr4 O). 1e-5 separates both (JCC revision R1.6).
+ON_AXIS_TOL = 1e-5
 RANGE_TOL = 1e-6   # tolerance for the range-invariant score asserts
 
 # --- V-score bond-weighting variants (eq:vscore/eq:bondscore) ---
@@ -281,7 +286,7 @@ class ModeScorer:
             s[R_Q] = (1/(N-N_Q)) sum_offaxis (r_perp x d)_Q / (|r_perp| |d|)
         Normalizing r_perp and d separately (rather than by |r_perp x d|)
         keeps the sin(phi) factor, down-weighting motion that isn't purely
-        tangential. N_Q = on-axis atoms (|r_perp| ~ 0), excluded.
+        tangential. N_Q = on-axis atoms (|r_perp| <= ON_AXIS_TOL), excluded.
         """
         axes = (np.array([1.0, 0.0, 0.0]),
                 np.array([0.0, 1.0, 0.0]),
@@ -290,7 +295,7 @@ class ModeScorer:
         for key, Q in zip('xyz', axes):
             r_perp = self.coords - np.outer(self.coords @ Q, Q)
             lr = np.sqrt(np.sum(r_perp**2, axis=1))
-            off_mask = lr > EPS_DENOM              # on the axis -> excluded (N_Q)
+            off_mask = lr > ON_AXIS_TOL            # on the axis -> excluded (N_Q)
             n_off = int(np.sum(off_mask))
 
             ld = self.dispLengths

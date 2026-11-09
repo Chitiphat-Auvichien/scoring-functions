@@ -36,6 +36,7 @@ sys.path.insert(0, ROOT)
 
 from src.parser import GaussianParser, EMITParser   # noqa: E402
 from src.scoring import ModeScorer, V_WEIGHTINGS    # noqa: E402
+from src.utils import atomicMass                    # noqa: E402
 
 TOL = 5e-4  # 3 decimal places
 
@@ -161,6 +162,24 @@ def test_tscore_ignores_subthreshold_noise():
     sc = scorer.calculate_scores(mode_vec)
     assert abs(sc["T"]["x"]) < 1e-9, f"noise-level x-displacement leaked into Tx: {sc['T']['x']}"
     assert abs(sc["T"]["z"] - 2.0 / 3.0) < TOL
+
+
+def test_rscore_on_axis_cutoff():
+    """N_Q uses ON_AXIS_TOL (1e-5 A), not the V-score guard EPS_DENOM (R1.6).
+
+    Water in the xy plane, C2 axis = y. O is moved a distance `off` along x (off the y-axis) and
+    moves along z; the H atoms move along y (parallel to the axis, term 0). With O 3.5e-6 A off the
+    axis (worst print rounding of an on-axis atom) it still counts as on the axis, so s[R_y] = 0;
+    at 2e-5 A it counts as off the axis and its full unit-vector term enters (|s[R_y]| = 1/3).
+    """
+    atoms = ["O", "H", "H"]
+    vec = np.array([[0.0, 0.0, 0.07], [0.0, -0.5, 0.0], [0.0, -0.5, 0.0]])
+    m_o, m_h = atomicMass["o"], atomicMass["h"]
+    for off, expect in ((3.5e-6, 0.0), (2e-5, 1.0 / 3.0)):
+        h_shift = -off * m_o / (2 * m_h)          # keep the CM on the y-axis, so O stays `off` from it
+        coords = [[off, 0.117, 0.0], [0.757 + h_shift, -0.470, 0.0], [-0.757 + h_shift, -0.470, 0.0]]
+        s = ModeScorer(atoms, coords, [(0, 1), (0, 2)]).calculate_scores(vec)["R"]["y"]
+        assert abs(abs(s) - expect) < 1e-9, f"offset {off}: s[R_y] = {s}, expected |s| = {expect}"
 
 
 def test_score_ranges():

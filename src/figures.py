@@ -200,6 +200,13 @@ PRED_BUCKET_TO_CATEGORY.update({
 # the convention already used in the group's earlier undergraduate report
 # (H-02-598, Figures 1-3: filled markers for ideal molecules, open markers
 # for non-ideal).
+# S/B ambiguity range of s[V_S] (JCC revision, referee comments R1.9/R1.10): the
+# 95 % bootstrap confidence interval of tau_SB, recalibrated on the single-centre
+# set with 5 % label flips and score noise sigma = 0.125 (the mixed-mode RMSE
+# against PED). A mode inside it can be labelled S or B by an equally valid
+# calibration. Written 0.31-0.53 (0.525 sits on a rounding boundary).
+AMBIGUITY_RANGE = (0.314, 0.525)
+
 IDEAL_STYLE = {
     "yes": {"filled": True, "label": "ideal", "alpha": 0.85},
     "no": {"filled": False, "label": "non-ideal", "alpha": 0.85},
@@ -592,6 +599,8 @@ def plot_benzene_normal_modes(
     _LEGEND_MERGE_KEY = {"translation": "clean_tr", "rotation": "clean_tr"}
     _LEGEND_MERGE_TEXT = {"clean_tr": "T/R"}
 
+    lo, hi = AMBIGUITY_RANGE
+    n_ambiguous = 0
     seen_labels = set()
     for _, row in normal.iterrows():
         # 2026-08-25: normal_csv's schema is now vib_label/tr_label/tr_score
@@ -614,9 +623,16 @@ def plot_benzene_normal_modes(
         # plot_bond_scores/plot_boxplots/plot_mode_mixing's established
         # "shape is not a redundant second encoding" convention.
         kw = _marker_kwargs(cat, ideal_flag="no", marker="o")
+        # R1.10: a vibration whose s[V_S] lies in the ambiguity range gets a
+        # filled marker (its S/B label depends on the calibration).
+        if cat in ("stretch", "bend") and lo <= row["V_Stretch"] <= hi:
+            kw = dict(kw, facecolors=kw.get("edgecolors", kw.get("c")))
+            n_ambiguous += 1
         ax.scatter(row["Freq"], row["V_Stretch"], s=26, zorder=3,
                    label=leg_label, **kw)
 
+    ax.axhspan(lo, hi, color=COLORS["background"], alpha=0.35, lw=0, zorder=0,
+               label="ambiguity range (0.31–0.53)")
     ax.axhline(TAU_SB, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
     y_offset = 0.045
     # Right side (ha="right"), clear of the legend which sits on the left.
@@ -653,6 +669,8 @@ def plot_benzene_normal_modes(
         "freq_range": (float(normal["Freq"].min()), float(normal["Freq"].max())),
         "vs_range": (float(normal["V_Stretch"].min()), float(normal["V_Stretch"].max())),
         "tau_SB": TAU_SB,
+        "ambiguity_range": AMBIGUITY_RANGE,
+        "n_ambiguous": n_ambiguous,
     }
     return summary
 
@@ -2507,6 +2525,126 @@ def plot_sensitivity(
     return summary
 
 
+def plot_tau_sb_derivation(
+    library_csv="data/results/library_scores.csv",
+    out_dir="data/figures",
+    label="fig_tau_sb_derivation",
+    curves_csv="data/results/tau_sb_derivation_curves.csv",
+    tau_SB=None,
+    n_boot=10000,
+    seed=20261029,
+):
+    """How tau_SB is obtained (JCC revision, referee comment R1.9; replaces
+    the submitted Fig. 4 in the main text).
+
+    (a) s[V_S] of the reference-labelled S modes (up) and B modes (down) of
+        the single-centre (SC) calibration set, bins of 0.025; filled =
+        ideal, open = non-ideal molecules. The s ~ 0 (B) and s ~ 1 (S)
+        spikes are clipped at 40 modes and carry their counts.
+    (b) Classification error (%) vs tau_SB for the SC set, with the 95 %
+        band of a molecule bootstrap (n_boot resamples of the 66 SC
+        molecules), and for the test set.
+    Grey: the SC minimum-error gap (tied minimum of the SC staircase).
+    Dashed: the adopted tau_SB.
+
+    Scores are the program's own per-member s[V_S] (degenerate members
+    scored one by one). Writes the curves to ``curves_csv``.
+    """
+    _style()
+    lib = pd.read_csv(library_csv)
+    lib = lib[(lib["kind"] == "internal") & lib["ref_label"].isin(["stretch", "bend"])].copy()
+    lib["y"] = (lib["ref_label"] == "stretch").astype(int)
+    sc = lib[lib["mol_type"].isin(["ideal", "non-ideal"])].reset_index(drop=True)
+    te = lib[lib["mol_type"] == "test"].reset_index(drop=True)
+    tau = Thresholds.calibrated().tau_SB if tau_SB is None else tau_SB
+
+    grid = np.round(np.arange(0.0, 1.0005, 0.001), 3)
+
+    def miss(df):
+        s_ = df["V_Stretch"].to_numpy(float)[:, None]
+        y_ = df["y"].to_numpy()[:, None]
+        return (((y_ == 1) & (s_ < grid[None, :])) | ((y_ == 0) & (s_ >= grid[None, :]))).astype(float)
+
+    A_sc, A_te = miss(sc), miss(te)
+    e_sc, e_te = A_sc.mean(axis=0), A_te.mean(axis=0)
+    tied = grid[e_sc <= e_sc.min() + 1e-12]
+    gap = (float(tied.min()), float(tied.max()))
+
+    # molecule bootstrap of the SC error curve
+    rng = np.random.default_rng(seed)
+    mols = sc["molecule"].unique()
+    code = pd.Categorical(sc["molecule"], categories=mols).codes
+    pick = rng.integers(0, len(mols), size=(n_boot, len(mols)))
+    cnt = np.zeros((n_boot, len(mols)))
+    np.add.at(cnt, (np.repeat(np.arange(n_boot), len(mols)), pick.ravel()), 1)
+    W = cnt[:, code]
+    E = (W @ A_sc) / W.sum(axis=1, keepdims=True)
+    band_lo, band_hi = np.percentile(E, 2.5, axis=0), np.percentile(E, 97.5, axis=0)
+
+    curves = pd.DataFrame({"tau_SB": grid, "error_SC_pct": 100 * e_sc, "error_test_pct": 100 * e_te,
+                           "SC_boot_lo_pct": 100 * band_lo, "SC_boot_hi_pct": 100 * band_hi})
+    if curves_csv:
+        os.makedirs(os.path.dirname(curves_csv) or ".", exist_ok=True)
+        curves.to_csv(curves_csv, index=False)
+
+    c_s, c_b, c_t = COLORS["stretching_ref"], COLORS["bending_ref"], COLORS["threshold"]
+    c_sc = "#009E73"
+    fig, (a1, a2) = plt.subplots(2, 1, figsize=(3.4, 4.3), sharex=True,
+                                 gridspec_kw=dict(height_ratios=[1.15, 1], hspace=0.08))
+    bins = np.arange(0, 1.0001, 0.025)
+    clip = 40
+    for lab, col, sign in (("S", c_s, 1), ("B", c_b, -1)):
+        d = sc[sc["y"] == (1 if lab == "S" else 0)]
+        h_i, _ = np.histogram(d[d["mol_type"] == "ideal"]["V_Stretch"], bins)
+        h_n, _ = np.histogram(d[d["mol_type"] == "non-ideal"]["V_Stretch"], bins)
+        a1.bar(bins[:-1], sign * h_i, width=0.025, align="edge", color=col, edgecolor=col, lw=0.6,
+               label=f"{lab}, ideal")
+        a1.bar(bins[:-1], sign * h_n, bottom=sign * h_i, width=0.025, align="edge", facecolor="white",
+               edgecolor=col, lw=0.6, label=f"{lab}, non-ideal")
+        for b, n_ in zip(bins[:-1], h_i + h_n):
+            if n_ > clip:
+                a1.text(b - 0.01, sign * 0.88 * clip, f"{n_}", ha="right", va="center", fontsize=6.5,
+                        color=col, bbox=dict(fc="white", ec="none", pad=0.3))
+    a1.axhline(0, color="k", lw=0.5)
+    for ax in (a1, a2):
+        ax.axvspan(gap[0], gap[1], color=COLORS["background"], alpha=0.5, lw=0)
+    a1.axvline(tau, color=c_t, ls="--", lw=1.0)
+    a1.set_ylim(-clip, clip)
+    a1.set_yticks([-40, -20, 0, 20, 40])
+    a1.set_yticklabels(["40", "20", "0", "20", "40"])
+    a1.text(0.03, 0.93, "S", transform=a1.transAxes, color=c_s, fontweight="bold", va="top")
+    a1.text(0.97, 0.07, "B", transform=a1.transAxes, color=c_b, fontweight="bold", va="bottom", ha="right")
+    a1.set_ylabel("Number of modes")
+    a1.legend(loc="lower right", bbox_to_anchor=(1.0, 0.13), ncol=2, frameon=False, fontsize=6.5,
+              handlelength=1.2, columnspacing=0.8)
+    a1.text(-0.27, 1.0, "(a)", transform=a1.transAxes, fontweight="bold", va="top")
+
+    a2.fill_between(grid, 100 * band_lo, 100 * band_hi, color=c_sc, alpha=0.25, lw=0)
+    a2.plot(grid, 100 * e_sc, color=c_sc, lw=1.2, label="SC")
+    a2.plot(grid, 100 * e_te, color="k", lw=1.0, ls=(0, (4, 1.5)), label="test")
+    a2.axvline(tau, color=c_t, ls="--", lw=1.0, label=r"adopted $\tau_\mathrm{SB}$")
+    a2.set_ylim(0, 30)
+    a2.set_xlim(0, 1)
+    a2.set_xlabel(r"$s[\mathrm{V_S}]$ or $\tau_\mathrm{SB}$")
+    a2.set_ylabel("Error (%)")
+    a2.legend(loc="upper left", bbox_to_anchor=(0.47, 1.0), frameon=False, fontsize=6.5,
+              handlelength=2.0)
+    a2.text(-0.27, 1.0, "(b)", transform=a2.transAxes, fontweight="bold", va="top")
+
+    pdf_path, png_path = _savefig(fig, out_dir, label)
+    plt.close(fig)
+    gi = int(np.argmin(np.abs(grid - tau)))
+    return {
+        "pdf": pdf_path, "png": png_path, "curves_csv": curves_csv,
+        "tau_SB": tau, "sc_gap": gap,
+        "n_sc_modes": len(sc), "n_sc_molecules": int(sc["molecule"].nunique()),
+        "n_test_modes": len(te),
+        "sc_errors_at_tau": int(round(e_sc[gi] * len(sc))),
+        "test_errors_at_tau": int(round(e_te[gi] * len(te))),
+        "n_boot": n_boot,
+    }
+
+
 def plot_tau_sb_sensitivity(
     sweep_csv="data/results/tau_sb_sensitivity_sweep.csv",
     thresholds_json="data/results/thresholds.json",
@@ -3507,6 +3645,8 @@ def regenerate_all(verbose=True):
         ("SI irrep-degeneracy coupling (no fig: label yet)", plot_irrep_coupling),
         ("fig:sensitivity", plot_sensitivity),
         ("fig:sensitivity binary scheme (no fig: label yet)", plot_tau_sb_sensitivity),
+        ("fig:tau_sb_derivation (R1.9 revision; replaces Fig. 4 in the main text)",
+         plot_tau_sb_derivation),
         ("fig:sensitivity stretch predictors: PED vs weighted vs unweighted s[V_S] "
          "(exploratory, no fig: label yet)", plot_stretch_predictor_sensitivity),
         ("fig:cputime linear (proposed, not yet in .tex)",

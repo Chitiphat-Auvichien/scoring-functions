@@ -124,7 +124,7 @@ retired scoring scheme) stays reproducible without digging through git history.
   (2026-08-10). The canonical `data/logs/`, `data/gjf/`, `data/fchk/`, `data/characterised_modes.csv`
   hold the current G16 rerun.
 * **`data/results_tau_sb_0.50/`** — the frozen pre-2026-08-20 output snapshot from when `tau_SB=0.50` was
-  the canonical default (it is now `0.42`; see `Thresholds.tau_SB`'s default in `src/classifier.py`).
+  the canonical default (it is now `0.43`, the midpoint of the single-centre minimum-error plateau rounded to 0.01; see `Thresholds.tau_SB`'s default in `src/classifier.py`).
 * **`data/results/archive/`, `data/results/archive_threeway/`, `data/results/archive_unweighted/`** (and
   the matching `data/figures/archive_threeway/`, `data/figures/archive_unweighted/`) — frozen snapshots
   from, respectively, the pre-2026-08-25 two-gate-purity classifier, the pre-binary-scheme (threeway)

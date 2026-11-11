@@ -25,7 +25,7 @@ Concretely, the code covers:
     molecules with mixed bond types. `--v-weighting none` restores the original unweighted definition.
 * **Step 2 — vibrational classification.** Every one of the `3N` candidate modes gets a `vib_label`
   from `V_Stretch` alone: `"S"` (stretching) or `"B"` (bending) under the default binary scheme, via a
-  single calibrated cutoff `tau_SB` (default `0.42`). An explicit `--classify-scheme threeway` opt-in can
+  single calibrated cutoff `tau_SB` (default `0.43`). An explicit `--classify-scheme threeway` opt-in can
   instead label a mode `"SB"` (mixed stretch-bend) using a separate `tau_S`/`tau_B` split.
 * **Step 3 — T/R identification (optional).** A Hungarian (`scipy.optimize.linear_sum_assignment`) global
   assignment finds the `n_T + n_R` modes that best represent translation/rotation, each getting a bare

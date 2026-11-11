@@ -27,7 +27,7 @@ longer exists. New tests below cover the restructured Step 2/Step 3 split.
 
 Threshold policy (decided Phase 3, 2026-07, unchanged by the 2026-08-25
 restructuring): this file explicitly pins Thresholds() -- the hardcoded
-PROVISIONAL constants (tau_TR=0.95, tau_S=0.9, tau_B=0.2, tau_SB=0.42) --
+PROVISIONAL constants (tau_TR=0.95, tau_S=0.9, tau_B=0.2, tau_SB=0.43) --
 rather than relying on classify_all_modes()'s default (which now auto-loads
 the Phase-3 CALIBRATED values via Thresholds.calibrated() when
 data/results/thresholds.json exists). This keeps these regression goldens
@@ -144,7 +144,7 @@ def test_benzene_emit_34_35_36_spot_check():
     slot (tr_label in {"Tx","Ty"}) with |tr_score|~=1.0 -- the SAME argmax
     winners as before 2026-08-25 (Step 3's assignment mechanism itself is
     unchanged, only the removed gate), no more asterisk. Under the default
-    binary scheme with tau_SB=0.42 (both 0.667 and 0.577 are >= 0.42),
+    binary scheme with tau_SB=0.43 (both 0.667 and 0.577 are >= 0.43),
     vib_label="S" for both -- a real, checkable behavior change from the
     pre-2026-08-25 threeway "SB" framing (V_Stretch itself, tab:water's own
     ground truth, is completely unaffected -- this is a label-layer-only
@@ -167,7 +167,7 @@ def test_benzene_emit_34_35_36_spot_check():
     assert abs(e34["V"] - 0.6666662706312129) < TOL
     assert abs(e35["V"] - 0.5773504978406205) < TOL
 
-    tau_SB = Thresholds().tau_SB  # provisional default 0.42
+    tau_SB = Thresholds().tau_SB  # provisional default 0.43
     assert e34["V"] >= tau_SB and e35["V"] >= tau_SB
     assert e34["vib_label"] == STRETCHING
     assert e35["vib_label"] == STRETCHING
@@ -278,7 +278,7 @@ def test_classify_all_modes_binary_scheme_never_produces_sb():
     raw, _ = load_inputs("C6H6", "normal", os.path.join(ROOT, "data"))
     scorer, final = build_scorer_and_final(raw, "normal")
     # tau_SB pinned explicitly at 0.5 (not the bare Thresholds() default,
-    # which is 0.42 -- see Thresholds' docstring). This test is about
+    # which is 0.43 -- see Thresholds' docstring). This test is about
     # scheme-divergence mechanics on a straddling pair, not about the
     # current canonical tau_SB value, so it stays independent of that
     # constant rather than being repinned every time tau_SB moves.
@@ -313,7 +313,7 @@ def test_classify_all_modes_default_scheme_is_now_binary():
     """2026-08 paper-standard switch: classify_all_modes()'s own default
     (no `scheme` kwarg at all, unlike `_classify()` above which pins
     "threeway" explicitly) must now be BINARY, not threeway. Benzene EMIT
-    34/35 (V_Stretch 0.667/0.577, both >= tau_SB=0.42) are STRETCHING under
+    34/35 (V_Stretch 0.667/0.577, both >= tau_SB=0.43) are STRETCHING under
     binary, never MIXED_STRETCH_BEND. tr_label/tr_score are identical to the
     threeway-scheme result (scheme never touches Step 3)."""
     raw, _ = load_inputs("C6H6", "emit", os.path.join(ROOT, "data"))

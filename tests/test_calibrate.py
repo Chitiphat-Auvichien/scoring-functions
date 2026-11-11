@@ -280,7 +280,7 @@ def test_benzene_emit_34_35_binary_default_under_calibrated_thresholds():
     """Mirror check of test_benzene_emit_34_35_36_under_calibrated_thresholds
     above, but for classify_all_modes()'s own scheme DEFAULT (binary, the
     2026-08 paper-standard switch) instead of the "threeway" pin `_classify`
-    applies. EMIT 34/35 (V_Stretch 0.667/0.577, both far above tau_SB=0.42)
+    applies. EMIT 34/35 (V_Stretch 0.667/0.577, both far above tau_SB=0.43)
     are STRETCHING under binary, never MIXED_STRETCH_BEND. tr_label/tr_score
     are identical to the threeway result (scheme never touches Step 3)."""
     calibrated = Thresholds.calibrated()

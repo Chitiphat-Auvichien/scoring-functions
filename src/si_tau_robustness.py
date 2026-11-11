@@ -50,7 +50,7 @@ import numpy as np
 import pandas as pd
 
 from src.classifier import Thresholds
-from src.figures import AMBIGUITY_RANGE, COLORS, _savefig, _style, plt
+from src.figures import AMBIGUITY_LABEL, AMBIGUITY_RANGE, COLORS, _savefig, _style, plt
 
 GRID = np.round(np.arange(0.0, 1.0005, 0.001), 3)
 NG = len(GRID)
@@ -63,7 +63,10 @@ C1_FLIP_P = 0.05
 FLIP_RATES = (("L2", 0.01), ("L3", 0.05), ("L4", 0.20))
 NOISE_SIGMAS = (("N1", 0.01), ("N2", 0.02), ("N3", 0.05), ("N4", 0.10))
 CI_SIGMA_SCAN = (0.0, 0.02, 0.05, 0.10, SIGMA_CAL)
-BAND_TOL = 0.005        # |this run's CI end - AMBIGUITY_RANGE end| up to which the figures shade the constant
+N_REP_CI = 100000        # replicates for the ambiguity range (Monte Carlo error of each end ~ +/-0.0004)
+CI_BATCH = 10000         # replicates per batch (memory; batch spread -> Monte Carlo standard error)
+BAND_TOL = 0.002        # |this run's CI end - AMBIGUITY_RANGE end| up to which the figures shade the constant
+                        # (~5 Monte Carlo standard errors at N_REP_CI = 10^5)
 DEFAULT_UNITS_CSV = os.path.join("data", "results", "si_degenerate_sets.csv")
 GROUP_COLOR = {"Data": COLORS["sens_single_centre"], "Labels": COLORS["mixed_ext"],
                "Scores": "#E69F00", "Combined": "#000000"}     # Okabe-Ito green / pink / orange / black
@@ -228,11 +231,6 @@ def write_tests_tex(design, path, n_rep, n_unit, n_mol):
 
 
 # ---------------------------------------------------------------------------- figures
-def _fmt2(x):
-    """Two-decimal text that rounds half up at the third decimal (0.525 -> 0.53)."""
-    return f"{np.floor(x * 100 + 0.5 + 1e-9) / 100:.2f}"
-
-
 def plot_robustness(summary, draws, gap, tau, band, out_dir, label="fig_si_tau_robustness"):
     """(a) tau* per test: thin line 2.5-97.5 %, thick bar 25-75 %, open circle median, diamond
     mean; dark grey SC gap, light grey ambiguity range, dashed adopted tau_SB. (b) share of
@@ -320,7 +318,8 @@ def plot_ambiguity(tau_draws, ci, tau, marks, out_dir, label="fig_si_tau_ambigui
     a1.axvspan(*ci, color=COLORS["background"], alpha=0.35, lw=0)
     a1.hist(tau_draws, bins=bins, color="#777777", edgecolor="white", lw=0.3)
     a1.axvline(tau, color=COLORS["threshold"], ls="--", lw=1.0)
-    a1.text(0.5 * (ci[0] + ci[1]), 1.01, f"95% CI {_fmt2(ci[0])}–{_fmt2(ci[1])}", ha="center",
+    # three decimals: both ends sit on a two-decimal rounding boundary (see figures.AMBIGUITY_LABEL)
+    a1.text(0.5 * (ci[0] + ci[1]), 1.01, f"95% CI {ci[0]:.3f}–{ci[1]:.3f}", ha="center",
             va="bottom", fontsize=10, transform=a1.get_xaxis_transform())
     a1.set_xlim(0.25, 0.60)
     a1.set_xlabel(r"Re-optimised " + TAU_LABEL + r" ($\tau^*$)")
@@ -380,7 +379,7 @@ def _benzene_rows(data_dir, results_dir):
 
 # ---------------------------------------------------------------------------- driver
 def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_rep=10000,
-        units_csv=DEFAULT_UNITS_CSV, make_figures=True, verbose=False):
+        n_rep_ci=N_REP_CI, units_csv=DEFAULT_UNITS_CSV, make_figures=True, verbose=False):
     """Run every robustness test and the ambiguity range; write CSVs, the LaTeX table and figures.
 
     Returns a dict of the headline numbers (and the paths written)."""
@@ -449,22 +448,34 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
     l1_bad_modes = [f"{sc['molecule'].iloc[np.flatnonzero(unit == u)[0]]} "
                     f"{sc['freq'].iloc[np.flatnonzero(unit == u)[0]]:.0f}" for u in l1_bad]
 
-    # ambiguity range: C1 + score noise sigma_cal, sigma_cal scan
+    # ambiguity range: C1 + score noise sigma_cal, sigma_cal scan. n_rep_ci replicates, drawn in
+    # batches of CI_BATCH (memory); the spread of the batch percentiles gives the Monte Carlo
+    # standard error of each end (batch means: SD of the batch values / sqrt(number of batches)).
     rng_ci = np.random.default_rng(SEED_CI)
     ci_rows, ci_draws = [], {}
     lo_q, hi_q = 100 * (1 - COVERAGE) / 2, 100 * (1 + COVERAGE) / 2
+    batch = min(CI_BATCH, n_rep_ci)
+    n_batch = max(1, n_rep_ci // batch)
     for sg in CI_SIGMA_SCAN:
-        w = molecule_weights(codes, len(mols), n_rep, rng_ci)
-        yy = flipped_labels(y0, unit, n_unit, C1_FLIP_P, n_rep, rng_ci)
-        ss = np.clip(s0 + rng_ci.normal(0, sg, (n_rep, n_sc)), 0, 1) if sg > 0 else s0
-        t = recalibrate(ss, yy, w, gi_tau)["tau_star"]
+        parts = []
+        for _ in range(n_batch):
+            w = molecule_weights(codes, len(mols), batch, rng_ci)
+            yy = flipped_labels(y0, unit, n_unit, C1_FLIP_P, batch, rng_ci)
+            ss = np.clip(s0 + rng_ci.normal(0, sg, (batch, n_sc)), 0, 1) if sg > 0 else s0
+            parts.append(recalibrate(ss, yy, w, gi_tau)["tau_star"])
+        t = np.concatenate(parts)
         ci_draws[sg] = t
         lo95, hi95 = np.percentile(t, [lo_q, hi_q])
+        if n_batch > 1:
+            bq = np.array([np.percentile(p, [lo_q, hi_q]) for p in parts])
+            mcse = bq.std(axis=0, ddof=1) / np.sqrt(n_batch)
+        else:
+            mcse = (np.nan, np.nan)
         ci_rows.append(dict(sigma_cal=sg, adopted=bool(np.isclose(sg, SIGMA_CAL)), coverage=COVERAGE,
-                            n_rep=n_rep, seed=SEED_CI, flip_p=C1_FLIP_P,
+                            n_rep=len(t), n_batches=n_batch, seed=SEED_CI, flip_p=C1_FLIP_P,
                             tau_mean=t.mean(), tau_median=np.median(t), tau_sd=t.std(ddof=1),
                             ci90_lo=np.percentile(t, 5), ci90_hi=np.percentile(t, 95),
-                            ci95_lo=lo95, ci95_hi=hi95,
+                            ci95_lo=lo95, ci95_hi=hi95, ci95_lo_mcse=mcse[0], ci95_hi_mcse=mcse[1],
                             n_sc_modes_inside_ci95=int(((s0 >= lo95) & (s0 <= hi95)).sum())))
     ci_tab = pd.DataFrame(ci_rows)
     adopted = ci_tab[ci_tab["adopted"]].iloc[0]
@@ -497,7 +508,7 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
     write_tests_tex(design, paths["tests_tex"], n_rep, n_unit, len(mols))
 
     # The figures shade the adopted range (src.figures.AMBIGUITY_RANGE) when this run reproduces it
-    # within Monte Carlo error (each end +/- ~0.0015 at 10^4 replicates); otherwise this run's CI.
+    # within Monte Carlo error (each end +/- ~0.0004 at 10^5 replicates); otherwise this run's CI.
     band_is_constant = bool(max(abs(ci[0] - AMBIGUITY_RANGE[0]), abs(ci[1] - AMBIGUITY_RANGE[1])) <= BAND_TOL)
     band = tuple(AMBIGUITY_RANGE) if band_is_constant else ci
     if make_figures:
@@ -527,6 +538,7 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
         n_degenerate_sets=uinfo["n_sets"], mixed_label_sets=uinfo["mixed_label_sets"],
         l1_n_gap_changed=n_l1_gap, l1_excluding_tau=l1_bad_modes,
         ci95=ci, ci90=(float(adopted["ci90_lo"]), float(adopted["ci90_hi"])),
+        ci95_mcse=(float(adopted["ci95_lo_mcse"]), float(adopted["ci95_hi_mcse"])), n_rep_ci=int(adopted["n_rep"]),
         ci_tau_sd=float(adopted["tau_sd"]), n_sc_inside_ci=int(adopted["n_sc_modes_inside_ci95"]),
         ambiguity_range_constant=AMBIGUITY_RANGE, figure_band=band, figure_band_is_constant=band_is_constant,
         summary=summary, ci_table=ci_tab, modes=modes,
@@ -547,10 +559,11 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--n-rep", type=int, default=10000)
+    ap.add_argument("--n-rep-ci", type=int, default=N_REP_CI)
     ap.add_argument("--units-csv", default=DEFAULT_UNITS_CSV)
     ap.add_argument("--no-figures", action="store_true")
     a = ap.parse_args(argv)
-    run(n_rep=a.n_rep, units_csv=a.units_csv, make_figures=not a.no_figures, verbose=True)
+    run(n_rep=a.n_rep, n_rep_ci=a.n_rep_ci, units_csv=a.units_csv, make_figures=not a.no_figures, verbose=True)
 
 
 if __name__ == "__main__":

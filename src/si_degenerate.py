@@ -2,7 +2,7 @@
 
 Ported from the R1.4 side report (JCC/2nd submission/side_reports/R1.4_degenerate_modes/
 r14_degenerate_modes.py, report section 2) with the revision's settings: tau_SB from
-Thresholds.calibrated() (0.43) and the S/B ambiguity range src.figures.AMBIGUITY_RANGE (0.31-0.53).
+Thresholds.calibrated() (0.43) and the S/B ambiguity range src.figures.AMBIGUITY_RANGE (0.315-0.525).
 
 Degenerate set (definition fixed by the author): modes of one molecule that
   (i) carry the SAME degenerate irrep (E, T or Pi) of the molecule's point group in
@@ -60,7 +60,7 @@ from matplotlib.patches import Patch
 from scipy.optimize import minimize, minimize_scalar
 
 from src.classifier import Thresholds
-from src.figures import _style, _savefig, COLORS, AMBIGUITY_RANGE
+from src.figures import _style, _savefig, COLORS, AMBIGUITY_RANGE, AMBIGUITY_LABEL
 
 TOL_CM = 0.5                      # cm-1, chained frequency tolerance of a set
 N_DIR_TRIPLE = 20000              # Fibonacci directions for the subspace mean / extremes of triples
@@ -503,7 +503,7 @@ def plot_all_sets(D, tau, out_dir, label="fig_si_degenerate_all_sets"):
     hand += [Line2D([], [], marker="|", ls="", color="k", ms=6, mew=1.0, label=r"subspace mean $\bar{s}$"),
              Line2D([], [], marker="o", ls="", mfc="white", mec="k", ms=3.5, mew=0.6, label="Gaussian's members"),
              Line2D([], [], marker="x", ls="", color="k", ms=4, mew=0.8, label=r"their mean $\bar{s}_\mathrm{G}$"),
-             Patch(facecolor=COLORS["background"], alpha=0.35, lw=0, label="ambiguity range (0.31–0.53)"),
+             Patch(facecolor=COLORS["background"], alpha=0.35, lw=0, label=f"ambiguity range ({AMBIGUITY_LABEL})"),
              Line2D([], [], color=COLORS["threshold"], ls="--", lw=0.8, label=r"$\tau_\mathrm{SB}$" + f" = {tau:.2f}")]
     fig.legend(handles=hand, loc="lower center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=6.8, frameon=False,
                columnspacing=1.4, handlelength=1.8)
@@ -555,7 +555,7 @@ def plot_near_threshold(D, tau, out_dir, label="fig_si_degenerate_near_threshold
     hand = [Line2D([], [], color=SYM_CLASS_COLOR[c], lw=5, solid_capstyle="butt", label=f"range, {SYM_CLASS_LABEL[c]}")
             for c in present]
     hand += [Line2D([], [], marker="|", ls="", color="k", ms=9, mew=1.6, label=r"subspace mean $\bar{s}$"),
-             Patch(facecolor=COLORS["background"], alpha=0.35, lw=0, label="ambiguity range (0.31–0.53)")]
+             Patch(facecolor=COLORS["background"], alpha=0.35, lw=0, label=f"ambiguity range ({AMBIGUITY_LABEL})")]
     hand2 = [Line2D([], [], marker="o", ls="", mfc=COLORS["stretching"], mec="k", mew=0.6, ms=5,
                     label="Gaussian's member, S"),
              Line2D([], [], marker="o", ls="", mfc=COLORS["bending"], mec="k", mew=0.6, ms=5,

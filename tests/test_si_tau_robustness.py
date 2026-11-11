@@ -96,7 +96,7 @@ def test_single_flips_and_ambiguity_range(tmp_path):
     for f in ("library_scores.csv", "thresholds.json", "C6H6_normal.csv"):
         shutil.copy(os.path.join("data", "results", f), tmp_path / f)
     out = TR.run(data_dir="data", out_dir=str(tmp_path), results_dir=str(tmp_path), n_rep=1000,
-                 units_csv=UNITS_CSV, make_figures=False)
+                 n_rep_ci=2000, units_csv=UNITS_CSV, make_figures=False)
     assert out["tau_SB"] == TAU and out["sc_errors_at_tau"] == 1
     assert out["n_units"] == 332 and not out["mixed_label_sets"]
     assert out["l1_excluding_tau"] == ["SBr4 135"]

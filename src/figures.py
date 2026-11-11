@@ -204,8 +204,12 @@ PRED_BUCKET_TO_CATEGORY.update({
 # 95 % bootstrap confidence interval of tau_SB, recalibrated on the single-centre
 # set with 5 % label flips and score noise sigma = 0.125 (the mixed-mode RMSE
 # against PED). A mode inside it can be labelled S or B by an equally valid
-# calibration. Written 0.31-0.53 (0.525 sits on a rounding boundary).
-AMBIGUITY_RANGE = (0.314, 0.525)
+# calibration. Values from src/si_tau_robustness.py with 10^5 replicates (per-member
+# scores, tau_SB 0.43): [0.315, 0.525], Monte Carlo error +/-0.0003 / +/-0.0004.
+# Both ends sit on a two-decimal rounding boundary, so the range is written with
+# three decimals (AMBIGUITY_LABEL); use that string in every figure.
+AMBIGUITY_RANGE = (0.315, 0.525)
+AMBIGUITY_LABEL = "0.315–0.525"
 
 IDEAL_STYLE = {
     "yes": {"filled": True, "label": "ideal", "alpha": 0.85},
@@ -641,7 +645,7 @@ def plot_benzene_normal_modes(
                    label=leg_label, **kw)
 
     ax.axhspan(lo, hi, color=COLORS["background"], alpha=0.35, lw=0, zorder=0,
-               label="ambiguity range (0.31–0.53)")
+               label=f"ambiguity range ({AMBIGUITY_LABEL})")
     ax.axhline(TAU_SB, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
     y_offset = 0.045
     # Right side (ha="right"), clear of the legend which sits on the left.

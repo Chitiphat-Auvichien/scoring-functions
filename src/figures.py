@@ -2250,16 +2250,15 @@ def plot_mode_mixing(
 
     ax_i.set_ylabel(r"$s[\mathrm{V_S}]$")
     ax_i.set_ylim(-0.05, 1.08)
-    # Bordered legends: both panels' legend boxes sit on top of scattered
-    # data points, so a frame + opaque face keep swatches from reading as
-    # more data (unlike every other legend in this module, frameon=False).
-    ax_i.legend(loc="center right", frameon=True, edgecolor="black",
-                facecolor="white", framealpha=1.0,
-                handletextpad=0.4, labelspacing=0.4)
-    ax_n.legend(loc="center right", frameon=True, edgecolor="black",
-                facecolor="white", framealpha=1.0,
-                handletextpad=0.4, labelspacing=0.4)
-    # Left side, clear of the "center right" legend.
+    # Legends in the empty lower-right corner (below tau_SB, right of the
+    # bending cluster) so they never cross the threshold line; the space
+    # between legend and line is left free for hand-added mode depictions
+    # in the manuscript copy. Bordered so swatches don't read as data.
+    for ax in (ax_i, ax_n):
+        ax.legend(loc="lower right", frameon=True, edgecolor="black",
+                  facecolor="white", framealpha=1.0,
+                  handletextpad=0.4, labelspacing=0.4)
+    # Left side, clear of the lower-right legend.
     ax_i.text(0.02, th.tau_SB, r"$\tau_{\mathrm{SB}}$", ha="left", va="bottom",
               color=COLORS["threshold"], transform=ax_i.get_yaxis_transform())
 

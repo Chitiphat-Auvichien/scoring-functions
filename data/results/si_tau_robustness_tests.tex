@@ -1,0 +1,14 @@
+% Robustness tests of tau_SB (SI). Written by src/si_tau_robustness.py; do not edit.
+% Needs booktabs and array. A unit = one degenerate set (members flip together) or one mode.
+% A replicate keeps everything not named. Seeds 20261029 (D, L, C) and 20261030 (N).
+\begin{tabular}{@{}l>{\raggedright\arraybackslash}p{3.3cm}>{\raggedright\arraybackslash}p{7.0cm}l@{}}
+\toprule
+ID & question & one replicate & $R$\\
+\midrule
+D1 & other molecules? & draw 66 molecules with replacement; $w_i$ = draws of the molecule of mode $i$ & $10^{4}$\\
+L1 & one wrong label? & flip the label of one unit & 332 (all)\\
+L2--L4 & random wrong labels? & each unit flips with $p=0.01$, $0.05$, $0.20$ & $10^{4}$ each\\
+N1--N4 & scores slightly off? & $s_i\to s_i+\varepsilon_i$, $\varepsilon_i\sim N(0,\sigma_s^2)$, $\sigma_s=0.01$, $0.02$, $0.05$, $0.10$; clipped to $[0,1]$ & $10^{4}$ each\\
+C1 & molecules and labels together & D1 and L3 in the same replicate & $10^{4}$\\
+\bottomrule
+\end{tabular}

@@ -13,6 +13,14 @@ ordered pass (`--dry-run` lists the stages; `--only`/`--skip` select them). It w
 `data/results/_run_manifest.json` recording which scoring definition, commit, and stages produced the
 current outputs.
 
+Opt-in stages (run only with `--only`): `sync_manuscript`, `si_tables`, and `si_analyses`, the
+Supporting-Information analyses of the JCC revision (about 1.5 min): `src/si_degenerate.py` (s[V_S]
+over all bases of each degenerate set), `src/si_frame.py` (frame spread; on-axis cut-off),
+`src/si_water_overlaps.py` (H2O scores vs Cartesian / mass-weighted overlaps) and
+`src/si_tau_robustness.py` (robustness of tau_SB and the S/B ambiguity range). They write
+`data/results/si_*.csv` and `data/figures/fig_si_*`; each module also runs on its own
+(`python -m src.si_degenerate`, ...).
+
 To rebuild under the original unweighted V-score instead, use `python reproduce.py --v-weighting none`.
 Scoring and thresholds must come from the same definition: `thresholds.json` records which one it was
 calibrated for, and the program refuses to classify with a mismatched pair rather than silently

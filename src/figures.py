@@ -452,17 +452,22 @@ def plot_benzene_stress_test(
                  alpha=0.6, linewidths=0, zorder=2,
                  label="other EMIT modes\n(all 6 external DOF)")
 
-    # -- Highlight 1: s[R_y] non-monotonicity, EMIT 2 vs EMIT 9 --
+    # -- Highlight 1: s[R] non-monotonicity, EMIT 2 vs EMIT 9 --
+    # The in-plane R axis EMIT 9 wins depends on the frame convention (R_y in
+    # the submitted MIT frame, R_x in the R1.5 frame), so read it from the
+    # CSV's own tr_label instead of hard-coding it.
     def _row(mode):
         return emit.loc[emit["Mode"] == mode].iloc[0]
 
     e2, e9 = _row("EMIT 2"), _row("EMIT 9")
-    ax_b.scatter([e2["C2_Ry"], e9["C2_Ry"]], [abs(e2["Ry"]), abs(e9["Ry"])],
+    r_ax = str(e9["tr_label"]) if isinstance(e9["tr_label"], str) and e9["tr_label"].startswith("R") else "Ry"
+    r_tex = "$R_" + r_ax[1] + "$"
+    ax_b.scatter([e2["C2_" + r_ax], e9["C2_" + r_ax]], [abs(e2[r_ax]), abs(e9[r_ax])],
                  color=COLORS["highlight_r"], marker="D", s=55,
                  edgecolors="black", linewidths=0.5, zorder=5,
-                 label=r"EMIT 2 / 9 ($R_y$ inversion)")
+                 label="EMIT 2 / 9 (" + r_tex + " inversion)")
     ann_r = ax_b.annotate(
-        "", xy=(e9["C2_Ry"], abs(e9["Ry"])), xytext=(e2["C2_Ry"], abs(e2["Ry"])),
+        "", xy=(e9["C2_" + r_ax], abs(e9[r_ax])), xytext=(e2["C2_" + r_ax], abs(e2[r_ax])),
         arrowprops=dict(arrowstyle="->", color=COLORS["highlight_r"], lw=1.4),
         zorder=4,
     )
@@ -471,18 +476,21 @@ def plot_benzene_stress_test(
     ann_r.arrow_patch.set_path_effects(
         [pe.Stroke(linewidth=2.0, foreground="black"), pe.Normal()])
     # EMIT 9 label offset upper-left, clear of the arrow's approach angle.
-    ax_b.annotate("EMIT 2", (e2["C2_Ry"], abs(e2["Ry"])),
+    ax_b.annotate("EMIT 2", (e2["C2_" + r_ax], abs(e2[r_ax])),
                   xytext=(6, 6), textcoords="offset points")
-    ax_b.annotate("EMIT 9", (e9["C2_Ry"], abs(e9["Ry"])),
+    ax_b.annotate("EMIT 9", (e9["C2_" + r_ax], abs(e9[r_ax])),
                   xytext=(-6, 8), textcoords="offset points",
                   ha="right")
 
     # -- Highlight 2: flagged external modes, EMIT 34/35/36. By symmetry
-    # (Tx/Ty/Tz translation) these three coincide exactly at the same
+    # (translations) these three coincide exactly at the same
     # (contribution, score) point -- plotted once, with a side callout table
     # (not per-point labels, which would overlap) giving the s[V_S] readout
-    # that distinguishes them.
-    flagged = [("EMIT 34", "Tx"), ("EMIT 35", "Ty"), ("EMIT 36", "Tz")]
+    # that distinguishes them. Their T axes come from tr_label (frame-dependent).
+    flagged = []
+    for mode in ("EMIT 34", "EMIT 35", "EMIT 36"):
+        lab = _row(mode)["tr_label"]
+        flagged.append((mode, lab if isinstance(lab, str) and lab.startswith("T") else "Tz"))
     fx, fy, fvs = [], [], []
     for mode, ax_name in flagged:
         r = _row(mode)
@@ -501,7 +509,7 @@ def plot_benzene_stress_test(
                         lw=0.9, ls="--"),
         zorder=4,
     )
-    callout_text = "EMIT 34-36 (Tx/Ty/Tz):\n" + "\n".join(
+    callout_text = "EMIT 34-36 (" + "/".join(ax for _, ax in flagged) + "):\n" + "\n".join(
         f"  {mode.split()[1]}: " + r"$s[\mathrm{V_S}]$" + f"={vs:.3f}"
         for (mode, _), vs in zip(flagged, fvs)
     )
@@ -529,10 +537,11 @@ def plot_benzene_stress_test(
         "pdf": pdf_path,
         "png": png_path,
         "n_background_points": len(bg_x),
-        "emit2_Ry_score": float(abs(e2["Ry"])),
-        "emit2_Ry_contribution": float(e2["C2_Ry"]),
-        "emit9_Ry_score": float(abs(e9["Ry"])),
-        "emit9_Ry_contribution": float(e9["C2_Ry"]),
+        "emit29_R_axis": r_ax,
+        "emit2_R_score": float(abs(e2[r_ax])),
+        "emit2_R_contribution": float(e2["C2_" + r_ax]),
+        "emit9_R_score": float(abs(e9[r_ax])),
+        "emit9_R_contribution": float(e9["C2_" + r_ax]),
         "emit34_36_scores": fy,
         "emit34_36_contributions": fx,
         "emit34_36_vstretch": fvs,

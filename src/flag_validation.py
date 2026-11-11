@@ -14,8 +14,9 @@ below): precision = 1.0 (flag never fires on a genuinely clean mode), recall
 one-to-one linear_sum_assignment only ever assigns 6 of 36 modes an external
 slot at all (by construction, not a bug) -- the other 30 modes reach Step 4
 and can never be flagged regardless of true external character. E.g. EMIT 2
-has more genuine Ry character than EMIT 9 by projection (38.7% vs 14.1%) but
-EMIT 9 wins the Ry slot on raw score (0.215 vs 0.143), so EMIT 9 is flagged
+has more genuine in-plane R character than EMIT 9 by projection (38.7% vs 14.1%;
+R_y in the submitted MIT frame, R_x in the R1.5 frame) but
+EMIT 9 wins that R slot on raw score (0.215 vs 0.143), so EMIT 9 is flagged
 (TP) while EMIT 2 is missed (FN) -- the recall gap is systematic to Step 2's
 assignment mechanism, not an isolated edge case.
 

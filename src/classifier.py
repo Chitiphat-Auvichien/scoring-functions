@@ -260,7 +260,8 @@ class Thresholds:
 
 def is_linear(scorer, tol=LINEAR_TOL):
     """True if the smallest principal moment of inertia is ~0 (linear molecule).
-    Must be called post-MIT() (as build_scorer_and_final always does) -- see
+    The moments do not depend on the frame; build_scorer_and_final puts the
+    molecular axis on x (frame rule or MIT()) -- see
     main.py::build_scorer_and_final for the n_R=2 / Rx-placeholder invariant this feeds."""
     moments, _ = scorer.principal_axes()
     scale = max(float(np.max(np.abs(moments))), 1e-12)

@@ -313,8 +313,10 @@ def displacement_rows(d, pairs):
 
 # ---------------------------------------------------------------- figures
 C_ON, C_OFF = "#E69F00", "#332288"        # on-/off-axis (by symmetry): colours the manuscript palette does not use
-GROUP_COLORS = {"single-centre": "#E69F00", "test": "#0072B2", "benzene": "#009E73"}   # Okabe-Ito, as the side report
-CASE_SHORT = {"asymmetric": "asym.", "linear": "linear", "symmetric": "symm.", "spherical": "spher."}
+# data sets: the same greys and names as the degenerate-set figures (src/si_degenerate.py)
+GROUP_COLORS = {"single-centre": "#4D4D4D", "test": "#9A9A9A", "benzene": "#DADADA"}
+GROUP_LABEL = {"single-centre": "SC set", "test": "test set", "benzene": "benzene"}
+CASE_SHORT = {"asymmetric": "asymmetric", "linear": "linear", "symmetric": "symmetric", "spherical": "spherical"}
 RQ = r"$|\boldsymbol{r}_{Q}^{A}|$"
 DA = r"$|\boldsymbol{d}^{A}|$"
 Z0 = 1e-8                                 # exact zeros are drawn here, on a tick labelled 0
@@ -328,7 +330,7 @@ def _figure_spread(S, out_dir):
     _style()
     V = S[S.max_abs >= MIN_ABS]
     tops = V[V.case.isin(["symmetric", "spherical"])]
-    fig, axs = plt.subplots(1, 2, figsize=(10.0, 4.3), gridspec_kw=dict(width_ratios=[1.15, 1.0], wspace=0.32))
+    fig, axs = plt.subplots(1, 2, figsize=(7.0, 3.2), gridspec_kw=dict(width_ratios=[1.15, 1.0], wspace=0.34))
 
     ax = axs[0]
     bins = np.linspace(0, 0.75, 31)
@@ -336,21 +338,20 @@ def _figure_spread(S, out_dir):
     for g, c in GROUP_COLORS.items():
         h, _ = np.histogram(tops[tops.group == g].spread, bins=bins)
         n_mol = tops[tops.group == g].molecule.nunique()
-        ax.bar(bins[:-1], h, width=np.diff(bins), bottom=bottom, align="edge", color=c, edgecolor="white",
-               lw=0.4, label=f"{g} ({n_mol})")
+        ax.bar(bins[:-1], h, width=np.diff(bins), bottom=bottom, align="edge", color=c, edgecolor="k",
+               lw=0.3, label=f"{GROUP_LABEL[g]} ({n_mol})")
         bottom += h
     med, p90 = tops.spread.median(), tops.spread.quantile(0.9)
     top = bottom.max() * 1.25
     ax.axvline(med, color="black", lw=1.0)
     ax.axvline(p90, color="black", lw=1.0, ls="--")
-    ax.text(med + 0.008, top * 0.97, f"median\n{med:.2f}", va="top", fontsize=9)
-    ax.text(p90 + 0.008, top * 0.97, f"90th percentile\n{p90:.2f}", va="top", fontsize=9)
+    ax.text(med + 0.008, top * 0.97, f"median\n{med:.2f}", va="top", fontsize=8)
+    ax.text(p90 + 0.008, top * 0.97, f"90th percentile\n{p90:.2f}", va="top", fontsize=8)
     ax.set_xlim(0, 0.75)
     ax.set_ylim(0, top)
-    ax.set_xlabel(r"frame spread $\Delta_k[\mathrm{T}]$ or $\Delta_k[\mathrm{R}]$")
-    ax.set_ylabel(r"number of values $\Delta_k[\mathrm{T}]$, $\Delta_k[\mathrm{R}]$")
-    ax.legend(frameon=False, loc="center right", fontsize=9, bbox_to_anchor=(1.0, 0.55))
-    ax.set_title("(a) symmetric and spherical tops; all principal-axis frames", loc="left", fontsize=10)
+    ax.set_xlabel(r"$\Delta_k[\mathrm{T}]$ or $\Delta_k[\mathrm{R}]$")
+    ax.set_ylabel("number of values")
+    ax.legend(frameon=False, loc="center right", fontsize=8, bbox_to_anchor=(1.0, 0.5))
 
     ax = axs[1]
     rng = np.random.default_rng(0)
@@ -363,15 +364,18 @@ def _figure_spread(S, out_dir):
             bx.set(facecolor="white", edgecolor=grey)
         ax.scatter(i + rng.uniform(-0.17, 0.17, len(v)), v, s=3, color=grey, alpha=0.35, lw=0, zorder=3,
                    rasterized=True)
-        ax.text(i, 0.79, f"n = {len(v)}", ha="center", fontsize=9)
+        ax.text(i, 0.79, f"n = {len(v)}", ha="center", fontsize=8)
     nmol = S.groupby("case").molecule.nunique()
     ax.set_xticks(range(len(CASES)))
     ax.set_xticklabels([f"{CASE_SHORT[c]}\n({nmol.get(c, 0)})" for c in CASES])
     ax.set_xlim(-0.6, len(CASES) - 0.4)
     ax.set_ylim(-0.02, 0.86)
-    ax.set_xlabel("case (number of molecules)")
-    ax.set_ylabel(r"frame spread $\Delta_k[\mathrm{T}]$, $\Delta_k[\mathrm{R}]$")
-    ax.set_title(f"(b) all {S.molecule.nunique()} molecules; all principal-axis frames", loc="left", fontsize=10)
+    ax.set_xlabel("rotor type (molecules)")
+    ax.set_ylabel(r"$\Delta_k[\mathrm{T}]$ or $\Delta_k[\mathrm{R}]$")
+    ax.tick_params(axis="x", labelsize=7.5)
+    fig.subplots_adjust(left=0.09, right=0.98, bottom=0.2, top=0.9)
+    for a, t in zip(axs, "ab"):
+        a.text(-0.2, 1.02, f"({t})", transform=a.transAxes, fontweight="bold", va="bottom")
     return _savefig(fig, out_dir, "fig_si_frame_spread")
 
 
@@ -398,12 +402,12 @@ def _strip(ax, P, rng, title):
     ax.set_yticks([0, 1])
     ax.set_yticklabels(["on-axis\n(by symmetry)", "off-axis\n(by symmetry)"])
     ax.tick_params(axis="y", length=0)
-    ax.text(20, 0, f"{len(on)} pairs\n({n_zero} with " + RQ + " = 0, not shown)", fontsize=9,
+    ax.text(20, 0, f"{len(on)} pairs\n({n_zero} at 0, not shown)", fontsize=9,
             ha="right", va="center")
     ax.text(2.6e-8, 1, f"{len(off)} pairs", fontsize=9, ha="left", va="center")
     ax.text(lo / 1.1, 0.36, _sci(lo) + " Å", fontsize=9, ha="right", va="top", color=C_ON)
     ax.text(hi * 1.1, 0.64, _sci(hi) + " Å", fontsize=9, ha="left", va="bottom", color=C_OFF)
-    ax.set_title(title, loc="left", fontsize=11)
+    ax.set_title(title, loc="left", fontsize=11, fontweight="bold")
 
 
 def _figure_gap(P, out_dir):
@@ -414,17 +418,15 @@ def _figure_gap(P, out_dir):
     from matplotlib.patches import Patch
     from .figures import COLORS, _savefig, _style
     _style()
-    fig, axs = plt.subplots(2, 1, figsize=(8.0, 5.4), sharex=True, gridspec_kw=dict(hspace=0.35))
+    fig, axs = plt.subplots(2, 1, figsize=(7.0, 4.8), sharex=True, gridspec_kw=dict(hspace=0.35))
     rng = np.random.default_rng(3)
-    nm = P.molecule.nunique()
     sel = P[P.selected]
-    nf = P.groupby(["molecule", "frame_index"]).ngroups
-    _strip(axs[0], sel, rng, f"(a) frame chosen by the program; {nm} molecules")
-    _strip(axs[1], P, rng, f"(b) every frame allowed by the symmetry rule; {nf} frames")
+    _strip(axs[0], sel, rng, "(a) program frame")
+    _strip(axs[1], P, rng, "(b) every allowed frame")
     axs[1].set_xlabel("distance from the $Q$-axis, " + RQ + " (Å)")
     fig.legend(handles=[Line2D([], [], color=COLORS["threshold"], ls="--", lw=1.0,
                                   label=r"cut-off $10^{-5}$ Å"),
-                           Patch(facecolor=COLORS["background"], alpha=0.25, label="gap between the classes")],
+                           Patch(facecolor=COLORS["background"], alpha=0.25, label="gap")],
                frameon=False, loc="upper center", bbox_to_anchor=(0.55, 0.0), fontsize=9, ncol=2)
     return _savefig(fig, out_dir, "fig_si_onaxis_gap")
 
@@ -478,9 +480,9 @@ def _figure_displacement(D, out_dir):
     ax.axhline(ON_AXIS_TOL, color=thr, ls="--", lw=1.0)
     # the displacement floor matters only for atoms that are counted (above the on-axis cut-off)
     ax.plot([EPS_DENOM, EPS_DENOM], [ON_AXIS_TOL, ylim[1]], color=thr, ls="--", lw=1.0)
-    ax.text(2.0e-4, 2.2e-6, "not counted", ha="center", va="center", color=thr, fontsize=10)
-    ax.text(1.3e-7, 3e-3, "term 0", ha="center", va="center", color=thr, fontsize=10)
-    ax.text(3e-5, 3e-3, "full term", ha="center", va="center", color=thr, fontsize=10)
+    ax.text(2.0e-4, 2.2e-6, "on the axis: excluded", ha="center", va="center", color=thr, fontsize=10)
+    ax.text(1.3e-7, 3e-3, "term\nset to 0", ha="center", va="center", color=thr, fontsize=10)
+    ax.text(3e-5, 3e-3, "term\ncomputed", ha="center", va="center", color=thr, fontsize=10)
     ax.text(xlim[1] * 0.8, ON_AXIS_TOL / 1.3, r"$10^{-5}$ Å", ha="right", va="top", color=thr, fontsize=9)
     ax.text(EPS_DENOM * 1.2, ylim[1] * 0.7, r"$10^{-6}$", ha="left", va="top", color=thr, fontsize=9)
     ax.set_xlabel("displacement of the atom, " + DA)
@@ -489,9 +491,6 @@ def _figure_displacement(D, out_dir):
                    fontsize=9, handletextpad=0.2, columnspacing=1.0)
     for h in lg.legend_handles:
         h.set_alpha(1)
-    nm, nk = D.molecule.nunique(), D.groupby(["molecule", "mode"]).ngroups
-    ax.set_title(f"frame chosen by the program; {nk} normal vibrational modes of {nm} molecules",
-                 loc="left", fontsize=10, pad=24)
     return _savefig(fig, out_dir, "fig_si_onaxis_displacement")
 
 

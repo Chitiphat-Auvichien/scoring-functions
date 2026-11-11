@@ -51,8 +51,8 @@ WATER_VIB_NAMES = ["delta", "nu_s", "nu_as"]
 _TEX = {"Tx": r"T$_\mathrm{x}$", "Ty": r"T$_\mathrm{y}$", "Tz": r"T$_\mathrm{z}$",
         "Rx": r"R$_\mathrm{x}$", "Ry": r"R$_\mathrm{y}$", "Rz": r"R$_\mathrm{z}$",
         "delta": r"$\delta$", "nu_s": r"$\nu_\mathrm{s}$", "nu_as": r"$\nu_\mathrm{as}$"}
-_TITLE = {"MS": "(a) MS", "oCart": r"(b) $o_\mathrm{Cart}$",
-          "oMW": r"(c) $o_\mathrm{MW}$ ($m = 2$)"}
+_TITLE = {"MS": r"(a) $s[\mathrm{T}_Q]$, $s[\mathrm{R}_Q]$", "oCart": r"(b) $o_\mathrm{Cart}$",
+          "oMW": r"(c) $o_\mathrm{MW}$"}
 _NORM_TOL = 1e-12
 
 

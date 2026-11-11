@@ -22,7 +22,7 @@ basis is an orthogonal k x k matrix O whose rows are the members' coefficients. 
                        (pairs: grid over the half circle + bounded refinement; triples: Gaussian's
                        vectors + 20 000 Fibonacci directions + Nelder-Mead from the 20 best)
   V_mean (s-bar)       subspace mean: s[V_S] averaged uniformly over directions
-  member_avg_orig      s-bar_G, the mean of Gaussian's own members (the manuscript's Fig. 7 practice)
+  member_avg_orig      s-bar_c, the mean of the computed members (Gaussian's own vectors) (the manuscript's Fig. 7 practice)
   w                    within-basis range of ONE basis: highest - lowest of its members
   member mean          mean of the members of ONE basis
 Both w and the member mean are sampled over `n_rot` rotations (bases) per set: pairs on the grid
@@ -37,9 +37,9 @@ Outputs
   data/results/si_degenerate_sets.csv          one row per set (152)
   data/results/si_degenerate_rotations.csv     per set, histogram counts over the n_rot rotations of
                                                w and of (member mean - s-bar) (long format)
-  data/figures/fig_si_degenerate_all_sets      every set: position on 0-1 and range about s-bar
+  data/figures/fig_si_degenerate_all_sets_{sc,test}  every set: position on 0-1 and range about s-bar
   data/figures/fig_si_degenerate_near_threshold sets whose range meets the ambiguity range
-  data/figures/fig_si_degenerate_mean_comparison s-bar vs s-bar_G; s-bar_G - s-bar vs spread
+  data/figures/fig_si_degenerate_mean_comparison s-bar vs s-bar_c; s-bar_c - s-bar vs spread
   data/figures/fig_si_degenerate_rotations     distributions of w and member mean - s-bar over rotations
   data/figures/fig_si_degenerate_spread        histogram of the spreads
 """
@@ -81,7 +81,7 @@ SYM_CLASS_LABEL = {"E3": "E pair, 3- or 6-fold axis", "T": "T triple",
                    "E4": "E pair, 4-fold axis", "Pi": r"$\Pi$ pair (linear)"}
 SV = r"$s[\mathrm{V_S}]$"
 SBAR = r"$\bar{s}$"
-SBAR_G = r"$\bar{s}_\mathrm{G}$"
+SBAR_G = r"$\bar{s}_\mathrm{c}$"   # mean of the computed members (as output by the frequency calculation)
 SPREAD_LABEL = r"spread of $s[\mathrm{V_S}]$ (highest $-$ lowest)"
 SETS_CSV = "si_degenerate_sets.csv"
 ROTATIONS_CSV = "si_degenerate_rotations.csv"
@@ -437,35 +437,42 @@ def _class_handles(lw=4):
 
 
 def plot_all_sets(D, tau, out_dir, label="fig_si_degenerate_all_sets"):
-    """Every set (replaces slide 8): per column, (left) the range of s[V_S] over all bases on the 0-1
-    scale with a tick at s-bar; (right) the same range about s-bar, Gaussian's members (circles) and their
-    mean s-bar_G (cross). Column 1: SC set; column 2: test set + benzene."""
-    _style()
-    cols = [("SC set", D[D.group == "SC"].sort_values("V_mean")),
-            ("test set + benzene", pd.concat([D[D.group == "test"].sort_values("V_mean"),
-                                              D[D.group == "benzene"].sort_values("V_mean")]))]
-    nmax = max(len(x) for _, x in cols)
+    """Every set (replaces slide 8), as two full-page figures, <label>_sc (SC set) and <label>_test
+    (test set + benzene): (left) the range of s[V_S] over all bases on the 0-1 scale with a tick at
+    s-bar; (right) the same range about s-bar, the computed members (circles) and their mean s-bar_c
+    (cross). Returns {"sc": (pdf, png), "test": (pdf, png)}."""
+    parts = {"sc": D[D.group == "SC"].sort_values("V_mean"),
+             "test": pd.concat([D[D.group == "test"].sort_values("V_mean"),
+                                D[D.group == "benzene"].sort_values("V_mean")])}
     dev = np.r_[D.Vmin - D.V_mean, D.Vmax - D.V_mean]
-    lim = np.ceil(np.abs(dev).max() * 100 + 0.6) / 100
-    fs_lab, fs_tick = 5.6, 6.5
-    fig = plt.figure(figsize=(7.0, 9.6))
-    top, bot = 0.965, 0.085
-    row_h = (top - bot) / nmax
-    for ci, (title, x) in enumerate(cols):
-        x0 = 0.115 + ci * 0.5
-        h = row_h * len(x)
-        axA = fig.add_axes([x0, top - h, 0.165, h])
-        axB = fig.add_axes([x0 + 0.185, top - h, 0.165, h])
+    lim = np.ceil(np.abs(dev).max() * 100 + 0.6) / 100          # same scale in both figures
+    fs_lab, fs_tick, fs_ax = 7.0, 7.5, 9.0
+    ROW, TOP, BOT, W = 0.10, 0.12, 1.05, 7.0                    # inches
+    common = [Line2D([], [], marker="|", ls="", color="k", ms=6, mew=1.0, label=r"subspace mean $\bar{s}$"),
+             Line2D([], [], marker="o", ls="", mfc="white", mec="k", ms=3.5, mew=0.6, label="computed members"),
+             Line2D([], [], marker="x", ls="", color="k", ms=4, mew=0.8, label="their mean " + SBAR_G),
+             Patch(facecolor=COLORS["background"], alpha=0.35, lw=0, label=f"ambiguity range ({AMBIGUITY_LABEL})"),
+             Line2D([], [], color=COLORS["threshold"], ls="--", lw=0.8, label=r"$\tau_\mathrm{SB}$" + f" = {tau:.2f}")]
+    out = {}
+    for key, x in parts.items():
+        _style()
+        H = ROW * len(x) + TOP + BOT
+        fig = plt.figure(figsize=(W, H))
+        rect = lambda x0, w: [x0 / W, BOT / H, w / W, ROW * len(x) / H]
+        axA = fig.add_axes(rect(1.75, 2.35))
+        axB = fig.add_axes(rect(4.4, 2.35))
         _threshold_axes(axA, tau)
         axB.axvline(0, color="k", lw=0.5, zorder=1)
         labels = []
         for y, (_, r) in enumerate(x.iterrows()):
             c = SYM_CLASS_COLOR[r.sym_class]
-            axA.plot([r.Vmin, r.Vmax], [y, y], color=c, lw=2.6, solid_capstyle="butt", zorder=2)
-            axA.plot(r.V_mean, y, "|", color="k", ms=4.5, mew=0.9, zorder=3)
-            axB.plot([r.Vmin - r.V_mean, r.Vmax - r.V_mean], [y, y], color=c, lw=2.6, solid_capstyle="butt", zorder=2)
-            axB.plot(_members(r) - r.V_mean, np.full(r.deg, y), "o", ms=2.5, mfc="white", mec="k", mew=0.5, zorder=3)
-            axB.plot(r.member_avg_orig - r.V_mean, y, "x", ms=3.0, color="k", mew=0.7, zorder=4)
+            axA.plot([r.Vmin, r.Vmax], [y, y], color=c, lw=3.2, solid_capstyle="butt", zorder=2)
+            axA.plot(r.V_mean, y, "|", color="k", ms=5.5, mew=1.0, zorder=3)
+            axB.plot([r.Vmin - r.V_mean, r.Vmax - r.V_mean], [y, y], color=c, lw=3.2, solid_capstyle="butt",
+                     zorder=2)
+            axB.plot(_members(r) - r.V_mean, np.full(r.deg, y), "o", ms=3.0, mfc="white", mec="k", mew=0.5,
+                     zorder=3)
+            axB.plot(r.member_avg_orig - r.V_mean, y, "x", ms=3.5, color="k", mew=0.8, zorder=4)
             star = "* " if r.straddles_tau else ""
             labels.append(f"{star}{_chem(r.molecule)} {r.freq:.0f} {_irrep_tex(r.irreps)}")
         nt = int((x.group == "test").sum())
@@ -474,42 +481,32 @@ def plot_all_sets(D, tau, out_dir, label="fig_si_degenerate_all_sets"):
                 a.axhline(nt - 0.5, color="k", lw=0.6)
             for name, y0 in (("test set", -0.3), ("benzene", nt - 0.3)):
                 axB.text(0.97, y0, name, transform=axB.get_yaxis_transform(), ha="right", va="top",
-                         fontsize=fs_lab + 0.4, style="italic")
+                         fontsize=fs_lab, style="italic")
         for a in (axA, axB):
             a.set_ylim(len(x) - 0.5, -0.5)
             a.tick_params(axis="x", labelsize=fs_tick, length=2.5, pad=1.5)
-            a.spines["top"].set_visible(True)
-            a.spines["right"].set_visible(True)
-            a.spines["top"].set_linewidth(0.6)
-            a.spines["right"].set_linewidth(0.6)
+            for sp in ("top", "right"):
+                a.spines[sp].set_visible(True)
+                a.spines[sp].set_linewidth(0.6)
         axA.set_yticks(range(len(x)))
         axA.set_yticklabels(labels, fontsize=fs_lab)
         axA.tick_params(axis="y", length=0, pad=2)
         axB.set_yticks([])
         axA.set_xlim(0, 1)
-        axA.set_xticks([0, tau, 1])
-        axA.set_xticklabels(["0", f"{tau:.2f}", "1"])
+        axA.set_xticks([0, 0.25, tau, 0.75, 1])
+        axA.set_xticklabels(["0", "0.25", f"{tau:.2f}", "0.75", "1"])
         axB.set_xlim(-lim, lim)
-        major = 0.1 if lim >= 0.1 else 0.05
-        tk = np.arange(-np.floor(lim / major) * major, lim + 1e-9, major)
+        tk = np.arange(-np.floor(lim / 0.05) * 0.05, lim + 1e-9, 0.05)
         axB.set_xticks(tk)
-        axB.set_xticklabels(["0" if abs(t) < 1e-9 else f"{t:.2f}".rstrip("0").replace("-", "−") for t in tk])
-        axB.set_xticks(np.arange(-np.floor(lim / 0.05) * 0.05, lim + 1e-9, 0.05), minor=True)
-        axB.tick_params(axis="x", which="minor", length=1.5)
-        axA.set_xlabel(SV, fontsize=7.5, labelpad=1.5)
-        axB.set_xlabel(SV + r"$\;-\;\bar{s}$", fontsize=7.5, labelpad=1.5)
-        axA.set_title(f"({'ab'[ci]}) {title}", fontsize=8, loc="left", x=-0.62, pad=4, fontweight="bold")
-    hand = _class_handles(lw=2.6)
-    hand += [Line2D([], [], marker="|", ls="", color="k", ms=6, mew=1.0, label=r"subspace mean $\bar{s}$"),
-             Line2D([], [], marker="o", ls="", mfc="white", mec="k", ms=3.5, mew=0.6, label="Gaussian's members"),
-             Line2D([], [], marker="x", ls="", color="k", ms=4, mew=0.8, label=r"their mean $\bar{s}_\mathrm{G}$"),
-             Patch(facecolor=COLORS["background"], alpha=0.35, lw=0, label=f"ambiguity range ({AMBIGUITY_LABEL})"),
-             Line2D([], [], color=COLORS["threshold"], ls="--", lw=0.8, label=r"$\tau_\mathrm{SB}$" + f" = {tau:.2f}")]
-    fig.legend(handles=hand, loc="lower center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=6.8, frameon=False,
-               columnspacing=1.4, handlelength=1.8)
-    paths = _savefig(fig, out_dir, label)
-    plt.close(fig)
-    return paths
+        axB.set_xticklabels(["0" if abs(t) < 1e-9 else f"{t:.2f}".replace("-", "−") for t in tk])
+        axA.set_xlabel(SV, fontsize=fs_ax, labelpad=2)
+        axB.set_xlabel(SV + r"$\;-\;\bar{s}$", fontsize=fs_ax, labelpad=2)
+        hand = [h for h, c in zip(_class_handles(lw=3.2), SYM_CLASSES) if c in set(x.sym_class)] + common
+        fig.legend(handles=hand, loc="lower center", bbox_to_anchor=(0.5, 0.0), ncol=3, fontsize=8,
+                   frameon=False, columnspacing=1.4, handlelength=1.8)
+        out[key] = _savefig(fig, out_dir, f"{label}_{key}")
+        plt.close(fig)
+    return out
 
 
 def near_threshold_sets(D, min_spread=0.01):
@@ -520,7 +517,7 @@ def near_threshold_sets(D, min_spread=0.01):
 
 def plot_near_threshold(D, tau, out_dir, label="fig_si_degenerate_near_threshold"):
     """Sets near the threshold (replaces slide 9): range over all bases (bar, symmetry-class colour),
-    Gaussian's members (circles filled by their label at tau_SB: S red, B blue) and s-bar (tick)."""
+    computed members (circles filled by their label at tau_SB: S red, B blue) and s-bar (tick)."""
     _style()
     show = near_threshold_sets(D).copy()
     show["g"] = show.group.map({g: i for i, g in enumerate(GROUP_ORDER)})
@@ -552,14 +549,14 @@ def plot_near_threshold(D, tau, out_dir, label="fig_si_degenerate_near_threshold
     ax.set_xlim(xmin, xmax)
     ax.set_xlabel(SV)
     present = [c for c in SYM_CLASSES if c in set(show.sym_class)]
-    hand = [Line2D([], [], color=SYM_CLASS_COLOR[c], lw=5, solid_capstyle="butt", label=f"range, {SYM_CLASS_LABEL[c]}")
+    hand = [Line2D([], [], color=SYM_CLASS_COLOR[c], lw=5, solid_capstyle="butt", label=SYM_CLASS_LABEL[c])
             for c in present]
     hand += [Line2D([], [], marker="|", ls="", color="k", ms=9, mew=1.6, label=r"subspace mean $\bar{s}$"),
              Patch(facecolor=COLORS["background"], alpha=0.35, lw=0, label=f"ambiguity range ({AMBIGUITY_LABEL})")]
     hand2 = [Line2D([], [], marker="o", ls="", mfc=COLORS["stretching"], mec="k", mew=0.6, ms=5,
-                    label="Gaussian's member, S"),
+                    label="computed member, S"),
              Line2D([], [], marker="o", ls="", mfc=COLORS["bending"], mec="k", mew=0.6, ms=5,
-                    label="Gaussian's member, B"),
+                    label="computed member, B"),
              Line2D([], [], color=COLORS["threshold"], ls="--", lw=0.8, label=r"$\tau_\mathrm{SB}$" + f" = {tau:.2f}")]
     hand2 += [Line2D([], [], ls="", label=" ")] * max(0, len(hand) - len(hand2))
     ax.legend(handles=hand + hand2, loc="lower center", bbox_to_anchor=(0.42, 1.0), ncol=2, fontsize=7.5,
@@ -570,8 +567,8 @@ def plot_near_threshold(D, tau, out_dir, label="fig_si_degenerate_near_threshold
 
 
 def plot_mean_comparison(D, tau, out_dir, label="fig_si_degenerate_mean_comparison", annotate=None):
-    """(a) s-bar vs s-bar_G (replaces slide 29a); grey quadrants: the two would give different labels at
-    tau_SB. (b) s-bar_G - s-bar vs spread (slide 29b); grey wedge |difference| <= spread."""
+    """(a) s-bar vs s-bar_c (replaces slide 29a); grey quadrants: the two would give different labels at
+    tau_SB. (b) s-bar_c - s-bar vs spread (slide 29b); grey wedge |difference| <= spread."""
     _style()
     fig, axs = plt.subplots(1, 2, figsize=(7.0, 3.3), gridspec_kw=dict(wspace=0.36))
     ax = axs[0]
@@ -590,7 +587,7 @@ def plot_mean_comparison(D, tau, out_dir, label="fig_si_degenerate_mean_comparis
     ax.set_aspect("equal")
     ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
     ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
-    ax.set_xlabel(r"mean of Gaussian's members $\bar{s}_\mathrm{G}$")
+    ax.set_xlabel("mean of computed members " + SBAR_G)
     ax.set_ylabel(r"subspace mean $\bar{s}$")
     ax = axs[1]
     diff = D.member_minus_mean
@@ -614,7 +611,7 @@ def plot_mean_comparison(D, tau, out_dir, label="fig_si_degenerate_mean_comparis
     ax.set_ylim(ylo, yhi)
     ax.set_box_aspect(1)
     ax.set_xlabel(SPREAD_LABEL)
-    ax.set_ylabel(r"$\bar{s}_\mathrm{G} - \bar{s}$")
+    ax.set_ylabel(SBAR_G[:-1] + r" - \bar{s}$")
     for a, t in zip(axs, "ab"):
         a.text(-0.3, 1.03, f"({t})", transform=a.transAxes, fontweight="bold", va="bottom")
         a.xaxis.label.set_size(10.5)
@@ -632,7 +629,7 @@ def plot_mean_comparison(D, tau, out_dir, label="fig_si_degenerate_mean_comparis
 
 def plot_rotations(D, H, out_dir, label="fig_si_degenerate_rotations"):
     """Distributions over rotations (replaces slide 30), from the histogram table H: (a) within-basis range
-    w by data set; (b) w by symmetry class (E 4-fold and Pi sets: w = 0 in every basis, noted);
+    w by data set; (b) w by symmetry class (E 4-fold and Pi sets have w = 0 in every basis; stated in the caption);
     (c) member mean - s-bar by data set. Counts on a log scale."""
     _style()
     fig, axs = plt.subplots(1, 3, figsize=(7.0, 2.7), gridspec_kw=dict(wspace=0.36))
@@ -657,12 +654,9 @@ def plot_rotations(D, H, out_dir, label="fig_si_degenerate_rotations"):
         h = H[H.sym_class == c]
         stairs(axs[1], h, W_BINS, "w", color=SYM_CLASS_COLOR[c], lw=1.3,
                label=f"{SYM_CLASS_LABEL[c]} ({int((D.sym_class == c).sum())})")
-    n0 = {c: int((D.sym_class == c).sum()) for c in ("E4", "Pi")}
-    axs[1].text(0.05, 0.04, f"E pair, 4-fold axis ({n0['E4']}) and\n" + rf"$\Pi$ pair ({n0['Pi']}): $w = 0$ in every basis",
-                transform=axs[1].transAxes, ha="left", va="bottom", fontsize=6.5)
     for ax in axs:
         ax.set_yscale("log")
-        ax.set_ylim(0.7, 3e6)
+        ax.set_ylim(0.7, 1.5e6)
         ax.set_ylabel("number of rotations", fontsize=9)
         ax.tick_params(labelsize=8)
     for ax in axs[:2]:
@@ -777,7 +771,8 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
     out = dict(sets_csv=sets_csv, rotations_csv=rot_csv, figures={},
                close_pairs_not_degenerate=diag["close_pairs_not_degenerate"], c3_character=diag["c3_character"])
     if figures:
-        out["figures"]["all_sets"] = plot_all_sets(D, tau, out_dir)
+        for k_, v_ in plot_all_sets(D, tau, out_dir).items():
+            out["figures"][f"all_sets_{k_}"] = v_
         out["figures"]["near_threshold"] = plot_near_threshold(D, tau, out_dir)
         out["figures"]["mean_comparison"] = plot_mean_comparison(D, tau, out_dir)
         out["figures"]["rotations"] = plot_rotations(D, H, out_dir)

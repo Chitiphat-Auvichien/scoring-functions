@@ -235,8 +235,8 @@ def plot_robustness(summary, draws, gap, tau, band, out_dir, label="fig_si_tau_r
     replicates in which tau_SB is still optimal. (c) 95th percentile of the regret (% of modes)."""
     _style()
     rows = summary.to_dict("records")
-    fig, (a1, a2, a3) = plt.subplots(1, 3, figsize=(9.0, 4.6), sharey=True,
-                                     gridspec_kw=dict(width_ratios=[2.4, 1, 1], wspace=0.08))
+    fig, (a1, a2, a3) = plt.subplots(1, 3, figsize=(7.2, 4.4), sharey=True,
+                                     gridspec_kw=dict(width_ratios=[2.2, 1, 1], wspace=0.1))
     pos, y_, ghead = {}, 0.0, {}
     for grp in reversed(list(GROUP_COLOR)):
         for r in reversed([r for r in rows if r["group"] == grp]):
@@ -267,35 +267,41 @@ def plot_robustness(summary, draws, gap, tau, band, out_dir, label="fig_si_tau_r
         a2.barh(p, fo, color=c, height=0.62)
         txt = f"{fo:.1f}" if fo < 99.95 else "100"
         if fo >= 30:
-            a2.text(fo - 2, p, txt, color="white", ha="right", va="center", fontsize=9)
+            a2.text(fo - 2, p, txt, color="white", ha="right", va="center", fontsize=8)
         else:
-            a2.text(fo + 2, p, txt, color=c, ha="left", va="center", fontsize=9)
+            a2.text(fo + 2, p, txt, color=c, ha="left", va="center", fontsize=8)
         rg = r["regret_p95_pct"]
         a3.plot([0, rg], [p, p], color=c, lw=1.0)
         a3.plot(rg, p, "o", color=c, ms=5.5, clip_on=False, zorder=3)
-    a1.plot([], [], "o", mfc="white", mec="k", mew=1.1, ms=5.5, label="median")
-    a1.plot([], [], "D", mfc="k", mec="white", ms=3.6, label="mean")
-    a1.legend(loc="lower right", frameon=True, framealpha=0.95, edgecolor="none", fontsize=9,
-              handletextpad=0.3, borderpad=0.3, labelspacing=0.25)
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+    hand = [Line2D([], [], marker="o", ls="", mfc="white", mec="k", mew=1.1, ms=5.5, label="median"),
+            Line2D([], [], marker="D", ls="", mfc="k", mec="white", ms=3.6, label="mean"),
+            Patch(facecolor=COLORS["background"], alpha=0.6, lw=0, label="SC minimum-error interval"),
+            Patch(facecolor=COLORS["background"], alpha=0.22, lw=0, label=f"ambiguity range ({AMBIGUITY_LABEL})"),
+            Line2D([], [], color=COLORS["threshold"], ls="--", lw=1.0, label=TAU_LABEL + f" = {tau:.2f}")]
+    fig.legend(handles=hand, loc="lower center", bbox_to_anchor=(0.5, 0.0), ncol=3, frameon=False,
+               fontsize=8, handletextpad=0.4, columnspacing=1.2)
+    fig.subplots_adjust(left=0.25, right=0.98, top=0.94, bottom=0.25)
     ids = [r["id"] for r in rows]
     a1.set_yticks([pos[i] for i in ids])
-    a1.set_yticklabels([rf"$\mathbf{{{r['id']}}}$  {r['short']}" for r in rows])
+    a1.set_yticklabels([r["short"] for r in rows], fontsize=9)
     a1.set_xlim(*xa)
     a1.set_xticks([0.3, 0.4, 0.5, 0.6])
-    a1.set_xlabel(r"Re-optimised " + TAU_LABEL + r" ($\tau^*$)")
+    a1.set_xlabel(r"Re-optimized " + TAU_LABEL + r" ($\tau^*$)")
     a2.set_xlim(0, 108)
     a2.set_xticks([0, 50, 100])
     a2.axvline(100, color=COLORS["background"], lw=0.7)
-    a2.set_xlabel(f"{tau:.2f} still\noptimal (%)")
+    a2.set_xlabel(f"{tau:.2f} still\noptimal (%)", fontsize=10)
     a3.set_xlim(0, xr)
     a3.set_xticks(np.arange(0, xr + 1e-9, 1.0))
     n_sc = summary["n_sc_modes"].iloc[0]
     a3.axvline(100 / n_sc, color=COLORS["threshold"], lw=0.8, ls=":")
-    a3.text(100 / n_sc + 0.06, max(ghead.values()), "1 mode", fontsize=9, color=COLORS["threshold"],
+    a3.text(100 / n_sc + 0.06, max(ghead.values()), "1 mode", fontsize=8, color=COLORS["threshold"],
             va="center")
-    a3.set_xlabel(f"Cost of keeping {tau:.2f},\n95th pct (% of modes)")
+    a3.set_xlabel(f"Excess error at {tau:.2f},\n95th percentile (%)", fontsize=10)
     for grp, yh in ghead.items():
-        a1.text(xa[0] + 0.004, yh, grp, color=GROUP_COLOR[grp], fontweight="bold", va="center")
+        a1.text(xa[0] + 0.004, yh, grp, color=GROUP_COLOR[grp], fontweight="bold", va="center", fontsize=9)
     a1.set_ylim(-0.7, max(ghead.values()) + 0.6)
     for a, t in zip((a1, a2, a3), "abc"):
         a.text(0.0 if a is a1 else 0.03, 1.01, f"({t})", transform=a.transAxes, fontweight="bold",
@@ -311,17 +317,16 @@ def plot_ambiguity(tau_draws, ci, tau, marks, out_dir, label="fig_si_tau_ambigui
     that call a mode of score s "S" (step curve), dotted 2.5/97.5 % lines, marked modes."""
     _style()
     a_ = (1 - COVERAGE) / 2
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.0, 3.6), gridspec_kw=dict(wspace=0.28))
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(7.2, 3.1), gridspec_kw=dict(wspace=0.38))
     bins = np.arange(0.2475, 0.6026, 0.005)
     a1.axvspan(*ci, color=COLORS["background"], alpha=0.35, lw=0)
     a1.hist(tau_draws, bins=bins, color="#777777", edgecolor="white", lw=0.3)
     a1.axvline(tau, color=COLORS["threshold"], ls="--", lw=1.0)
-    # ci is the adopted range: computed ends rounded half up to 0.01 (figures.AMBIGUITY_RANGE)
-    a1.text(0.5 * (ci[0] + ci[1]), 1.01, f"95% CI {ci[0]:.2f}–{ci[1]:.2f}", ha="center",
-            va="bottom", fontsize=10, transform=a1.get_xaxis_transform())
+    # ci is the adopted range: computed ends rounded half up to 0.01 (figures.AMBIGUITY_RANGE);
+    # its values go in the caption, not on the panel
     a1.set_xlim(0.25, 0.60)
-    a1.set_xlabel(r"Re-optimised " + TAU_LABEL + r" ($\tau^*$)")
-    a1.set_ylabel("Calibrations")
+    a1.set_xlabel(r"Re-optimized " + TAU_LABEL + r" ($\tau^*$)")
+    a1.set_ylabel("Number of calibrations")
     xx = np.linspace(0.20, 0.65, 901)
     srt = np.sort(tau_draws)
     share = np.searchsorted(srt, xx, side="right") / len(srt)
@@ -338,19 +343,27 @@ def plot_ambiguity(tau_draws, ci, tau, marks, out_dir, label="fig_si_tau_ambigui
         a2.plot(m["s"], m["share_S"], "o", ms=5.5, mfc="white", mec=col, mew=1.3, zorder=3)
         if m.get("xy_text") is not None:       # data-coordinate label (shared by several marks)
             a2.annotate(m["text"], (m["s"], m["share_S"]), xytext=m["xy_text"], textcoords="data",
-                        fontsize=9, ha="left", va="center", color=col,
+                        fontsize=8, ha="left", va="center", color=col,
                         arrowprops=dict(arrowstyle="-", lw=0.5, color=col, shrinkA=1, shrinkB=3))
         else:
             a2.annotate(m["text"], (m["s"], m["share_S"]), xytext=m["offset"], textcoords="offset points",
-                        fontsize=9, ha="left" if m["offset"][0] > 0 else "right", va="center", color=col,
+                        fontsize=8, ha="left" if m["offset"][0] > 0 else "right", va="center", color=col,
                         arrowprops=dict(arrowstyle="-", lw=0.5, color=col, shrinkA=0, shrinkB=3))
     a2.set_xlim(0.20, 0.65)
     a2.set_ylim(-0.03, 1.05)
     a2.set_yticks([0, 0.25, 0.5, 0.75, 1])
     a2.set_xlabel(SV_LABEL + " of a mode")
-    a2.set_ylabel("Share of calibrations\nlabelling the mode S")
+    a2.set_ylabel("Fraction of calibrations\nlabeling the mode S")
+    if marks:
+        from matplotlib.lines import Line2D
+        refs = sorted({m["literature"] for m in marks})
+        a2.legend(handles=[Line2D([], [], marker="o", ls="", mfc="white", ms=5.5, mew=1.3,
+                                  mec=COLORS["stretching_ref"] if r == "S" else COLORS["bending_ref"],
+                                  label=f"reference {r}") for r in refs],
+                  loc="upper left", bbox_to_anchor=(0.0, 0.88), frameon=False, fontsize=9,
+                  handletextpad=0.2)
     for a, t in zip((a1, a2), "ab"):
-        a.text(-0.16 if t == "a" else -0.2, 1.01, f"({t})", transform=a.transAxes, fontweight="bold",
+        a.text(-0.22 if t == "a" else -0.3, 1.01, f"({t})", transform=a.transAxes, fontweight="bold",
                va="bottom")
     paths = _savefig(fig, out_dir, label)
     plt.close(fig)
@@ -406,7 +419,7 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
     design = {
         "D1": ("Data", "molecule bootstrap", "other molecules?",
                f"draw {len(mols)} molecules with replacement; w_i = draws of the molecule of mode i"),
-        "L1": ("Labels", "every single flip", "one wrong label?", "flip the label of one unit"),
+        "L1": ("Labels", "each single flip", "one wrong label?", "flip the label of one unit"),
         "L2": ("Labels", "random flips 1%", "random wrong labels?", "each unit flips with p = 0.01"),
         "L3": ("Labels", "random flips 5%", "random wrong labels?", "each unit flips with p = 0.05"),
         "L4": ("Labels", "random flips 20%", "random wrong labels?", "each unit flips with p = 0.20"),
@@ -414,7 +427,7 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
         "N2": ("Scores", r"noise $\sigma_s=0.02$", "scores slightly off?", "s_i -> s_i + N(0, 0.02^2)"),
         "N3": ("Scores", r"noise $\sigma_s=0.05$", "scores slightly off?", "s_i -> s_i + N(0, 0.05^2)"),
         "N4": ("Scores", r"noise $\sigma_s=0.10$", "scores slightly off?", "s_i -> s_i + N(0, 0.10^2)"),
-        "C1": ("Combined", "mol. bootstrap + 5% flips", "molecules and labels together",
+        "C1": ("Combined", "bootstrap + 5% flips", "molecules and labels together",
                "D1 and L3 in the same replicate"),
     }
     res, seeds = {}, {}
@@ -524,12 +537,13 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
                                 xy_text=None, offset=offsets[m.molecule]))
         bz = modes[modes["set"] == "benzene"]
         for m in bz[bz["name"] == r"$\nu_{10}$"].itertuples():
-            sel.append(dict(s=m.s, share_S=m.share_S, literature=m.literature, text=m.name,
-                            xy_text=None, offset=(14, -12)))
+            sel.append(dict(s=m.s, share_S=m.share_S, literature=m.literature,
+                            text=rf"C$_6$H$_6$ {m.freq:.0f}", xy_text=None, offset=(14, -12)))
         nu14 = bz[bz["name"] == r"$\nu_{14}$"]
         for k, m in enumerate(nu14.itertuples()):           # e1u pair: one label, a leader to each member
             sel.append(dict(s=m.s, share_S=m.share_S, literature=m.literature,
-                            text=r"$\nu_{14}$ pair" if k == 0 else "", xy_text=(0.55, 0.78), offset=None))
+                            text=rf"C$_6$H$_6$ {m.freq:.0f} pair" if k == 0 else "", xy_text=(0.535, 0.74),
+                            offset=None))
         paths["fig_ambiguity"] = plot_ambiguity(ci_draws[SIGMA_CAL], band, tau, sel, out_dir)
 
     out = dict(

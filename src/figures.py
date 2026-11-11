@@ -646,10 +646,9 @@ def plot_benzene_normal_modes(
         # plot_bond_scores/plot_boxplots/plot_mode_mixing's established
         # "shape is not a redundant second encoding" convention.
         kw = _marker_kwargs(cat, ideal_flag="no", marker="o")
-        # R1.10: a vibration whose s[V_S] lies in the ambiguity range gets a
-        # filled marker (its S/B label depends on the calibration).
+        # R1.10: the grey band alone marks the ambiguity range (markers stay
+        # hollow; user, 2026-11-11); only counted here for the summary.
         if cat in ("stretch", "bend") and lo <= row["V_Stretch"] <= hi:
-            kw = dict(kw, facecolors=kw.get("edgecolors", kw.get("c")))
             n_ambiguous += 1
         ax.scatter(row["Freq"], row["V_Stretch"], s=26, zorder=3,
                    label=leg_label, **kw)
@@ -657,8 +656,10 @@ def plot_benzene_normal_modes(
     ax.axhspan(lo, hi, color=COLORS["background"], alpha=0.35, lw=0, zorder=0,
                label=f"ambiguity range ({AMBIGUITY_LABEL})")
     ax.axhline(TAU_SB, color=COLORS["threshold"], ls="--", lw=0.8, zorder=1)
-    y_offset = 0.045
-    # Right side (ha="right"), clear of the legend which sits on the left.
+    # Just above the line and wholly inside the grey band (top of the text
+    # ~0.07 above its baseline, below the band edge); right side, clear of
+    # the legend on the left.
+    y_offset = 0.012
     ax.text(0.98, TAU_SB + y_offset, r"$\tau_{\mathrm{SB}}=$" + f"{TAU_SB:.2f}",
             ha="right", va="bottom", color=COLORS["threshold"],
             transform=ax.get_yaxis_transform())

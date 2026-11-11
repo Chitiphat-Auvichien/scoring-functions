@@ -91,7 +91,8 @@ def test_benzene_emit_34_35_are_false_negatives():
     not true positives. This is the direct, mechanical consequence of
     retiring the purity gate, not a regression to fix."""
     detail, _ = benzene_emit_flag_confusion()
-    expected = {"EMIT 34": "Tx", "EMIT 35": "Ty"}
+    # (R1.5 frame rule, 2026-11-11: benzene axes x<->y vs the submitted MIT frame; values unchanged)
+    expected = {"EMIT 34": "Ty", "EMIT 35": "Tx"}
     for name, label in expected.items():
         row = detail[detail["Mode"] == name].iloc[0]
         assert row["classifier_label"] == label
@@ -115,7 +116,8 @@ def test_emit_2_vs_9_ry_inversion_still_visible_in_projection_and_assignment():
     assert row2["cell"] == "FN"
     assert row9["cell"] == "FN"
     assert row2["classifier_label"] == "B"    # never won a slot
-    assert row9["classifier_label"] == "Ry"   # won the Ry slot, but cleanly (no flag exists to fire)
+    # (R1.5 frame rule, 2026-11-11: benzene axes x<->y vs the submitted MIT frame; values unchanged)
+    assert row9["classifier_label"] == "Rx"   # won the Rx slot, but cleanly (no flag exists to fire)
 
 
 def test_ground_truth_label_thresholds():

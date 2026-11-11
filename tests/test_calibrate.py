@@ -340,7 +340,7 @@ def test_degenerate_emit_block_sanity_check():
     assert n_slotted == 6  # n_T(3) + n_R(3) for benzene (non-linear)
 
     # The degenerate block (EMIT 1-9, eigenvalue -23.7514 cm-1) genuinely
-    # contains 2 of the 6 slot-winners (EMIT 6 -> Rx, EMIT 9 -> Ry) and 7
+    # contains 2 of the 6 slot-winners (EMIT 6 -> Ry, EMIT 9 -> Rx) and 7
     # modes that fall through to Step 2's own vib_label -- these 7 are NOT
     # all the same label, which is expected (different eigenvectors,
     # different s[V_S]), not a bug.
@@ -351,8 +351,9 @@ def test_degenerate_emit_block_sanity_check():
     # precision, ~1e-6 relative), not necessarily bit-identical.
     assert max(freqs) - min(freqs) < 1e-4 * abs(freqs[0]), freqs
     block_tr = {n: by_name[n]["tr_label"] for n in degenerate_block}
-    assert block_tr["EMIT 6"] == "Rx"
-    assert block_tr["EMIT 9"] == "Ry"
+    # (R1.5 frame rule, 2026-11-11: benzene axes x<->y vs the submitted MIT frame; values unchanged)
+    assert block_tr["EMIT 6"] == "Ry"
+    assert block_tr["EMIT 9"] == "Rx"
     n_external_in_block = sum(1 for lbl in block_tr.values() if lbl is not None)
     assert n_external_in_block == 2  # not 0, not 9 -- exactly the 2 slot-winners
 

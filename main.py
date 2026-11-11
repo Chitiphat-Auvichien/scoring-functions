@@ -11,6 +11,7 @@ import pandas as pd
 # [END EDIT NOTE]
 from src.parser import GaussianParser, QCFileParser, EMITParser, IntermediateIO
 from src.scoring import ModeScorer, V_WEIGHTINGS, DEFAULT_V_WEIGHTING, set_v_weighting
+from src import frame as frame_rule
 from src.classifier import classify_all_modes, classify_to_rows, is_linear, Thresholds
 from src.projection import (build_reference_basis, project_emit,
                              build_reference_basis_cartesian, project_emit_cartesian)
@@ -170,12 +171,17 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
     """Align to principal axes and build the candidate mode pool ('final'),
     shared by run_scoring_pipeline() and the classifier so both score the
     identical mode list.
-      - 'normal': MIT rotates the molecule AND the mode vectors
-        (rotate_modes=True); the 3 ideal T + 3 ideal R references are
-        prepended to the real vibrational modes.
-      - 'emit'  : EMIT modes already live in principal axes, so MIT rotates
-        only the molecule (rotate_modes=False); no ideal references are
-        added -- all 3N raw EMIT eigenvectors are the candidate pool.
+      - the frame is chosen by src/frame.py (R1.5 rule: symmetry + sum-D
+        tie-break + naming convention; asymmetric tops = eigenvector axes,
+        right-handed; linear = turn scan about the molecular axis) from the
+        COM-shifted input geometry and the input modes; geometry and mode
+        vectors are then expressed in it. --frame-rule eigh restores the
+        submitted version's MIT() frame.
+      - 'normal': the 3 ideal T + 3 ideal R references, built in the chosen
+        frame, are prepended to the real vibrational modes.
+      - 'emit'  : EMIT vectors are stored in MIT()'s frame and are returned
+        to the input frame before the frame is chosen; no ideal references
+        are added -- all 3N raw EMIT eigenvectors are the candidate pool.
 
     v_weighting selects the eq:vscore bond weighting ('mu' or 'none'); None
     means the process-active default set by --v-weighting. This function is the
@@ -187,8 +193,8 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
     than silently corrupt the V-score). Returns (scorer, final).
 
     Linear-molecule invariant (authoritative site): a linear molecule has
-    n_R=2, but MIT() always places the linear (smallest-moment) axis on the
-    new X axis, so construct_R()'s "Rx" reference is an all-zero placeholder,
+    n_R=2, but both frame rules place the linear (smallest-moment) axis on
+    the new X axis, so construct_R()'s "Rx" reference is an all-zero placeholder,
     not a genuine external mode. It is dropped here -- left in, it would fall
     through Step 2 (external_slots() excludes Rx for linear molecules, so no
     slot claims it) into Step 4 and be mislabeled BENDING (V=0 <= tau_B).
@@ -205,10 +211,31 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
             "No bond connectivity available; provide a .com/.gjf (or, for ORCA/"
             "Molden input, a .bonds list) in data/gjf/, or add bonds to the "
             "intermediate file before scoring.")
-    rotate = (mode_type == "normal")
     scorer = ModeScorer(raw["atoms"], raw["coords"], raw["bonds"],
-                        v_weighting=v_weighting)
-    rotated = scorer.MIT(raw["modes"], rotate_modes=rotate)
+                        v_weighting=v_weighting)  # COM-shifted input coordinates
+    if frame_rule.get_frame_rule() == "eigh":
+        # The submitted version's frame: eigenvectors of the inertia tensor
+        # with the heaviest-atom sign fix (can be left-handed).
+        rotated = scorer.MIT(raw["modes"], rotate_modes=(mode_type == "normal"))
+        scorer.frame_info = dict(kind="", n=0, evaluations=0, sum_d=[], step="eigh (submitted version)")
+    else:
+        # R1.5 frame rule (src/frame.py), evaluated in the INPUT coordinates.
+        # EMIT vectors are stored in MIT's frame of the same geometry, so they
+        # are first returned to the input frame (d_in = d_MIT R^T).
+        if mode_type == "emit":
+            R = scorer.mit_rotation_matrix()
+            vecs_in = [np.asarray(m["vector"], dtype=float) @ R.T for m in raw["modes"]]
+        else:
+            vecs_in = [np.asarray(m["vector"], dtype=float) for m in raw["modes"]]
+        F, info = frame_rule.select_frame_for_scorer(scorer, vecs_in)
+        scorer.apply_frame(F)
+        scorer.frame = F
+        scorer.frame_info = info
+        rotated = []
+        for m, v in zip(raw["modes"], vecs_in):
+            new_mode = m.copy()
+            new_mode["vector"] = v @ F.T
+            rotated.append(new_mode)
     if mode_type == "normal":
         for i, m in enumerate(rotated):
             m["label"] = f"Vib {i+1}"
@@ -275,18 +302,21 @@ def run_projection_pipeline(mol_name, data_dir="data", thresholds=None, write=Tr
     raw_e, _ = load_inputs(mol_name, "emit", data_dir)
     scorer_e, final_e = build_scorer_and_final(raw_e, "emit")
 
-    # Q and Theta are only frame-consistent because both parses read the SAME
-    # log geometry and MIT()'s eigendecomposition is deterministic -- assert
-    # it rather than relying on that silently.
+    # Q and Theta are only comparable if the normal-mode pool and the EMIT
+    # pool end in the SAME frame. Both parses read the same log geometry, but
+    # the frame rule also looks at the input modes, so assert it rather than
+    # relying on it silently.
     coords_n = scorer_n.coords
     coords_e = scorer_e.coords
     if not np.allclose(coords_n, coords_e, atol=1e-6):
         raise ValueError(
             f"'{mol_name}': the 'normal' and 'emit' parses of the log geometry "
-            "rotated into different principal-axis frames (max coord diff "
-            f"{np.max(np.abs(coords_n - coords_e)):.3g}) -- Q and Theta would "
-            "not be projection-comparable. Check for a second/different "
-            "'Standard orientation' block or non-deterministic MIT() sign fix."
+            "ended in different principal-axis frames (max coord diff "
+            f"{np.max(np.abs(coords_n - coords_e)):.3g}; frames: "
+            f"{getattr(scorer_n, 'frame_info', {}).get('step')} / "
+            f"{getattr(scorer_e, 'frame_info', {}).get('step')}) -- Q and Theta "
+            "would not be projection-comparable. Check for a second/different "
+            "'Standard orientation' block, or run with --keep-input-frame."
         )
 
     emit_path = os.path.join(dirs["results"], f"{mol_name}_EMIT.csv")
@@ -559,7 +589,24 @@ def main():
     dev_group.add_argument("--figures", action="store_true",
                             help="Regenerate all manuscript figures from data/results/*.csv -> "
                                  "data/figures/*.{pdf,png}. Global (ignores -m).")
+    dev_group.add_argument("--frame-rule", choices=list(frame_rule.FRAME_RULES), default="symmetry",
+                            dest="frame_rule",
+                            help="Principal-axis frame for the T/R scores. 'symmetry' (default): "
+                                 "symmetry rule + sum-D tie-break + naming convention (src/frame.py). "
+                                 "'eigh': the submitted version's eigenvector frame (MIT).")
+    dev_group.add_argument("--keep-input-frame", action="store_true", dest="keep_input_frame",
+                            help="Keep the input frame (e.g. Gaussian's standard orientation) when "
+                                 "it is one of the frames the symmetry rule allows.")
+    dev_group.add_argument("--sym-tol", type=float, default=None, dest="sym_tol",
+                            help=f"Symmetry tolerance in Angstrom for the frame rule (default "
+                                 f"{frame_rule.SYM_TOL:g}); raise it for coordinates printed with "
+                                 "fewer than 5 decimals.")
     args = ap.parse_args()
+
+    frame_rule.set_frame_rule(args.frame_rule)
+    frame_rule.set_keep_input_frame(args.keep_input_frame)
+    if args.sym_tol is not None:
+        frame_rule.set_sym_tol(args.sym_tol)
 
     # Before anything scores: every downstream pipeline reads this default
     # rather than taking the variant as an argument.

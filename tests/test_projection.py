@@ -42,8 +42,9 @@ def test_benzene_emit_34_35_36_translational_fraction():
     respective ideal translation axis -- the manuscript's headline number."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
-    assert abs(rows["EMIT 34"]["C2_Tx"] - 0.767349) < TOL
-    assert abs(rows["EMIT 35"]["C2_Ty"] - 0.767349) < TOL
+    # (R1.5 frame rule, 2026-11-11: benzene axes x<->y vs the submitted MIT frame; values unchanged)
+    assert abs(rows["EMIT 34"]["C2_Ty"] - 0.767349) < TOL
+    assert abs(rows["EMIT 35"]["C2_Tx"] - 0.767349) < TOL
     assert abs(rows["EMIT 36"]["C2_Tz"] - 0.767349) < TOL
 
 
@@ -53,8 +54,9 @@ def test_benzene_emit_2_vs_9_ry_inversion():
     non-monotonicity example (IMPLEMENTATION_PLAN.md Phase 2)."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
-    ry2 = rows["EMIT 2"]["C2_Ry"]
-    ry9 = rows["EMIT 9"]["C2_Ry"]
+    # (R1.5 frame rule, 2026-11-11: benzene axes x<->y vs the submitted MIT frame; values unchanged)
+    ry2 = rows["EMIT 2"]["C2_Rx"]
+    ry9 = rows["EMIT 9"]["C2_Rx"]
     assert abs(ry2 - 0.386632) < TOL
     assert abs(ry9 - 0.141039) < TOL
     assert ry2 > ry9  # projection ordering is opposite the |s[Ry]| score ordering
@@ -106,7 +108,8 @@ def test_cartesian_overlap_pathway_is_raw_and_not_orthonormal():
     specifically."""
     df, _, _ = run_projection_pipeline("C6H6", write=False)
     rows = _rows_by_mode(df)
-    assert abs(rows["EMIT 34"]["Ocart_Tx"] - 0.875991) < TOL
+    # (R1.5 frame rule, 2026-11-11: benzene axes x<->y vs the submitted MIT frame; values unchanged)
+    assert abs(rows["EMIT 34"]["Ocart_Ty"] - 0.875991) < TOL
     assert abs(rows["EMIT 34"]["Ocart_Sum"] - 1.560176) < TOL
     assert rows["EMIT 34"]["Ocart_VS"] + rows["EMIT 34"]["Ocart_VB"] < 1.0 - TOL
     mass_weighted_cols = ["C2_Tx", "C2_Ty", "C2_Tz", "C2_Rx", "C2_Ry", "C2_Rz",
@@ -114,7 +117,7 @@ def test_cartesian_overlap_pathway_is_raw_and_not_orthonormal():
     assert abs(sum(rows["EMIT 34"][c] for c in mass_weighted_cols) - 1.0) < 0.01
     # sanity: unsquared overlap re-squared recovers what C2_Tx would have been
     # under this (non-orthonormal) basis had it been squared like C2_ is.
-    assert abs(rows["EMIT 34"]["Ocart_Tx"] ** 2 - 0.767360) < TOL
+    assert abs(rows["EMIT 34"]["Ocart_Ty"] ** 2 - 0.767360) < TOL
 
 
 def test_ocart_vs_vb_le_one_and_bounded_by_external_leakage():

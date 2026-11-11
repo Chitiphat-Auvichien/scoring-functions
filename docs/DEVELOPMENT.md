@@ -34,6 +34,45 @@ and `data/figures/archive_unweighted/`; `python scripts/compare_weighting.py` di
   decision any more (Step 3 no longer gates on `tau_TR` at all; `tau_S`/`tau_B` only matter under
   `--classify-scheme threeway`). Kept for sensitivity reporting (`src/calibrate.py`'s sweeps).
 
+## Principal-axis frame (`src/frame.py`)
+
+The T/R scores are evaluated in a frame chosen from the input geometry and the input modes
+(`main.build_scorer_and_final`, the single place every scorer is built):
+
+* **Symmetric and spherical tops** — step 1, symmetry (Gaussian's convention): `z` = the `C_n` axis, `y`
+  through an atom of the smallest set of symmetry-equivalent off-axis atoms, `x = y × z`; spherical tops:
+  every set of three perpendicular `C2` axes (`C4` for O/Oh). Step 2: among these allowed frames (grouped
+  by axis lines), the largest `Σ_k (D_T,k + D_R,k)` over the input modes, `D` = largest minus second-largest
+  `|s|` over the rotatable axes. Step 3: names and signs (`+z` to the heaviest on-axis atom off the centre,
+  else `Σ m z³ > 0`; lowest-index atom in the `yz` plane on `+y`; then the largest coordinates in input
+  order). Step 3 never changes a score magnitude, a label or the T/R assignment.
+* **Asymmetric tops** — eigenvectors of the inertia tensor in increasing moment order, right-handed, signs
+  by the step-3 key.
+* **Linear molecules** — `x` = molecular axis towards the heaviest atom off the centre; the turn about `x`
+  with the largest `ΣD` from a 0.1° rescoring scan; `y`/`z` named by the first mode with an in-plane score.
+* EMIT vectors are stored in `MIT()`'s frame and are returned to the input frame
+  (`ModeScorer.mit_rotation_matrix`) before the frame is chosen; `--emit-projection` asserts that the
+  normal-mode and EMIT pools end in the same frame.
+
+Flags:
+* `--frame-rule {symmetry,eigh}` — `symmetry` (default) is the rule above; `eigh` restores the submitted
+  version's `MIT()` frame (eigenvectors with the heaviest-atom sign fix; can be left-handed).
+* `--keep-input-frame` — keep the input frame (e.g. Gaussian's standard orientation) when it is one of the
+  allowed frames. Without it the rule alone reproduces Gaussian's axis lines for 24 of the 40 roster tops
+  with 3N−6 input (all 40 with 3N input); the rest get a symmetry-equivalent frame.
+* `--sym-tol TOL` — symmetry tolerance in Å (default `1.5e-5`).
+
+Known limits:
+* `SYM_TOL` is calibrated on the roster (tops symmetric to ≤ 4.5e-6 Å; the ten C2v near-tops miss a `C_n`
+  axis by ≥ 5e-5 Å and stay asymmetric). Coordinates printed more coarsely than 1e-5 Å need a larger value.
+* Accidentally equal moments without a `C_n` (n ≥ 3) axis are not covered (the eigenvector frame is then arbitrary).
+* Linear molecules: the turn is fixed to the 0.1° step (re-oriented input: axes within 0.06°, per-axis
+  scores within 4e-4). With a central atom, input bent by more than the on-axis cut-off (`ON_AXIS_TOL`)
+  makes `s[R_y]`, `s[R_z]` jump with the turn.
+* Axis names and signs can depend on the atom numbering where the alternatives are symmetry-equivalent;
+  never on the input orientation, and never in `|s|`, labels or the assignment.
+* The on-axis cut-off must exceed the geometry's symmetry error (B3N3H6: 1.5e-6 Å < 1e-5 Å).
+
 ## Per-molecule flags (`-m`/`--molecule` required; each needs its prerequisite CSV to already exist)
 
 Project raw EMIT eigenvectors onto the mass-weighted normal-mode reference basis. Requires

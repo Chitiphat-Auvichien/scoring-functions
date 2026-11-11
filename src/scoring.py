@@ -160,9 +160,11 @@ class ModeScorer:
         moments, axes = np.linalg.eigh(tensor)
         return moments, axes
 
-    def MIT(self, modes=None, rotate_modes=True):
-        """Rotates the molecule (and, if rotate_modes, the mode displacement
-        vectors) into the basis of principal axes of inertia."""
+    def mit_rotation_matrix(self):
+        """The rotation MIT() applies at the current geometry: eigenvector
+        columns of the inertia tensor with the heaviest-atom sign fix, so that
+        X_MIT = X @ rot. Vectors stored in MIT's frame (EMIT modes) go back to
+        the input frame as d_in = d_MIT @ rot.T."""
         tensor = self._build_inertia_tensor()
         eigVal, rot = np.linalg.eigh(tensor)  # eigenvectors as columns of rot
 
@@ -173,6 +175,21 @@ class ModeScorer:
         h_new = self.coords[heaviest_idx] @ rot
         if h_new.sum() < 0.0:
             rot = -rot
+        return rot
+
+    def apply_frame(self, F):
+        """Express the geometry in the frame F (rows = new x, y, z axes, as
+        returned by src.frame.select_frame): coords -> coords @ F.T. Mode
+        vectors must be transformed the same way by the caller."""
+        self.coords = self.coords @ np.asarray(F, dtype=float).T
+        self.update_bond_vectors()
+
+    def MIT(self, modes=None, rotate_modes=True):
+        """Rotates the molecule (and, if rotate_modes, the mode displacement
+        vectors) into the basis of principal axes of inertia (the submitted
+        version's frame; main.py uses src.frame.select_frame by default)."""
+        rot = self.mit_rotation_matrix()
+        self.mit_rotation = rot
 
         self.coords = self.coords @ rot
         self.update_bond_vectors()  # recompute rather than rotate existing vectors

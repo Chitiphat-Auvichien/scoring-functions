@@ -204,12 +204,22 @@ PRED_BUCKET_TO_CATEGORY.update({
 # 95 % bootstrap confidence interval of tau_SB, recalibrated on the single-centre
 # set with 5 % label flips and score noise sigma = 0.125 (the mixed-mode RMSE
 # against PED). A mode inside it can be labelled S or B by an equally valid
-# calibration. Values from src/si_tau_robustness.py with 10^5 replicates (per-member
+# calibration. Computed by src/si_tau_robustness.py with 10^5 replicates (per-member
 # scores, tau_SB 0.43): [0.315, 0.525], Monte Carlo error +/-0.0003 / +/-0.0004.
-# Both ends sit on a two-decimal rounding boundary, so the range is written with
-# three decimals (AMBIGUITY_LABEL); use that string in every figure.
-AMBIGUITY_RANGE = (0.315, 0.525)
-AMBIGUITY_LABEL = "0.315–0.525"
+# Adopted value = the computed ends rounded half up to 0.01, the same rule that
+# gives tau_SB = 0.43 from 0.4256 (authors, 2026-11-11). Used for shading, filled
+# markers and set selection; AMBIGUITY_LABEL is its text in every figure.
+def round_half_up(x, ndigits=2):
+    """Round half up at the given decimal (0.315 -> 0.32, 0.525 -> 0.53), robust to
+    binary floating point (0.525 is stored as 0.52500000000000002...)."""
+    from decimal import Decimal, ROUND_HALF_UP
+    q = Decimal(1).scaleb(-ndigits)
+    return float(Decimal(repr(float(x))).quantize(q, rounding=ROUND_HALF_UP))
+
+
+AMBIGUITY_RANGE_COMPUTED = (0.315, 0.525)
+AMBIGUITY_RANGE = tuple(round_half_up(v) for v in AMBIGUITY_RANGE_COMPUTED)   # (0.32, 0.53)
+AMBIGUITY_LABEL = f"{AMBIGUITY_RANGE[0]:.2f}–{AMBIGUITY_RANGE[1]:.2f}"
 
 IDEAL_STYLE = {
     "yes": {"filled": True, "label": "ideal", "alpha": 0.85},

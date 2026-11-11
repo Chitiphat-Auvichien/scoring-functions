@@ -1,7 +1,7 @@
 {
   "v_weighting": "mu",
-  "git_commit": "ea6f156527d60cb5dfaa80bde2caa6b0f96d1c67",
-  "timestamp": "2026-11-11T19:38:37",
+  "git_commit": "c08da1b1867b44aa96ef71f833565c0d54aa62d6",
+  "timestamp": "2026-11-11T21:35:35",
   "stages_run": [
     "figures",
     "si_analyses"

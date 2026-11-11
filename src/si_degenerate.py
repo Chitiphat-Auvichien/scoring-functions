@@ -2,7 +2,7 @@
 
 Ported from the R1.4 side report (JCC/2nd submission/side_reports/R1.4_degenerate_modes/
 r14_degenerate_modes.py, report section 2) with the revision's settings: tau_SB from
-Thresholds.calibrated() (0.43) and the S/B ambiguity range src.figures.AMBIGUITY_RANGE (0.315-0.525).
+Thresholds.calibrated() (0.43) and the S/B ambiguity range src.figures.AMBIGUITY_RANGE (0.32-0.53, the computed 0.315-0.525 rounded half up).
 
 Degenerate set (definition fixed by the author): modes of one molecule that
   (i) carry the SAME degenerate irrep (E, T or Pi) of the molecule's point group in

@@ -50,7 +50,7 @@ import numpy as np
 import pandas as pd
 
 from src.classifier import Thresholds
-from src.figures import AMBIGUITY_LABEL, AMBIGUITY_RANGE, COLORS, _savefig, _style, plt
+from src.figures import AMBIGUITY_LABEL, AMBIGUITY_RANGE, COLORS, _savefig, _style, plt, round_half_up
 
 GRID = np.round(np.arange(0.0, 1.0005, 0.001), 3)
 NG = len(GRID)
@@ -65,8 +65,6 @@ NOISE_SIGMAS = (("N1", 0.01), ("N2", 0.02), ("N3", 0.05), ("N4", 0.10))
 CI_SIGMA_SCAN = (0.0, 0.02, 0.05, 0.10, SIGMA_CAL)
 N_REP_CI = 100000        # replicates for the ambiguity range (Monte Carlo error of each end ~ +/-0.0004)
 CI_BATCH = 10000         # replicates per batch (memory; batch spread -> Monte Carlo standard error)
-BAND_TOL = 0.002        # |this run's CI end - AMBIGUITY_RANGE end| up to which the figures shade the constant
-                        # (~5 Monte Carlo standard errors at N_REP_CI = 10^5)
 DEFAULT_UNITS_CSV = os.path.join("data", "results", "si_degenerate_sets.csv")
 GROUP_COLOR = {"Data": COLORS["sens_single_centre"], "Labels": COLORS["mixed_ext"],
                "Scores": "#E69F00", "Combined": "#000000"}     # Okabe-Ito green / pink / orange / black
@@ -318,8 +316,8 @@ def plot_ambiguity(tau_draws, ci, tau, marks, out_dir, label="fig_si_tau_ambigui
     a1.axvspan(*ci, color=COLORS["background"], alpha=0.35, lw=0)
     a1.hist(tau_draws, bins=bins, color="#777777", edgecolor="white", lw=0.3)
     a1.axvline(tau, color=COLORS["threshold"], ls="--", lw=1.0)
-    # three decimals: both ends sit on a two-decimal rounding boundary (see figures.AMBIGUITY_LABEL)
-    a1.text(0.5 * (ci[0] + ci[1]), 1.01, f"95% CI {ci[0]:.3f}–{ci[1]:.3f}", ha="center",
+    # ci is the adopted range: computed ends rounded half up to 0.01 (figures.AMBIGUITY_RANGE)
+    a1.text(0.5 * (ci[0] + ci[1]), 1.01, f"95% CI {ci[0]:.2f}–{ci[1]:.2f}", ha="center",
             va="bottom", fontsize=10, transform=a1.get_xaxis_transform())
     a1.set_xlim(0.25, 0.60)
     a1.set_xlabel(r"Re-optimised " + TAU_LABEL + r" ($\tau^*$)")
@@ -507,10 +505,12 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
     modes.to_csv(paths["modes_csv"], index=False)
     write_tests_tex(design, paths["tests_tex"], n_rep, n_unit, len(mols))
 
-    # The figures shade the adopted range (src.figures.AMBIGUITY_RANGE) when this run reproduces it
-    # within Monte Carlo error (each end +/- ~0.0004 at 10^5 replicates); otherwise this run's CI.
-    band_is_constant = bool(max(abs(ci[0] - AMBIGUITY_RANGE[0]), abs(ci[1] - AMBIGUITY_RANGE[1])) <= BAND_TOL)
-    band = tuple(AMBIGUITY_RANGE) if band_is_constant else ci
+    # The adopted range is this run's CI rounded half up to 0.01 (the rule that gives tau_SB 0.43).
+    # The figures shade src.figures.AMBIGUITY_RANGE when it equals that rounding; otherwise the
+    # rounding of this run (and the mismatch is reported in the returned dict).
+    ci_rounded = (round_half_up(ci[0]), round_half_up(ci[1]))
+    band_is_constant = ci_rounded == tuple(AMBIGUITY_RANGE)
+    band = tuple(AMBIGUITY_RANGE) if band_is_constant else ci_rounded
     if make_figures:
         draws = {tid: r["tau_star"] for tid, r in res.items()}
         paths["fig_robustness"] = plot_robustness(summary, draws, gap, tau, band, out_dir)
@@ -540,7 +540,7 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
         ci95=ci, ci90=(float(adopted["ci90_lo"]), float(adopted["ci90_hi"])),
         ci95_mcse=(float(adopted["ci95_lo_mcse"]), float(adopted["ci95_hi_mcse"])), n_rep_ci=int(adopted["n_rep"]),
         ci_tau_sd=float(adopted["tau_sd"]), n_sc_inside_ci=int(adopted["n_sc_modes_inside_ci95"]),
-        ambiguity_range_constant=AMBIGUITY_RANGE, figure_band=band, figure_band_is_constant=band_is_constant,
+        ambiguity_range_constant=AMBIGUITY_RANGE, ci95_rounded=ci_rounded, figure_band=band, figure_band_is_constant=band_is_constant,
         summary=summary, ci_table=ci_tab, modes=modes,
         n_rep=n_rep, units_csv=units_csv, runtime_s=time.time() - t0, paths=paths,
     )

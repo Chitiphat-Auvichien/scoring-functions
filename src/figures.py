@@ -3918,6 +3918,12 @@ def plot_ped_vs_vscore(
     # added to the legend (in-axes text label instead, right of the plot at
     # the line's own height).
     if show_tau_SB_line:
+        # Ambiguity range on s[V_S] only (it is a property of the score's
+        # calibration, not of %nu) -- same grey band as fig:benzenenormal,
+        # defined in this figure's section (R1.9/R1.10, user 2026-11-12).
+        lo, hi = AMBIGUITY_RANGE
+        ax.axhspan(lo, hi, color=COLORS["background"], alpha=0.35, lw=0, zorder=0,
+                   label=f"ambiguity range ({AMBIGUITY_LABEL})")
         ax.axhline(th.tau_SB, color=COLORS["threshold"], ls="-", lw=0.8, zorder=1)
         ax.text(0.98, th.tau_SB, r"$\tau_{\mathrm{SB}}$", ha="right", va="bottom",
                 color=COLORS["threshold"], transform=ax.get_yaxis_transform())

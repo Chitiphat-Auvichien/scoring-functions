@@ -278,10 +278,31 @@ def external_slots(scorer):
     return 3, len(r_slots), slots
 
 
+SCORE_DECIMALS = 2
+
+
+def round_score(v, ndigits=SCORE_DECIMALS):
+    """s[V_S] rounded HALF UP to `ndigits` decimals -- the precision at which
+    tau_SB is stated (0.43), so the S/B comparison uses the same precision on
+    both sides (authors, 2026-11-12). Only the comparison uses it: every
+    output CSV keeps the raw score. Scalar in -> float out; array in -> array.
+
+    Half up, not numpy's half-to-even; the 1e-9 guard absorbs binary
+    representation error (0.425 is stored as 0.42499999999999998...), so it
+    agrees with figures.round_half_up's Decimal(repr(x)) rounding for every
+    score not within 1e-11 of a rounding boundary.
+
+    Consequence: round_score(v) >= 0.43  <=>  v >= 0.425."""
+    q = 10.0 ** ndigits
+    r = np.floor(np.asarray(v, dtype=float) * q + 0.5 + 1e-9) / q
+    return float(r) if np.ndim(r) == 0 else r
+
+
 def vib_label_binary(v, tau_SB):
     """Binary-scheme Step-2 vibrational sub-classification from s[V_S]: forces
-    every mode to STRETCHING or BENDING via a single cutoff, never MIXED_STRETCH_BEND."""
-    return STRETCHING if v >= tau_SB else BENDING
+    every mode to STRETCHING or BENDING via a single cutoff, never MIXED_STRETCH_BEND.
+    The score is rounded to tau_SB's precision first (round_score)."""
+    return STRETCHING if round_score(v) >= tau_SB else BENDING
 
 
 def vib_label(v, thresholds, scheme="binary"):

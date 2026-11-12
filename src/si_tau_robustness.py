@@ -49,7 +49,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from src.classifier import Thresholds
+from src.classifier import Thresholds, round_score
 from src.figures import AMBIGUITY_LABEL, AMBIGUITY_RANGE, COLORS, _savefig, _style, plt, round_half_up
 
 GRID = np.round(np.arange(0.0, 1.0005, 0.001), 3)
@@ -503,7 +503,7 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
     mrows += _benzene_rows(data_dir, results_dir)
     modes = pd.DataFrame(mrows)
     modes["share_S"] = [share_s(v) for v in modes["s"]]
-    modes["label_at_tau"] = np.where(modes["s"] >= tau, "S", "B")
+    modes["label_at_tau"] = np.where(round_score(modes["s"].to_numpy(float)) >= tau, "S", "B")
     modes["reading"] = np.where((modes["share_S"] > a_) & (modes["share_S"] < 1 - a_), "ambiguous",
                                 "reliable")
     modes = modes.sort_values(["s", "molecule"]).reset_index(drop=True)

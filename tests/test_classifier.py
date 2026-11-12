@@ -42,6 +42,7 @@ basenames `H2O`/`C6H6` (data/mol_list_method.csv).
 """
 import os
 import sys
+import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -49,7 +50,7 @@ sys.path.insert(0, ROOT)
 from main import load_inputs, build_scorer_and_final              # noqa: E402
 from src.classifier import (                                       # noqa: E402
     classify_all_modes, classify_to_rows, Thresholds,
-    vib_label, vib_label_binary, predicted_category, predicted_category_column,
+    vib_label, vib_label_binary, predicted_category, predicted_category_column, round_score,
     STRETCHING, BENDING, MIXED_STRETCH_BEND,
 )
 
@@ -244,12 +245,25 @@ def test_vib_label_binary_boundary_and_no_third_outcome():
     outcome, unlike the threeway split's MIXED_STRETCH_BEND band."""
     tau_SB = 0.5
     assert vib_label_binary(0.0, tau_SB) == BENDING
-    assert vib_label_binary(0.499999, tau_SB) == BENDING
+    assert vib_label_binary(0.49, tau_SB) == BENDING
     assert vib_label_binary(0.5, tau_SB) == STRETCHING  # boundary: >= -> STRETCHING
     assert vib_label_binary(1.0, tau_SB) == STRETCHING
     # A value that would be MIXED_STRETCH_BEND under the threeway split
     # (strictly between tau_B and tau_S) still lands cleanly on one side here.
     assert vib_label_binary(0.6, tau_SB) in (STRETCHING, BENDING)
+
+
+def test_vib_label_binary_rounds_score_to_threshold_precision():
+    """s[V_S] is rounded half up to 2 decimals (tau_SB's precision) before the
+    comparison, so at tau_SB = 0.43 the effective raw cut is 0.425."""
+    assert round_score(0.425) == 0.43            # stored as 0.42499999999999998
+    assert round_score(0.4249) == 0.42
+    assert round_score(0.315) == 0.32 and round_score(0.525) == 0.53
+    assert list(round_score(np.array([0.004, 0.005, 0.994, 0.995]))) == [0.0, 0.01, 0.99, 1.0]
+    assert vib_label_binary(0.4249, 0.43) == BENDING
+    assert vib_label_binary(0.425, 0.43) == STRETCHING
+    assert vib_label_binary(0.42896, 0.43) == STRETCHING   # C7H8 953: B before 2026-11-12
+    assert vib_label_binary(0.499999, 0.5) == STRETCHING   # rounds to 0.50
 
 
 def test_vib_label_scheme_param_delegates_to_binary():

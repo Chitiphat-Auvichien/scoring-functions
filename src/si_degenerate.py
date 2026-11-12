@@ -59,7 +59,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from scipy.optimize import minimize, minimize_scalar
 
-from src.classifier import Thresholds
+from src.classifier import Thresholds, round_score
 from src.figures import _style, _savefig, COLORS, AMBIGUITY_RANGE, AMBIGUITY_LABEL
 
 TOL_CM = 0.5                      # cm-1, chained frequency tolerance of a set
@@ -344,7 +344,7 @@ def analyse_set(s, tau, n_rot=DEFAULT_N_ROT, seed=DEFAULT_SEED, n_start=200, n_r
                                   options=dict(xatol=1e-10))
             w_hi = max(w_hi, -res.fun)
         w_lo = float(w.min())
-        mixed = (np.minimum(s1, s2) < tau) & (np.maximum(s1, s2) >= tau)
+        mixed = (round_score(np.minimum(s1, s2)) < tau) & (round_score(np.maximum(s1, s2)) >= tau)
         mm_lo, mm_hi = float(mm.min()), float(mm.max())
         C0 = np.vstack([Corig, C])
     else:
@@ -354,7 +354,7 @@ def analyse_set(s, tau, n_rot=DEFAULT_N_ROT, seed=DEFAULT_SEED, n_start=200, n_r
         SB = np.array([f(haar(3, rng)) for _ in range(n_rot)])     # (n_rot, 3) members of each basis
         w = np.ptp(SB, axis=1)
         mm = SB.mean(1)
-        mixed = (SB.min(1) < tau) & (SB.max(1) >= tau)
+        mixed = (round_score(SB.min(1)) < tau) & (round_score(SB.max(1)) >= tau)
         w_lo, w_hi = _angle_extremes3(lambda x: np.ptp(f(frame3(*x))), rng, n_start, n_refine)
         w_lo, w_hi = min(w_lo, w.min()), max(w_hi, w.max())
         mm_lo, mm_hi = _angle_extremes3(lambda x: f(frame3(*x)).mean(), rng, n_start, n_refine)
@@ -362,7 +362,7 @@ def analyse_set(s, tau, n_rot=DEFAULT_N_ROT, seed=DEFAULT_SEED, n_start=200, n_r
         C0 = np.vstack([Corig, P])
     vmin, vmax = _direction_extremes(f, k, C0, n_rot)
     vmin, vmax = min(vmin, orig.min()), max(vmax, orig.max())
-    lab = lambda v: "S" if v >= tau else "B"
+    lab = lambda v: "S" if round_score(v) >= tau else "B"     # S/B at tau_SB precision
     row = {key: s[key] for key in ("molecule", "group", "mol_type", "point_group", "freq", "deg", "irreps",
                                    "status", "sym_class")}
     row.update(
@@ -373,14 +373,14 @@ def analyse_set(s, tau, n_rot=DEFAULT_N_ROT, seed=DEFAULT_SEED, n_start=200, n_r
         member_avg_orig=float(orig.mean()), member_minus_mean=float(orig.mean() - mean),
         member_avg_min=float(mm_lo), member_avg_max=float(mm_hi), mm_range=float(mm_hi - mm_lo),
         mm_p25=float(np.quantile(mm, 0.25)), mm_median=float(np.median(mm)), mm_p75=float(np.quantile(mm, 0.75)),
-        mm_sd=float(mm.std()), mm_frac_S=float((mm >= tau).mean()),
+        mm_sd=float(mm.std()), mm_frac_S=float((round_score(mm) >= tau).mean()),
         w_gauss=float(np.ptp(orig)), w_min=float(w_lo), w_p25=float(np.quantile(w, 0.25)),
         w_median=float(np.median(w)), w_p75=float(np.quantile(w, 0.75)), w_p90=float(np.quantile(w, 0.9)),
         w_mean=float(w.mean()), w_max=float(w_hi), w_frac_mixed_labels=float(mixed.mean()),
         tau_SB=float(tau), labels_orig="/".join(lab(v) for v in orig), label_mean=lab(mean),
         label_member_mean=lab(orig.mean()),
-        orig_mixed_labels=bool((orig.min() < tau) and (orig.max() >= tau)),
-        straddles_tau=bool(vmin < tau <= vmax),
+        orig_mixed_labels=bool((round_score(orig.min()) < tau) and (round_score(orig.max()) >= tau)),
+        straddles_tau=bool(round_score(vmin) < tau <= round_score(vmax)),
         meets_ambiguity_range=bool(vmax >= AMBIGUITY_RANGE[0] and vmin <= AMBIGUITY_RANGE[1]),
         n_rot=int(n_rot), vscan_dev=float(np.abs(f(Corig) - orig).max()),
     )
@@ -530,7 +530,7 @@ def plot_near_threshold(D, tau, out_dir, label="fig_si_degenerate_near_threshold
         ax.plot([r.Vmin, r.Vmax], [y, y], color=SYM_CLASS_COLOR[r.sym_class], lw=5, solid_capstyle="butt", zorder=2)
         ax.plot(r.V_mean, y, "|", color="k", ms=11, mew=1.8, zorder=3)
         for v in _members(r):
-            c = COLORS["stretching"] if v >= tau else COLORS["bending"]
+            c = COLORS["stretching"] if round_score(v) >= tau else COLORS["bending"]
             ax.plot(v, y, "o", ms=5, mfc=c, mec="k", mew=0.6, zorder=4)
         yl.append(f"{'* ' if r.straddles_tau else ''}{_chem(r.molecule)} {r.freq:.0f} {_irrep_tex(r.irreps)}")
     bounds = np.flatnonzero(np.diff(show.g.to_numpy())) + 0.5
@@ -709,7 +709,7 @@ def headline_numbers(D, samples, tau):
     dm_all = np.concatenate([s[1] for s in samples]) if samples else np.array([])
     imax = (D.member_minus_mean.abs()).idxmax()
     smax = D.spread.idxmax()
-    lab = lambda v: v >= tau
+    lab = lambda v: round_score(v) >= tau
     return dict(
         tau_SB=float(tau), ambiguity_range=AMBIGUITY_RANGE,
         n_sets=len(D), n_sets_by_group={g: int((D.group == g).sum()) for g in GROUP_ORDER},
@@ -728,7 +728,7 @@ def headline_numbers(D, samples, tau):
         n_label_disagree_member_mean_vs_subspace_mean=int((lab(D.member_avg_orig) != lab(D.V_mean)).sum()),
         sets_member_mean_label_depends_on_basis=[f"{m} {f:.0f}" for m, f, a, b in
                                                  zip(D.molecule, D.freq, D.member_avg_min, D.member_avg_max)
-                                                 if a < tau <= b],
+                                                 if round_score(a) < tau <= round_score(b)],
         sets_mixed_labels_in_some_basis=[f"{m} {f:.0f}" for m, f, x in zip(D.molecule, D.freq, D.w_frac_mixed_labels)
                                          if x > 0],
         n_rotations=int(len(w_all)),

@@ -39,7 +39,7 @@ import os
 import numpy as np
 import pandas as pd
 
-from src.classifier import Thresholds, vib_label, predicted_category_column
+from src.classifier import Thresholds, vib_label, predicted_category_column, round_score
 from src.scoring import get_v_weighting
 from src.library_ingest import (
     build_library_scores, resolve_log_basename, _EXTERNAL_SLOTS,
@@ -472,11 +472,12 @@ def sweep_tau_sb(lib_df, tau_grid=DEFAULT_TAU_SB_GRID, data_dir="data"):
     n_test = len(test_df)
     n_single_centre = len(single_centre_df)
     ref_all = all_df["ref_label"].to_numpy()
-    v_all = all_df["V_Stretch"].to_numpy(dtype=float)
+    # S/B comparisons use s[V_S] rounded to tau_SB's precision (round_score).
+    v_all = round_score(all_df["V_Stretch"].to_numpy(dtype=float))
     ref_test = test_df["ref_label"].to_numpy()
-    v_test = test_df["V_Stretch"].to_numpy(dtype=float)
+    v_test = round_score(test_df["V_Stretch"].to_numpy(dtype=float))
     ref_sc = single_centre_df["ref_label"].to_numpy()
-    v_sc = single_centre_df["V_Stretch"].to_numpy(dtype=float)
+    v_sc = round_score(single_centre_df["V_Stretch"].to_numpy(dtype=float))
 
     records = []
     for tau in tau_grid:

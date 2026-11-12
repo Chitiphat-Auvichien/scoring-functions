@@ -106,6 +106,7 @@ from src.classifier import (
     Thresholds, classification_bucket,
     is_clean_external, is_mixed_external, is_external_label, external_axis,
     vib_label, vib_label_binary, predicted_category, predicted_category_column,
+    round_score,
 )
 from src.csv_label_ingest import TYPE_TO_REF_LABEL
 
@@ -2579,7 +2580,7 @@ def plot_tau_sb_derivation(
     grid = np.round(np.arange(0.0, 1.0005, 0.001), 3)
 
     def miss(df):
-        s_ = df["V_Stretch"].to_numpy(float)[:, None]
+        s_ = round_score(df["V_Stretch"].to_numpy(float))[:, None]   # tau_SB precision
         y_ = df["y"].to_numpy()[:, None]
         return (((y_ == 1) & (s_ < grid[None, :])) | ((y_ == 0) & (s_ >= grid[None, :]))).astype(float)
 

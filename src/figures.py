@@ -2990,14 +2990,14 @@ def plot_stretch_predictor_sensitivity(
     # one physical axis, two notations: bottom = score threshold (0.xx), top = PED (%)
     ax.set_xlim(0, 100)
     ax.xaxis.set_major_locator(mtick.MultipleLocator(20))
-    ax.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"{x / 100:.1f}"))
+    ax.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"{x / 100:.2f}"))   # scores: 0.xx
     ax.set_xlabel(r"Threshold on $s[\mathrm{V_S}]$")
     top = ax.secondary_xaxis("top")
     top.xaxis.set_major_locator(mtick.MultipleLocator(20))
-    top.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"{x:.0f}%"))
-    top.set_xlabel("Threshold on PED")
-    ax.set_ylabel("Classification error")
-    ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
+    top.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"{x:.0f}"))
+    top.set_xlabel("Threshold on PED (%)")             # unit in the label, bare tick values
+    ax.set_ylabel("Classification error (%)")
+    ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda y, _: f"{100 * y:.0f}"))
     error_cols = ["error_PED", "error_weighted_sVS", "error_unweighted_sVS"]
     y_max = max(0.05, float(sweep[error_cols].max().max()) * 1.1)
     ax.set_ylim(-0.01, y_max)

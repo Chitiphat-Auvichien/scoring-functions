@@ -50,14 +50,17 @@ The T/R scores are evaluated in a frame chosen from the input geometry and the i
 * **Symmetric and spherical tops** — step 1, symmetry (Gaussian's convention): `z` = the `C_n` axis, `y`
   through an atom of the smallest set of symmetry-equivalent off-axis atoms, `x = y × z`; spherical tops:
   every set of three perpendicular `C2` axes (`C4` for O/Oh). Step 2: among these allowed frames (grouped
-  by axis lines), the largest `Σ_k (D_T,k + D_R,k)` over the input modes, `D` = largest minus second-largest
-  `|s|` over the rotatable axes. Step 3: names and signs (`+z` to the heaviest on-axis atom off the centre,
+  by axis lines), the largest value of the tie-break criterion over the input modes (`--tie-break`):
+  `tmax` (default) = the largest `Σ_Q |s_k(Q)[T_Q]|` over the rotatable axes `Q`, each axis from a different
+  mode (best assignment of the input modes to the in-plane T slots); `gap` = `Σ_k (D_T,k + D_R,k)`, `D` =
+  largest minus second-largest `|s|` over the rotatable axes. They agree for 3N input and the benzene EMIT
+  modes; with 3N−6 input they can choose different symmetry-equivalent frames. Step 3: names and signs (`+z` to the heaviest on-axis atom off the centre,
   else `Σ m z³ > 0`; lowest-index atom in the `yz` plane on `+y`; then the largest coordinates in input
   order). Step 3 never changes a score magnitude, a label or the T/R assignment.
 * **Asymmetric tops** — eigenvectors of the inertia tensor in increasing moment order, right-handed, signs
   by the step-3 key.
 * **Linear molecules** — `x` = molecular axis towards the heaviest atom off the centre; the turn about `x`
-  with the largest `ΣD` from a 0.1° rescoring scan; `y`/`z` named by the first mode with an in-plane score.
+  with the largest tie-break criterion (`Q = y, z`) from a 0.1° rescoring scan; `y`/`z` named by the first mode with an in-plane score.
 * EMIT vectors are stored in `MIT()`'s frame and are returned to the input frame
   (`ModeScorer.mit_rotation_matrix`) before the frame is chosen; `--emit-projection` asserts that the
   normal-mode and EMIT pools end in the same frame.
@@ -65,8 +68,9 @@ The T/R scores are evaluated in a frame chosen from the input geometry and the i
 Flags:
 * `--frame-rule {symmetry,eigh}` — `symmetry` (default) is the rule above; `eigh` restores the submitted
   version's `MIT()` frame (eigenvectors with the heaviest-atom sign fix; can be left-handed).
+* `--tie-break {tmax,gap}` — step 2 criterion (above); `tmax` is the default, `gap` is the R1.5 report's `ΣD`.
 * `--keep-input-frame` — keep the input frame (e.g. Gaussian's standard orientation) when it is one of the
-  allowed frames. Without it the rule alone reproduces Gaussian's axis lines for 24 of the 40 roster tops
+  allowed frames. Without it the rule alone reproduces Gaussian's axis lines for 25 of the 40 roster tops (24 with `--tie-break gap`)
   with 3N−6 input (all 40 with 3N input); the rest get a symmetry-equivalent frame.
 * `--sym-tol TOL` — symmetry tolerance in Å (default `1.5e-5`).
 

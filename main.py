@@ -171,8 +171,8 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
     """Align to principal axes and build the candidate mode pool ('final'),
     shared by run_scoring_pipeline() and the classifier so both score the
     identical mode list.
-      - the frame is chosen by src/frame.py (R1.5 rule: symmetry + sum-D
-        tie-break + naming convention; asymmetric tops = eigenvector axes,
+      - the frame is chosen by src/frame.py (R1.5 rule: symmetry + step-2
+        tie-break (--tie-break: tmax default, gap = sum D) + naming convention; asymmetric tops = eigenvector axes,
         right-handed; linear = turn scan about the molecular axis) from the
         COM-shifted input geometry and the input modes; geometry and mode
         vectors are then expressed in it. --frame-rule eigh restores the
@@ -217,7 +217,7 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
         # The submitted version's frame: eigenvectors of the inertia tensor
         # with the heaviest-atom sign fix (can be left-handed).
         rotated = scorer.MIT(raw["modes"], rotate_modes=(mode_type == "normal"))
-        scorer.frame_info = dict(kind="", n=0, evaluations=0, sum_d=[], step="eigh (submitted version)")
+        scorer.frame_info = dict(kind="", n=0, evaluations=0, tie_break="", values=[], step="eigh (submitted version)")
     else:
         # R1.5 frame rule (src/frame.py), evaluated in the INPUT coordinates.
         # EMIT vectors are stored in MIT's frame of the same geometry, so they
@@ -592,8 +592,15 @@ def main():
     dev_group.add_argument("--frame-rule", choices=list(frame_rule.FRAME_RULES), default="symmetry",
                             dest="frame_rule",
                             help="Principal-axis frame for the T/R scores. 'symmetry' (default): "
-                                 "symmetry rule + sum-D tie-break + naming convention (src/frame.py). "
+                                 "symmetry rule + tie-break (--tie-break) + naming convention (src/frame.py). "
                                  "'eigh': the submitted version's eigenvector frame (MIT).")
+    dev_group.add_argument("--tie-break", choices=list(frame_rule.TIE_BREAKS), default="tmax",
+                            dest="tie_break",
+                            help="Step 2 of the symmetry frame rule, among the allowed sets of axis lines "
+                                 "(and the turn of a linear molecule). 'tmax' (default): largest sum of "
+                                 "|s[T_Q]| over the rotatable axes, each axis from a different input mode. "
+                                 "'gap': largest sum_k (D_T,k + D_R,k), D = gap between the two largest "
+                                 "|s| of mode k over the rotatable axes.")
     dev_group.add_argument("--keep-input-frame", action="store_true", dest="keep_input_frame",
                             help="Keep the input frame (e.g. Gaussian's standard orientation) when "
                                  "it is one of the frames the symmetry rule allows.")
@@ -605,6 +612,7 @@ def main():
 
     frame_rule.set_frame_rule(args.frame_rule)
     frame_rule.set_keep_input_frame(args.keep_input_frame)
+    frame_rule.set_tie_break(args.tie_break)
     if args.sym_tol is not None:
         frame_rule.set_sym_tol(args.sym_tol)
 

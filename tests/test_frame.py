@@ -92,15 +92,16 @@ def test_gaussian_standard_orientation_is_allowed_and_kept():
         assert info["step"].endswith("input frame kept")
 
 
+@pytest.mark.parametrize("tie_break", FR.TIE_BREAKS)
 @pytest.mark.parametrize("mol", ["NH3", "BF3", "C6H6", "CH3CN"])
-def test_3n_input_returns_the_frame_its_references_were_built_in(mol):
+def test_3n_input_returns_the_frame_its_references_were_built_in(mol, tie_break):
     raw = _load(mol)
     X, sym, m, bonds = _com(raw)
     kind, z, _ = FR.detect_top(X, sym, m)
     for f0 in FR.candidate_frames(X, sym, m, kind, z)[::4]:   # one sign pattern per atom line
         s0 = ModeScorer(sym, X @ f0.T, bonds)
         tr = [md["vector"] @ f0 for md in s0.construct_T() + s0.construct_R()]   # back to input coords
-        f, _ = FR.select_frame(X, sym, m, bonds, _vecs(raw) + tr)
+        f, _ = FR.select_frame(X, sym, m, bonds, _vecs(raw) + tr, tie_break=tie_break)
         assert FR.line_set(f) == FR.line_set(f0), mol
 
 
@@ -114,7 +115,42 @@ def test_benzene_emit_picks_and_common_frame():
     picks = {r["tr_label"]: r["name"] for r in classify_all_modes(sc_e, final_e, Thresholds()) if r["tr_label"]}
     assert picks == {"Tx": "EMIT 35", "Ty": "EMIT 34", "Tz": "EMIT 36",
                      "Rx": "EMIT 9", "Ry": "EMIT 6", "Rz": "EMIT 19"}
-    assert sc_e.frame_info["sum_d"][0] == pytest.approx(5.7875, abs=1e-3)
+    assert sc_e.frame_info["tie_break"] == "tmax"
+    assert sc_e.frame_info["values"][0] == pytest.approx(2.0, abs=1e-3)          # EMIT 34 + 35 on Tx, Ty
+    X, sym, m, bonds = sc_e.coords @ sc_e.frame, sc_e.symbols, sc_e.masses, sc_e.bList   # back to the input frame
+    vecs = [md["vector"] @ sc_e.frame for md in final_e]
+    f_gap, info_gap = FR.select_frame(X, sym, m, bonds, vecs, tie_break="gap")
+    assert np.allclose(f_gap, sc_e.frame, atol=1e-6)                             # both rules: the same frame
+    assert info_gap["values"][0] == pytest.approx(5.7875, abs=1e-3)
+
+
+def test_tie_break_default_and_option():
+    assert FR.get_tie_break() == "tmax"
+    raw = _load("PCl3")                                   # 3N-6 input: the two rules choose different lines
+    X, sym, m, bonds = _com(raw)
+    f_t, i_t = FR.select_frame(X, sym, m, bonds, _vecs(raw))
+    f_g, i_g = FR.select_frame(X, sym, m, bonds, _vecs(raw), tie_break="gap")
+    assert i_t["tie_break"] == "tmax" and i_g["tie_break"] == "gap"
+    assert FR.line_set(f_t) != FR.line_set(f_g)
+    assert i_g["values"][0] == pytest.approx(1.5438, abs=1e-3)
+    FR.set_tie_break("gap")
+    try:
+        f_g2, _ = FR.select_frame(X, sym, m, bonds, _vecs(raw))
+    finally:
+        FR.set_tie_break("tmax")
+    assert np.allclose(f_g2, f_g)
+    with pytest.raises(ValueError):
+        FR.set_tie_break("sum")
+
+
+def test_t_max_is_the_best_assignment_of_distinct_modes():
+    raw = _load("NH3")
+    X, sym, m, bonds = _com(raw)
+    vecs = _vecs(raw)
+    sc = ModeScorer(sym, X, bonds)
+    A = np.array([[abs(sc.calculate_scores(v)["T"][q]) for q in "xy"] for v in vecs])
+    brute = max(A[a, 0] + A[b, 1] for a in range(len(A)) for b in range(len(A)) if a != b)
+    assert FR.t_max(X, sym, bonds, vecs, np.eye(3)) == pytest.approx(brute, abs=1e-12)
 
 
 @pytest.mark.parametrize("mol", ["NH3", "BF3", "C6H6", "CH4", "PCl5", "XeOH4"])

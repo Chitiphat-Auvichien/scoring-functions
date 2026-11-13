@@ -12,10 +12,16 @@ Step 1 (symmetry, symmetric and spherical tops). As in Gaussian's standard orien
     off-axis atoms; x = y cross z. Spherical tops: every set of three mutually
     perpendicular C2 axes (C4 axes for O/Oh). These are the *allowed* frames.
 Step 2 (tie-break). Among the allowed frames, grouped by their set of axis lines, the one
-    with the largest  sum_k (D_T,k + D_R,k)  over the input modes k (before any ideal
-    references are added), where D is the largest minus the second-largest |s| over the
-    rotatable axes (x, y for a symmetric top; x, y, z for a spherical top). Exact ties
-    (TIE_TOL) go to step 3.
+    with the largest value of the step-2 criterion over the input modes k (before any ideal
+    references are added). The rotatable axes Q are x, y (symmetric top), x, y, z
+    (spherical top) or y, z (linear molecule). Exact ties (TIE_TOL) go to step 3.
+      "tmax" (default):  max over DIFFERENT modes of  sum_Q |s_k(Q)[T_Q]|, i.e. the largest
+                         translational score on each rotatable axis, each axis from its own
+                         mode (best assignment of the input modes to the in-plane T slots).
+      "gap" (option):    sum_k (D_T,k + D_R,k), D = largest minus second-largest |s| of mode k
+                         over the rotatable axes (the R1.5 report's sum D).
+    Both give the same frame whenever the input contains translational and rotational modes
+    (3N input) and for the benzene EMIT modes; with 3N-6 input they can differ.
 Step 3 (naming; no physical effect). +z towards the heaviest on-axis atom off the centre
     (else sum m z^3 > 0); the lowest-index atom in the yz plane on +y; remaining ties by
     the largest coordinates in input order. It fixes axis names and signs only: never a
@@ -23,7 +29,7 @@ Step 3 (naming; no physical effect). +z towards the heaviest on-axis atom off th
 Asymmetric tops: eigenvectors of the inertia tensor in increasing moment order
     (x = a, y = b, z = c), right-handed, signs by the step-3 key.
 Linear molecules: x = the molecular axis, +x towards the heaviest atom off the centre;
-    the turn about x with the largest sum D, found by rescoring every mode at turns of
+    the turn about x with the largest step-2 criterion, found by rescoring every mode at turns of
     0.1 deg from the input frame (ties: the smallest turn); y and z then named by the
     modes (the first mode with an in-plane score has its larger component on +y).
 
@@ -35,6 +41,7 @@ it as X @ F.T and d @ F.T.
 import itertools
 
 import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 from .scoring import ModeScorer
 
@@ -59,6 +66,20 @@ GEOM_TOL = 1e-3
 FRAME_RULES = ("symmetry", "eigh")
 _frame_rule = "symmetry"
 _keep_input_frame = False
+# Step-2 criterion (main.py --tie-break): "tmax" (default) or "gap" (sum D).
+TIE_BREAKS = ("tmax", "gap")
+_tie_break = "tmax"
+
+
+def set_tie_break(rule):
+    global _tie_break
+    if rule not in TIE_BREAKS:
+        raise ValueError(f"tie-break must be one of {TIE_BREAKS}, got {rule!r}")
+    _tie_break = rule
+
+
+def get_tie_break():
+    return _tie_break
 
 
 def set_frame_rule(rule):
@@ -244,6 +265,25 @@ def sum_d(X, sym, bonds, vecs, f, axes="xy"):
     return float(tot)
 
 
+def t_max(X, sym, bonds, vecs, f, axes="xy"):
+    """largest sum over `axes` of |s[T_Q]|, each axis taken from a different mode
+    (best assignment of the modes to the T slots of `axes`)."""
+    A = np.array([[abs(r["T"][q]) for q in axes] for r in _scores_in_frame(X, sym, bonds, vecs, f)])
+    if A.size == 0:
+        return 0.0
+    rows, cols = linear_sum_assignment(-A)
+    return float(A[rows, cols].sum())
+
+
+def step2_value(X, sym, bonds, vecs, f, axes="xy", tie_break=None):
+    """The step-2 criterion of frame f (larger wins): t_max ("tmax") or sum_d ("gap")."""
+    tie_break = _tie_break if tie_break is None else tie_break
+    if tie_break not in TIE_BREAKS:
+        raise ValueError(f"tie-break must be one of {TIE_BREAKS}, got {tie_break!r}")
+    fn = t_max if tie_break == "tmax" else sum_d
+    return fn(X, sym, bonds, vecs, f, axes)
+
+
 # ---------------------------------------------------------------- asymmetric tops
 def frame_asymmetric(X, sym, m):
     """Eigenvectors of I in increasing moment order, right-handed, signs by the naming key."""
@@ -275,15 +315,17 @@ def _linear_frame_at(ax, u, phi):
     return np.array([ax, c * u + s_ * v, -s_ * u + c * v])          # right-handed, x = molecular axis
 
 
-def frame_linear(X, sym, m, bonds, vecs, step_deg=None):
+def frame_linear(X, sym, m, bonds, vecs, step_deg=None, tie_break=None):
     """Turn about the molecular axis by a rescoring scan. Returns (frame, info)."""
     step = LINEAR_STEP_DEG if step_deg is None else step_deg
+    tie_break = _tie_break if tie_break is None else tie_break
     ax, u = _linear_start(X, m)
     turns = np.radians(np.arange(0.0, 90.0, step))
-    sums = np.array([sum_d(X, sym, bonds, vecs, _linear_frame_at(ax, u, t), axes="yz") for t in turns])
+    sums = np.array([step2_value(X, sym, bonds, vecs, _linear_frame_at(ax, u, t), "yz", tie_break) for t in turns])
     if sums.max() < TIE_TOL:
-        # No in-plane score at all: every turn gives the same scores. +y follows the
-        # perpendicular displacement of the first moving atom (first mode in input order).
+        # No in-plane score (for "tmax": no in-plane T score) at all: the criterion is the
+        # same at every turn. +y follows the perpendicular displacement of the first moving
+        # atom (first mode in input order).
         for v in vecs:
             P = v - np.outer(v @ ax, ax)
             n_ = np.linalg.norm(P, axis=1)
@@ -291,14 +333,15 @@ def frame_linear(X, sym, m, bonds, vecs, step_deg=None):
                 y = P[int(np.argmax(n_ > 1e-6))]
                 y = y / np.linalg.norm(y)
                 return (np.array([ax, y, np.cross(ax, y)]),
-                        dict(phi=None, sum_d=0.0, scorings=len(turns), step="linear: no in-plane score"))
+                        dict(phi=None, value=0.0, tie_break=tie_break, scorings=len(turns), step="linear: no in-plane score"))
         return (_linear_frame_at(ax, u, 0.0),
-                dict(phi=None, sum_d=0.0, scorings=len(turns), step="linear: no in-plane displacement"))
+                dict(phi=None, value=0.0, tie_break=tie_break, scorings=len(turns), step="linear: no in-plane displacement"))
     i = int(np.argmax(sums >= sums.max() - TIE_TOL))
     phi = turns[i]
     cands = [_linear_frame_at(ax, u, phi + k * np.pi / 2) for k in range(4)]
     S = [_scores_in_frame(X, sym, bonds, vecs, f) for f in cands]
-    info = dict(phi=float(np.degrees(phi)), sum_d=float(sums[i]), scorings=len(turns) + 4, step="linear: scan")
+    info = dict(phi=float(np.degrees(phi)), value=float(sums[i]), tie_break=tie_break, scorings=len(turns) + 4,
+                step=f"linear: scan ({tie_break})")
     for kmode in range(len(vecs)):
         for K in ("T", "R"):
             a0, b0 = S[0][kmode][K]["y"], S[0][kmode][K]["z"]
@@ -309,18 +352,21 @@ def frame_linear(X, sym, m, bonds, vecs, step_deg=None):
 
 
 # ---------------------------------------------------------------- the rule
-def select_frame(X, sym, m, bonds, vecs, keep_input_frame=None, tol=None):
+def select_frame(X, sym, m, bonds, vecs, keep_input_frame=None, tol=None, tie_break=None):
     """Choose the frame for COM-shifted input coordinates X and the input mode vectors `vecs`
     (as given: no ideal references). Returns (F, info); info has kind, n, evaluations,
-    sum_d (per set of axis lines, descending) and the step that decided."""
+    tie_break (the step-2 criterion), values (its value per set of axis lines, descending)
+    and the step that decided."""
     keep_input_frame = _keep_input_frame if keep_input_frame is None else keep_input_frame
+    tie_break = _tie_break if tie_break is None else tie_break
     kind, z, n = detect_top(X, sym, m, tol)
     if kind == "asymmetric":
-        return frame_asymmetric(X, sym, m), dict(kind=kind, n=0, evaluations=0, sum_d=[],
-                                                 step="asymmetric: eigenvectors + naming")
+        return frame_asymmetric(X, sym, m), dict(kind=kind, n=0, evaluations=0, tie_break=tie_break,
+                                                 values=[], step="asymmetric: eigenvectors + naming")
     if kind == "linear":
-        f, info = frame_linear(X, sym, m, bonds, vecs)
-        return f, dict(kind=kind, n=0, evaluations=info["scorings"], sum_d=[info["sum_d"]], step=info["step"])
+        f, info = frame_linear(X, sym, m, bonds, vecs, tie_break=tie_break)
+        return f, dict(kind=kind, n=0, evaluations=info["scorings"], tie_break=tie_break, values=[info["value"]],
+                       step=info["step"])
     axes = "xy" if kind == "symmetric" else "xyz"
     groups = {}
     for f in candidate_frames(X, sym, m, kind, z, tol):
@@ -329,12 +375,12 @@ def select_frame(X, sym, m, bonds, vecs, keep_input_frame=None, tol=None):
         score = {k: 0.0 for k in groups}
         nev = 0
     else:
-        score = {k: sum_d(X, sym, bonds, vecs, fs[0], axes) for k, fs in groups.items()}
+        score = {k: step2_value(X, sym, bonds, vecs, fs[0], axes, tie_break) for k, fs in groups.items()}
         nev = len(groups)
     best = max(score.values())
     keep = [f for k, fs in groups.items() if score[k] >= best - TIE_TOL for f in fs]
     tied = sum(score[k] >= best - TIE_TOL for k in groups)
-    info = dict(kind=kind, n=n, evaluations=nev, sum_d=sorted(score.values(), reverse=True))
+    info = dict(kind=kind, n=n, evaluations=nev, tie_break=tie_break, values=sorted(score.values(), reverse=True))
     if keep_input_frame:
         for fs in groups.values():
             for f in fs:
@@ -343,13 +389,13 @@ def select_frame(X, sym, m, bonds, vecs, keep_input_frame=None, tol=None):
     if len(groups) == 1:
         step = f"{kind}: one set of axis lines + naming"
     elif tied == 1:
-        step = f"{kind}: sum D + naming"
+        step = f"{kind}: {tie_break} + naming"
     else:
-        step = f"{kind}: sum D tie + naming"
+        step = f"{kind}: {tie_break} tie + naming"
     return min(keep, key=lambda f: convention_key(X, sym, m, f)), dict(info, step=step)
 
 
-def select_frame_for_scorer(scorer, vecs, keep_input_frame=None, tol=None):
+def select_frame_for_scorer(scorer, vecs, keep_input_frame=None, tol=None, tie_break=None):
     """select_frame on a ModeScorer's current (COM-shifted) coordinates."""
     return select_frame(scorer.coords, scorer.symbols, scorer.masses, scorer.bList, vecs,
-                        keep_input_frame=keep_input_frame, tol=tol)
+                        keep_input_frame=keep_input_frame, tol=tol, tie_break=tie_break)

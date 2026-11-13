@@ -173,9 +173,9 @@ TeH6,ideal,single-centre,Oh,spherical,14,1694.78,3,T,0.428565,0.428565,0.426527,
 TeH6,ideal,single-centre,Oh,spherical,14,1694.78,3,R,3.69809e-17,3.69809e-17,1.22947e-18,26990,24
 TeH6,ideal,single-centre,Oh,spherical,15,1894.99,1,T,0,0,0,26990,24
 TeH6,ideal,single-centre,Oh,spherical,15,1894.99,1,R,4.804e-17,4.804e-17,0,26990,24
-CO2,non-ideal,single-centre,Dinfh,linear,1,551.705,2,T,0.33323,0.333333,,360,
+CO2,non-ideal,single-centre,Dinfh,linear,1,551.705,2,T,0.332855,0.333333,,360,
 CO2,non-ideal,single-centre,Dinfh,linear,1,551.705,2,R,0,0,,360,
-CO2,non-ideal,single-centre,Dinfh,linear,2,551.705,2,T,0.33323,0.333333,,360,
+CO2,non-ideal,single-centre,Dinfh,linear,2,551.705,2,T,0.332855,0.333333,,360,
 CO2,non-ideal,single-centre,Dinfh,linear,2,551.705,2,R,0,0,,360,
 CO2,non-ideal,single-centre,Dinfh,linear,3,1241.28,1,T,0,0,,360,
 CO2,non-ideal,single-centre,Dinfh,linear,3,1241.28,1,R,0,0,,360,
@@ -420,7 +420,7 @@ NBr3,non-ideal,single-centre,C3v,symmetric,1,130.606,2,R,0.472355,0.473227,0.280
 NBr3,non-ideal,single-centre,C3v,symmetric,2,130.606,2,T,0.234274,0.234757,0.187776,360,12
 NBr3,non-ideal,single-centre,C3v,symmetric,2,130.606,2,R,0.439311,0.441053,0.380853,360,12
 NBr3,non-ideal,single-centre,C3v,symmetric,3,187.785,1,T,2.87404e-06,2.87404e-06,2.48899e-06,360,12
-NBr3,non-ideal,single-centre,C3v,symmetric,3,187.785,1,R,0.0165196,0.0165197,1.82584e-06,360,12
+NBr3,non-ideal,single-centre,C3v,symmetric,3,187.785,1,R,0.0165197,0.0165197,1.82584e-06,360,12
 NBr3,non-ideal,single-centre,C3v,symmetric,4,356.927,1,T,2.60777e-05,2.60777e-05,2.25839e-05,360,12
 NBr3,non-ideal,single-centre,C3v,symmetric,4,356.927,1,R,0.197428,0.197428,2.41625e-05,360,12
 NBr3,non-ideal,single-centre,C3v,symmetric,5,485.24,2,T,0.367971,0.368964,0.277809,360,12
@@ -446,7 +446,7 @@ PF3,non-ideal,single-centre,C3v,symmetric,2,267.705,2,R,0.319018,0.319281,0.2125
 PF3,non-ideal,single-centre,C3v,symmetric,3,380.312,1,T,2.22771e-06,2.22771e-06,1.92926e-06,360,12
 PF3,non-ideal,single-centre,C3v,symmetric,3,380.312,1,R,0.132605,0.132605,3.33902e-06,360,12
 PF3,non-ideal,single-centre,C3v,symmetric,4,802.073,1,T,2.38795e-06,2.38795e-06,2.06803e-06,360,12
-PF3,non-ideal,single-centre,C3v,symmetric,4,802.073,1,R,0.0951917,0.0951918,1.83339e-06,360,12
+PF3,non-ideal,single-centre,C3v,symmetric,4,802.073,1,R,0.0951918,0.0951918,1.83339e-06,360,12
 PF3,non-ideal,single-centre,C3v,symmetric,5,804.216,2,T,0.253721,0.253853,0.185566,360,12
 PF3,non-ideal,single-centre,C3v,symmetric,5,804.216,2,R,0.167856,0.168065,0.133952,360,12
 PF3,non-ideal,single-centre,C3v,symmetric,6,804.216,2,T,0.210747,0.211251,0.166158,360,12
@@ -494,7 +494,7 @@ AsF3,non-ideal,single-centre,C3v,symmetric,2,268.112,2,R,0.259327,0.261179,0.160
 AsF3,non-ideal,single-centre,C3v,symmetric,3,352.269,1,T,3.4422e-07,3.4422e-07,2.98104e-07,360,12
 AsF3,non-ideal,single-centre,C3v,symmetric,3,352.269,1,R,0.161508,0.161508,1.19661e-06,360,12
 AsF3,non-ideal,single-centre,C3v,symmetric,4,790.652,2,T,0.220454,0.221659,0.17302,360,12
-AsF3,non-ideal,single-centre,C3v,symmetric,4,790.652,2,R,0.167219,0.168923,0.134076,360,12
+AsF3,non-ideal,single-centre,C3v,symmetric,4,790.652,2,R,0.167218,0.168923,0.134076,360,12
 AsF3,non-ideal,single-centre,C3v,symmetric,5,790.652,2,T,0.191268,0.192269,0.143553,360,12
 AsF3,non-ideal,single-centre,C3v,symmetric,5,790.652,2,R,0.140811,0.141603,0.0928519,360,12
 AsF3,non-ideal,single-centre,C3v,symmetric,6,799.931,1,T,2.90876e-08,2.90876e-08,2.51906e-08,360,12
@@ -522,7 +522,7 @@ AsBr3,non-ideal,single-centre,C3v,symmetric,4,249.108,1,R,0.105707,0.105707,3.64
 AsBr3,non-ideal,single-centre,C3v,symmetric,5,257.558,2,T,0.30125,0.303703,0.247372,360,12
 AsBr3,non-ideal,single-centre,C3v,symmetric,5,257.558,2,R,0.199892,0.200421,0.165853,360,12
 AsBr3,non-ideal,single-centre,C3v,symmetric,6,257.558,2,T,0.228422,0.229965,0.189261,360,12
-AsBr3,non-ideal,single-centre,C3v,symmetric,6,257.558,2,R,0.117915,0.117993,0.0506873,360,12
+AsBr3,non-ideal,single-centre,C3v,symmetric,6,257.558,2,R,0.117914,0.117993,0.0506873,360,12
 BH3,non-ideal,single-centre,D3h,symmetric,1,1185.76,1,T,0,0,0,360,12
 BH3,non-ideal,single-centre,D3h,symmetric,1,1185.76,1,R,0.333333,0.333333,1.11022e-16,360,12
 BH3,non-ideal,single-centre,D3h,symmetric,2,1251.99,2,T,0.155001,0.156123,0.131805,360,12

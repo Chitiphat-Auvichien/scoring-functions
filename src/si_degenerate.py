@@ -85,6 +85,8 @@ SBAR = r"$\bar{s}$"
 SBAR_G = r"$\bar{s}_\mathrm{c}$"   # mean of the computed members (as output by the frequency calculation)
 # "range" (highest - lowest) is the precise statistic; over all bases, vs. the within-basis range w
 RANGE_LABEL = r"range of $s[\mathrm{V_S}]$ over all bases"
+RANGE_BAR = dict(facecolor="white", edgecolor="k", lw=0.7)   # near-threshold range bars: one neutral style
+RANGE_BAR_H = 0.42                                         # bar height (rows are 1 apart)
 SETS_CSV = "si_degenerate_sets.csv"
 ROTATIONS_CSV = "si_degenerate_rotations.csv"
 W_BINS = np.round(np.arange(0.0, 0.1501, 0.0025), 6)
@@ -524,15 +526,16 @@ def _near_threshold_rows(D):
 
 
 def _draw_near_threshold(ax, D, tau):
-    """Sets near the threshold (replaces slide 9) on `ax`: range over all bases (bar, symmetry-class
-    colour), computed members (circles filled by their label at tau_SB: S red, B blue) and s-bar (tick).
+    """Sets near the threshold (replaces slide 9) on `ax`: range over all bases (one neutral bar style
+    for every set -- no symmetry-class colours, so the eye goes to the range), computed members
+    (circles filled by their label at tau_SB: S red, B blue) and s-bar (tick).
     Returns the legend handles (two columns of equal length)."""
     show = _near_threshold_rows(D)
     n = len(show)
     _threshold_axes(ax, tau)
     yl = []
     for y, (_, r) in enumerate(show.iterrows()):
-        ax.plot([r.Vmin, r.Vmax], [y, y], color=SYM_CLASS_COLOR[r.sym_class], lw=5, solid_capstyle="butt", zorder=2)
+        ax.barh(y, r.Vmax - r.Vmin, left=r.Vmin, height=RANGE_BAR_H, zorder=2, **RANGE_BAR)
         ax.plot(r.V_mean, y, "|", color="k", ms=11, mew=1.8, zorder=3)
         for v in _members(r):
             c = COLORS["stretching"] if round_score(v) >= tau else COLORS["bending"]
@@ -553,10 +556,8 @@ def _draw_near_threshold(ax, D, tau):
     ax.set_ylim(n - 0.5, -0.5)
     ax.set_xlim(xmin, xmax)
     ax.set_xlabel(SV)
-    present = [c for c in SYM_CLASSES if c in set(show.sym_class)]
-    hand = [Line2D([], [], color=SYM_CLASS_COLOR[c], lw=5, solid_capstyle="butt", label=SYM_CLASS_LABEL[c])
-            for c in present]
-    hand += [Line2D([], [], marker="|", ls="", color="k", ms=9, mew=1.6, label=r"subspace mean $\bar{s}$"),
+    hand = [Patch(label="range over all bases", **RANGE_BAR),
+            Line2D([], [], marker="|", ls="", color="k", ms=9, mew=1.6, label=r"subspace mean $\bar{s}$"),
              Patch(facecolor=COLORS["background"], alpha=0.35, lw=0, label=f"ambiguity range ({AMBIGUITY_LABEL})")]
     hand2 = [Line2D([], [], marker="o", ls="", mfc=COLORS["stretching"], mec="k", mew=0.6, ms=5,
                     label="computed member, S"),
@@ -593,7 +594,7 @@ def plot_range_near_threshold(D, tau, out_dir, label="fig_si_degenerate_range_ne
     range. One figure (formerly fig_si_degenerate_spread and fig_si_degenerate_near_threshold)."""
     _style()
     n = len(_near_threshold_rows(D))
-    W, BOT, ROW, LEG, TOP = 7.0, 0.5, 0.215, 0.95, 0.05        # inches
+    W, BOT, ROW, LEG, TOP = 7.0, 0.5, 0.215, 0.75, 0.05        # inches
     H = BOT + ROW * n + LEG + TOP
     fig = plt.figure(figsize=(W, H))
     rect = lambda x0, w: [x0 / W, BOT / H, w / W, ROW * n / H]

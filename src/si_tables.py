@@ -23,6 +23,8 @@ do not fit portrait even at \\tiny) `pdflscape`.
 """
 
 import os
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+
 import pandas as pd
 
 from src.classifier import predicted_category
@@ -55,28 +57,45 @@ def _esc(val):
     return "".join(_LATEX_SPECIAL.get(ch, ch) for ch in str(val))
 
 
+def _round_str(val, nd):
+    """`val` to `nd` decimals, rounded half up (away from zero), the same
+    rule as the S/B comparison -- Python's own formatting rounds half to
+    even (102.5 -> '102'). Plain '-' sign; never '-0.00'."""
+    s = str(Decimal(repr(float(val))).quantize(Decimal(1).scaleb(-nd),
+                                                 rounding=ROUND_HALF_UP))
+    return s[1:] if s.startswith("-") and float(s) == 0.0 else s
+
+
 def _fmt(val, nd=3):
-    """Numeric cell formatter: fixed `nd` decimal places, NaN/None -> empty."""
+    """Numeric cell formatter: fixed `nd` decimal places (rounded half up),
+    minus sign as $-$, NaN/None -> empty."""
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return ""
     try:
-        s = f"{float(val):.{nd}f}"
-        return s[1:] if s.startswith("-") and float(s) == 0.0 else s  # no "-0.000"
-    except (TypeError, ValueError):
+        s = _round_str(val, nd)
+    except (TypeError, ValueError, InvalidOperation):
         return _esc(val)
+    return "$-$" + s[1:] if s.startswith("-") else s  # a real minus, not a hyphen
+
+
+def _packed_scores_tex(text):
+    """LaTeX cell for a packed 'A-B:val; A-B:val' string: escaped, with the
+    value minus signs as $-$ (bond hyphens stay hyphens)."""
+    return _esc(text).replace(":-", ":$-$")
 
 
 def _pack_bond_scores(row, bond_cols, nd=3):
     """Join per-bond `s_AB[A-B]` columns into one 'A-B:val; A-B:val' text
     cell (skips NaN entries) -- mirrors the packed `s_AB` string column
-    already used by library_scores.csv."""
+    already used by library_scores.csv. Plain text; pass the result
+    through `_packed_scores_tex` for a table cell."""
     parts = []
     for col in bond_cols:
         val = row[col]
         if pd.isna(val):
             continue
         bond = col.split("[", 1)[1].rstrip("]")
-        parts.append(f"{bond}:{_fmt(val, nd)}")
+        parts.append(f"{bond}:{_round_str(val, nd)}")
     return "; ".join(parts)
 
 
@@ -210,7 +229,7 @@ def _write_column_block_table(mode_names, row_labels, data, caption, label,
     for bi, block_modes in enumerate(blocks):
         if bi > 0:
             lines.append("\\bigskip")
-            lines.append(f"\\centerline{{\\textit{{Table~\\ref{{{label}}} (continued).}}}}")
+            lines.append(f"\\centerline{{\\textit{{Table~\\ref{{{label}}} (continued)}}}}")
             lines.append("\\smallskip")
         col_spec = "l" + "c" * sum(mode_widths[m] for m in block_modes)
         lines.append("\\begin{center}")
@@ -222,7 +241,7 @@ def _write_column_block_table(mode_names, row_labels, data, caption, label,
             _esc(m) if mode_widths[m] == 1 else f"\\multicolumn{{2}}{{c}}{{{_esc(m)}}}"
             for m in block_modes
         ]
-        lines.append("Mode & " + " & ".join(header_cells) + r" \\")
+        lines.append("\\textbf{Mode} & " + " & ".join(header_cells) + r" \\")
         lines.append("\\midrule")
         for ri, rlabel in enumerate(row_labels):
             cells = []
@@ -279,7 +298,7 @@ def water_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
             _esc(row["Mode"]), _fmt(row["Freq"], 2), _esc(pred), _esc(row["Irrep"]),
             _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
             _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
-            _esc(_pack_bond_scores(row, bond_cols)),
+            _packed_scores_tex(_pack_bond_scores(row, bond_cols)),
             _fmt(row["Mu"], 4), _fmt(row["K"], 4),
         ])
 
@@ -313,7 +332,7 @@ def library_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DIR):
             _esc(pred),
             _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
             _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
-            _esc(row["s_AB"]), _fmt(row["reduced_mass"], 4), _fmt(row["force_constant"], 4),
+            _packed_scores_tex(row["s_AB"]), _fmt(row["reduced_mass"], 4), _fmt(row["force_constant"], 4),
             _esc(row["irrep"]),
         ])
 
@@ -342,7 +361,7 @@ def benzene_normal_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TABLES_DI
             _esc(row["Mode"]), _fmt(row["Freq"], 2), _esc(pred), _esc(row["Irrep"]),
             _fmt(row["Tx"]), _fmt(row["Ty"]), _fmt(row["Tz"]),
             _fmt(row["Rx"]), _fmt(row["Ry"]), _fmt(row["Rz"]), _fmt(row["V_Stretch"]),
-            _esc(_pack_bond_scores(row, bond_cols)),
+            _packed_scores_tex(_pack_bond_scores(row, bond_cols)),
             _fmt(row["Mu"], 4), _fmt(row["K"], 4),
         ])
 
@@ -551,44 +570,56 @@ def benzene_emit_summary_table(data_dir=DEFAULT_DATA_DIR, out_dir=DEFAULT_SI_TAB
 
         nu_lit, pednu_cell = _nu_and_pednu(best_col)
         nu_lit2, pednu_cell2 = _nu_and_pednu(second_col)
-        ovm_cell = [_fmt(best_val, 2), _fmt(second_val, 2)]
+        if round(abs(second_val), 2) == 0.0:
+            # no second match (e.g. EMIT 12, 36): "-" in all three cells,
+            # as in the submitted SI
+            nu_lit2 = pednu_cell2 = second_cell = "-"
+        else:
+            second_cell = _fmt(second_val, 2)
+        ovm_cell = [_fmt(best_val, 2), second_cell]
         nu_cell = [nu_lit, nu_lit2]
         pednu_full_cell = [pednu_cell, pednu_cell2]
 
         tr_label = row["tr_label"]
-        tr_cell = "-" if pd.isna(tr_label) or str(tr_label).strip() == "" else _esc(tr_label)
+        if pd.isna(tr_label) or str(tr_label).strip() == "":
+            tr_cell = "-"
+        else:  # "Rx" -> $\mathrm{R_x}$, as in the main text
+            t = str(tr_label).strip()
+            tr_cell = f"$\\mathrm{{{t[0]}_{t[1:]}}}$"
 
         mode_names.append(mode)
         mode_widths[mode] = 2
         data[mode] = [
             _fmt(row["Eigenvalue"], 2),
-            _fmt(row["Ocart_Tx"], 2), _fmt(row["Ocart_Ty"], 2), _fmt(row["Ocart_Tz"], 2),
-            _fmt(row["Ocart_Rx"], 2), _fmt(row["Ocart_Ry"], 2), _fmt(row["Ocart_Rz"], 2),
+            # o[T/R] from the 6-dp full_cartesian CSV (same values as the
+            # 4-dp Ocart_* columns): rounding a 4-dp tie half up rounds twice
+            # (EMIT 26: 0.014991 -> 0.0150 -> 0.02)
+            _fmt(full_row["Tx"], 2), _fmt(full_row["Ty"], 2), _fmt(full_row["Tz"], 2),
+            _fmt(full_row["Rx"], 2), _fmt(full_row["Ry"], 2), _fmt(full_row["Rz"], 2),
             ovm_cell, nu_cell, pednu_full_cell,
             _fmt(row["Tx"], 2), _fmt(row["Ty"], 2), _fmt(row["Tz"], 2),
             _fmt(row["Rx"], 2), _fmt(row["Ry"], 2), _fmt(row["Rz"], 2), _fmt(row["V_Stretch"], 2),
             _esc(row["vib_label"]), tr_cell,
         ]
 
+    # Caption and footnote follow the submitted SI (2026-10-05) wording; the
+    # rounding sentence is updated for the half-up S/B rule (2026-11-12).
     footnote = (
-        "$o$ denotes an overlap from each type of normal modes, including "
-        "translation [T], rotation [R], and the highest-overlapped "
-        "vibrational mode(s) [$v_m$]. Blank Ref.-mode cells are modes "
-        "without a published Shimanouchi assignment in this study. "
-        "\\%$\\nu$ is the real VEDA4 PED-derived total stretching "
-        "contribution (Section~\\ref{si:ped}) of the matched Vib-$N$ normal "
-        "mode, averaged over degenerate partners as in Figure~7; values "
-        "above 100 reflect this molecule's redundant internal-coordinate "
-        "set and are not an error. Every mode reports its best- and "
-        "second-best-overlapped normal mode side by side, as Table~4 itself "
-        "does for EMIT~16/33 -- the two need not be comparable in magnitude; "
-        "compare the two $o[v_m]$ values to judge how cleanly (or not) a "
-        "single normal mode explains the EMIT mode. "
-        + _RAW_DATA_FOOTNOTE)
-    caption = ("Full listing of all 36 EMIT modes of C$_6$H$_6$ (benzene), tiled in "
-               "the same per-mode-as-column format as the main text's 8-mode Table~4 "
-               "(\\texttt{tab:emitselected}), extended here to the complete EMIT "
-               "eigenbasis.")
+        "$o$ denotes an overlap with each type of normal modes in "
+        "\\emph{Cartesian} coordinates, including translation [T], rotation "
+        "[R], and the highest-overlapped vibrational mode(s) [$v_m$]. Note "
+        "that Cartesian normal coordinates do not form an orthonormal basis "
+        "set, so the overlap values need not be normalized. \\%$\\nu$ is the "
+        "VEDA 4 PED-derived total stretching contribution of the matched "
+        "normal vibrational mode, averaged over degenerate modes; values "
+        "above 100 reflect redundant internal-coordinate set and are not an "
+        "error. Every mode reports its best- and second-best-overlapped "
+        "normal mode. Values are rounded to two decimals, and labels are "
+        "assigned from $s[\\mathrm{V_S}]$ rounded half up to two decimals. "
+        "Full raw score tables are available in the public code repository "
+        "(see the Data Availability Statement).")
+    caption = ("Full listing of normal-mode overlaps and characteristic scores "
+               "for all 36 EMIT modes of C$_6$H$_6$ (benzene).")
     return _write_column_block_table(mode_names, row_labels, data, caption,
                                       "tab:benzeneemitsummary",
                                       os.path.join(out_dir, "tab_benzene_emit_summary.tex"),

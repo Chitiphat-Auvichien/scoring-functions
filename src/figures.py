@@ -2945,46 +2945,60 @@ def plot_stretch_predictor_sensitivity(
 
     # Minimum-error plateaus: every tau tied at the minimum, on a 0.1 % grid so each
     # plateau is resolved as the interval between neighbouring scores (the error is a
-    # staircase constant on (v_k, v_k+1]); a 1 % grid misplaces the ends. All tied runs
-    # are kept (PED has two disjoint ones). Curves are drawn on the same fine grid.
+    # staircase constant on (v_k, v_k+1]); a 1 % grid misplaces the ends. Curves are drawn
+    # on the same fine grid. ONE threshold per predictor, by the tau_SB rule: the midpoint
+    # of the minimum-error plateau, rounded half up to the predictor's precision (scores
+    # 0.01, PED 1 %); when the minimum is tied on several disjoint plateaus (PED), the one
+    # whose midpoint is nearest 0.50 (50 %). Notation (user): scores 0.xx, PED xx %.
     step = 0.1
     fine = np.round(np.arange(0.0, 100.0 + step / 2, step), 1)
     series = (
         ("PED", ped_df["PED_Stretch_pct"], COLORS["sens_accuracy"], "s", "PED"),
-        ("weighted_sVS", wt_df["V_Stretch_pct"], COLORS["sens_change"], "o",
-         r"$s[\mathrm{V_S}]\times100$"),
+        ("weighted_sVS", wt_df["V_Stretch_pct"], COLORS["sens_change"], "o", r"$s[\mathrm{V_S}]$"),
         ("unweighted_sVS", unw_df["V_Stretch_pct"], COLORS["sens_single_centre"], "^",
-         r"unweighted $s[\mathrm{V_S}]\times100$"),
+         r"unweighted $s[\mathrm{V_S}]$"),
     )
-    tau_sb_pct = 100 * Thresholds.calibrated().tau_SB
+    tau_sb = Thresholds.calibrated().tau_SB
+    tau_sb_pct = 100 * tau_sb
+    # threshold in % -> label text in the predictor's own notation
+    fmt_thr = {"PED": lambda p: f"{p:.0f}%", "weighted_sVS": lambda p: f"{p / 100:.2f}",
+               "unweighted_sVS": lambda p: f"{p / 100:.2f}"}
 
-    fig, ax = plt.subplots(figsize=(5.6, 4.6))
-    plateaus, min_err, line_h, band_h = {}, {}, [], []
+    fig, ax = plt.subplots(figsize=(5.6, 4.9))
+    plateaus, chosen, thr_pct, min_err, line_h, thr_h = {}, {}, {}, {}, [], []
     for key, vals, col, mk, name in series:
         df_ = {"PED": ped_df, "weighted_sVS": wt_df, "unweighted_sVS": unw_df}[key]
         e = _sweep_error_vs_threshold(vals.to_numpy(float), df_["ref_label"], fine)["error"].to_numpy()
         tied = fine[e <= e.min() + 1e-12]
         runs = np.split(tied, np.flatnonzero(np.diff(tied) > step * 1.5) + 1)
         ivs = [(round(float(r[0]) - step, 1), float(r[-1])) for r in runs]   # tau in (lo, hi]
-        plateaus[key], min_err[key] = ivs, float(e.min())
-        for lo, hi in ivs:
-            ax.axvspan(lo, hi, color=col, alpha=0.2, lw=0, zorder=1)
+        lo, hi = min(ivs, key=lambda iv: (abs((iv[0] + iv[1]) / 2 - 50.0), iv[0]))
+        # midpoint rounded half up to 1 % (= 0.01 on the score scale), as for tau_SB
+        thr = float(np.floor(round((lo + hi) / 2, 6) + 0.5))
+        plateaus[key], chosen[key], thr_pct[key], min_err[key] = ivs, (lo, hi), thr, float(e.min())
         line_h.append(ax.plot(fine, e, color=col, marker=mk, markersize=2.5, markevery=10,
                               lw=1.1, zorder=3, label=name)[0])
-        band_h.append(Patch(facecolor=col, alpha=0.35, lw=0,
-                            label="min. error: " + ", ".join(f"{lo:g}–{hi:g}%" for lo, hi in ivs)))
+        thr_h.append(ax.axvline(thr, color=col, ls=":", lw=1.4, zorder=2,
+                                label="min.-error threshold: " + fmt_thr[key](thr)))
     tau_h = ax.axvline(tau_sb_pct, color=COLORS["threshold"], ls="--", lw=1.0, zorder=2,
-                       label=r"$\tau_\mathrm{SB}$ = " + f"{tau_sb_pct:g}%")
+                       label=r"$\tau_\mathrm{SB}$ = " + f"{tau_sb:.2f}")
 
-    ax.set_xlabel(r"$\tau$ (%)")
-    ax.set_ylabel("Classification error")
+    # one physical axis, two notations: bottom = score threshold (0.xx), top = PED (%)
     ax.set_xlim(0, 100)
+    ax.xaxis.set_major_locator(mtick.MultipleLocator(20))
+    ax.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"{x / 100:.1f}"))
+    ax.set_xlabel(r"threshold on $s[\mathrm{V_S}]$")
+    top = ax.secondary_xaxis("top")
+    top.xaxis.set_major_locator(mtick.MultipleLocator(20))
+    top.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"{x:.0f}%"))
+    top.set_xlabel("threshold on PED")
+    ax.set_ylabel("Classification error")
     ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
     error_cols = ["error_PED", "error_weighted_sVS", "error_unweighted_sVS"]
     y_max = max(0.05, float(sweep[error_cols].max().max()) * 1.1)
     ax.set_ylim(-0.01, y_max)
-    # each curve followed by its own plateau patch, then the adopted threshold
-    hand = [h for pair in zip(line_h, band_h) for h in pair] + [tau_h]
+    # each curve followed by its own selected threshold, then the adopted tau_SB
+    hand = [h for pair in zip(line_h, thr_h) for h in pair] + [tau_h]
     ax.legend(handles=hand, loc="upper right", frameon=False, fontsize=LEGEND_FONTSIZE,
               handletextpad=0.5, labelspacing=0.4)
 
@@ -3014,12 +3028,11 @@ def plot_stretch_predictor_sensitivity(
         "error_unweighted_sVS_range": (float(sweep["error_unweighted_sVS"].min()),
                                         float(sweep["error_unweighted_sVS"].max())),
         "tau_SB_pct": tau_sb_pct,
-        # minimum-error plateaus, each a list of (lo, hi] intervals in % (0.1 % grid)
-        "plateaus_PED": plateaus["PED"], "min_error_PED": min_err["PED"],
-        "plateaus_weighted_sVS": plateaus["weighted_sVS"],
-        "min_error_weighted_sVS": min_err["weighted_sVS"],
-        "plateaus_unweighted_sVS": plateaus["unweighted_sVS"],
-        "min_error_unweighted_sVS": min_err["unweighted_sVS"],
+        # minimum-error plateaus, each a list of (lo, hi] intervals in % (0.1 % grid); the
+        # one nearest 50 % and its rounded midpoint = the threshold drawn (in %)
+        **{f"{k}_{key}": d[key] for key in ("PED", "weighted_sVS", "unweighted_sVS")
+           for k, d in (("plateaus", plateaus), ("chosen_plateau", chosen),
+                        ("threshold_pct", thr_pct), ("min_error", min_err))},
     }
     return summary
 

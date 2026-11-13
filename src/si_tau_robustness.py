@@ -527,24 +527,9 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
     if make_figures:
         draws = {tid: r["tau_star"] for tid, r in res.items()}
         paths["fig_robustness"] = plot_robustness(summary, draws, gap, tau, band, out_dir)
-        sel = []
-        offsets = {"SBr4": (-14, 12), "NBr3": (-16, 10)}
-        for m in modes[modes["set"] == "SC"].itertuples():
-            key = (m.molecule, round(m.freq))
-            if key in (("SBr4", 135), ("NBr3", 188)):
-                sel.append(dict(s=m.s, share_S=m.share_S, literature=m.literature,
-                                text=f"{m.molecule[:-1]}$_{m.molecule[-1]}$ {m.freq:.0f}",
-                                xy_text=None, offset=offsets[m.molecule]))
-        bz = modes[modes["set"] == "benzene"]
-        for m in bz[bz["name"] == r"$\nu_{10}$"].itertuples():
-            sel.append(dict(s=m.s, share_S=m.share_S, literature=m.literature,
-                            text=rf"C$_6$H$_6$ {m.freq:.0f}", xy_text=None, offset=(14, -12)))
-        nu14 = bz[bz["name"] == r"$\nu_{14}$"]
-        for k, m in enumerate(nu14.itertuples()):           # e1u pair: one label, a leader to each member
-            sel.append(dict(s=m.s, share_S=m.share_S, literature=m.literature,
-                            text=rf"C$_6$H$_6$ {m.freq:.0f} pair" if k == 0 else "", xy_text=(0.535, 0.74),
-                            offset=None))
-        paths["fig_ambiguity"] = plot_ambiguity(ci_draws[SIGMA_CAL], band, tau, sel, out_dir)
+        # panel (b) carries no marked modes (the reference-B marks SBr4 135, NBr3 188 and benzene
+        # nu10/nu14 were removed); the modes near the cut stay in si_tau_robustness_modes.csv
+        paths["fig_ambiguity"] = plot_ambiguity(ci_draws[SIGMA_CAL], band, tau, [], out_dir)
 
     out = dict(
         tau_SB=tau, sc_gap=gap, n_sc_modes=n_sc, n_sc_molecules=len(mols), n_test_modes=len(te),

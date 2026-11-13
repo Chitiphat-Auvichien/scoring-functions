@@ -18,7 +18,8 @@ each recombined vector is converted back to Cartesian displacements and scored w
 exactly as ModeScorer.Vscore (side report section 2.4). With B_k the Cartesian back-transforms of a
 mass-weighted orthonormal basis of the set, a single member is d(c) = sum_k c_k B_k with |c| = 1 and a
 basis is an orthogonal k x k matrix O whose rows are the members' coefficients. Per set:
-  Vmin, Vmax, spread   lowest / highest s[V_S] of a single member over ALL directions c
+  Vmin, Vmax, spread   lowest / highest s[V_S] of a single member over ALL directions c; `spread` =
+                       Vmax - Vmin, labelled "range ... over all bases" in the figures
                        (pairs: grid over the half circle + bounded refinement; triples: Gaussian's
                        vectors + 20 000 Fibonacci directions + Nelder-Mead from the 20 best)
   V_mean (s-bar)       subspace mean: s[V_S] averaged uniformly over directions
@@ -38,10 +39,10 @@ Outputs
   data/results/si_degenerate_rotations.csv     per set, histogram counts over the n_rot rotations of
                                                w and of (member mean - s-bar) (long format)
   data/figures/fig_si_degenerate_all_sets_{sc,test}  every set: position on 0-1 and range about s-bar
-  data/figures/fig_si_degenerate_near_threshold sets whose range meets the ambiguity range
-  data/figures/fig_si_degenerate_mean_comparison s-bar vs s-bar_c; s-bar_c - s-bar vs spread
+  data/figures/fig_si_degenerate_range_near_threshold  (a) histogram of the ranges; (b) sets whose
+                                               range meets the ambiguity range
+  data/figures/fig_si_degenerate_mean_comparison s-bar vs s-bar_c; s-bar_c - s-bar vs range
   data/figures/fig_si_degenerate_rotations     distributions of w and member mean - s-bar over rotations
-  data/figures/fig_si_degenerate_spread        histogram of the spreads
 """
 
 import os
@@ -82,7 +83,8 @@ SYM_CLASS_LABEL = {"E3": "E pair, 3- or 6-fold axis", "T": "T triple",
 SV = r"$s[\mathrm{V_S}]$"
 SBAR = r"$\bar{s}$"
 SBAR_G = r"$\bar{s}_\mathrm{c}$"   # mean of the computed members (as output by the frequency calculation)
-SPREAD_LABEL = r"spread of $s[\mathrm{V_S}]$ (highest $-$ lowest)"
+# "range" (highest - lowest) is the precise statistic; over all bases, vs. the within-basis range w
+RANGE_LABEL = r"range of $s[\mathrm{V_S}]$ over all bases"
 SETS_CSV = "si_degenerate_sets.csv"
 ROTATIONS_CSV = "si_degenerate_rotations.csv"
 W_BINS = np.round(np.arange(0.0, 0.1501, 0.0025), 6)
@@ -515,15 +517,18 @@ def near_threshold_sets(D, min_spread=0.01):
     return D[(D.Vmax >= lo) & (D.Vmin <= hi) & (D.spread > min_spread)]
 
 
-def plot_near_threshold(D, tau, out_dir, label="fig_si_degenerate_near_threshold"):
-    """Sets near the threshold (replaces slide 9): range over all bases (bar, symmetry-class colour),
-    computed members (circles filled by their label at tau_SB: S red, B blue) and s-bar (tick)."""
-    _style()
+def _near_threshold_rows(D):
     show = near_threshold_sets(D).copy()
     show["g"] = show.group.map({g: i for i, g in enumerate(GROUP_ORDER)})
-    show = show.sort_values(["g", "V_mean"])
+    return show.sort_values(["g", "V_mean"])
+
+
+def _draw_near_threshold(ax, D, tau):
+    """Sets near the threshold (replaces slide 9) on `ax`: range over all bases (bar, symmetry-class
+    colour), computed members (circles filled by their label at tau_SB: S red, B blue) and s-bar (tick).
+    Returns the legend handles (two columns of equal length)."""
+    show = _near_threshold_rows(D)
     n = len(show)
-    fig, ax = plt.subplots(figsize=(4.6, 0.95 + 0.215 * n))
     _threshold_axes(ax, tau)
     yl = []
     for y, (_, r) in enumerate(show.iterrows()):
@@ -559,8 +564,54 @@ def plot_near_threshold(D, tau, out_dir, label="fig_si_degenerate_near_threshold
                     label="computed member, B"),
              Line2D([], [], color=COLORS["threshold"], ls="--", lw=0.8, label=r"$\tau_\mathrm{SB}$" + f" = {tau:.2f}")]
     hand2 += [Line2D([], [], ls="", label=" ")] * max(0, len(hand) - len(hand2))
-    ax.legend(handles=hand + hand2, loc="lower center", bbox_to_anchor=(0.42, 1.0), ncol=2, fontsize=7.5,
-              frameon=False, columnspacing=1.2, handlelength=1.8)
+    return hand + hand2
+
+
+def _draw_range(ax, D):
+    """Histogram of the ranges (column `spread`, highest - lowest over all bases) of all sets on `ax`,
+    stacked by data set; median (solid) and 95th percentile (dashed) marked (replaces the histogram on slide 8)."""
+    xmax = np.ceil((D.spread.max() + 0.005) * 100) / 100
+    bins = np.arange(0, xmax + 1e-9, 0.005)
+    ax.hist([D[D.group == g].spread for g in GROUP_ORDER], bins=bins, stacked=True,
+            color=[GROUP_GREY[g] for g in GROUP_ORDER], edgecolor="k", lw=0.3,
+            label=[f"{GROUP_LABEL[g]} ({int((D.group == g).sum())})" for g in GROUP_ORDER])
+    ymax = ax.get_ylim()[1]
+    for q, ls, yf in ((0.5, "-", 0.97), (0.95, "--", 0.55)):
+        v = D.spread.quantile(q)
+        ax.axvline(v, color="k", lw=0.8, ls=ls)
+        ax.text(v + 0.002, ymax * yf, f"{'median' if q == 0.5 else '95th percentile'}\n{v:.3f}", fontsize=7.5,
+                va="top")
+    ax.set_xlim(0, xmax)
+    ax.set_xlabel(RANGE_LABEL)
+    ax.set_ylabel("number of sets")
+    ax.legend(fontsize=7.5, frameon=False, loc="upper right", bbox_to_anchor=(1.04, 1.0), handlelength=1.1,
+              handletextpad=0.4)                      # compact, so it clears the 95th-percentile line
+
+
+def plot_range_near_threshold(D, tau, out_dir, label="fig_si_degenerate_range_near_threshold"):
+    """(a) histogram of the ranges of s[V_S] over all bases; (b) the sets whose range of s[V_S] meets the ambiguity
+    range. One figure (formerly fig_si_degenerate_spread and fig_si_degenerate_near_threshold)."""
+    _style()
+    n = len(_near_threshold_rows(D))
+    W, BOT, ROW, LEG, TOP = 7.0, 0.5, 0.215, 0.95, 0.05        # inches
+    H = BOT + ROW * n + LEG + TOP
+    fig = plt.figure(figsize=(W, H))
+    rect = lambda x0, w: [x0 / W, BOT / H, w / W, ROW * n / H]
+    axA = fig.add_axes(rect(0.5, 2.25))
+    axB = fig.add_axes(rect(4.3, 2.6))
+    _draw_range(axA, D)
+    hand = _draw_near_threshold(axB, D, tau)
+    for a in (axA, axB):
+        a.xaxis.label.set_size(9.5)
+    axA.yaxis.label.set_size(9.5)
+    axA.tick_params(labelsize=8.5)
+    axB.tick_params(axis="x", labelsize=8.5)
+    axA.xaxis.set_major_locator(plt.MultipleLocator(0.05))
+    axB.legend(handles=hand, loc="lower center", bbox_to_anchor=(0.32, 1.0), ncol=2, fontsize=7.5,
+               frameon=False, columnspacing=1.2, handlelength=1.8)
+    top = (BOT + ROW * n) / H
+    for x0, t in ((0.02, "a"), (2.95, "b")):
+        fig.text(x0 / W, top + 0.02, f"({t})", fontweight="bold", va="bottom")
     paths = _savefig(fig, out_dir, label)
     plt.close(fig)
     return paths
@@ -568,7 +619,7 @@ def plot_near_threshold(D, tau, out_dir, label="fig_si_degenerate_near_threshold
 
 def plot_mean_comparison(D, tau, out_dir, label="fig_si_degenerate_mean_comparison", annotate=None):
     """(a) s-bar vs s-bar_c (replaces slide 29a); grey quadrants: the two would give different labels at
-    tau_SB. (b) s-bar_c - s-bar vs spread (slide 29b); grey wedge |difference| <= spread."""
+    tau_SB. (b) s-bar_c - s-bar vs range (slide 29b); grey wedge |difference| <= range."""
     _style()
     fig, axs = plt.subplots(1, 2, figsize=(7.0, 3.3), gridspec_kw=dict(wspace=0.36))
     ax = axs[0]
@@ -610,7 +661,7 @@ def plot_mean_comparison(D, tau, out_dir, label="fig_si_degenerate_mean_comparis
     ax.set_xlim(0, xmax)
     ax.set_ylim(ylo, yhi)
     ax.set_box_aspect(1)
-    ax.set_xlabel(SPREAD_LABEL)
+    ax.set_xlabel(RANGE_LABEL)
     ax.set_ylabel(SBAR_G[:-1] + r" - \bar{s}$")
     for a, t in zip(axs, "ab"):
         a.text(-0.3, 1.03, f"({t})", transform=a.transAxes, fontweight="bold", va="bottom")
@@ -677,31 +728,6 @@ def plot_rotations(D, H, out_dir, label="fig_si_degenerate_rotations"):
     return paths
 
 
-def plot_spread(D, out_dir, label="fig_si_degenerate_spread"):
-    """Histogram of the spreads of all sets, stacked by data set; median (solid) and 90th percentile
-    (dashed) marked (replaces the histogram on slide 8)."""
-    _style()
-    fig, ax = plt.subplots(figsize=(3.4, 2.7))
-    xmax = np.ceil((D.spread.max() + 0.005) * 100) / 100
-    bins = np.arange(0, xmax + 1e-9, 0.005)
-    ax.hist([D[D.group == g].spread for g in GROUP_ORDER], bins=bins, stacked=True,
-            color=[GROUP_GREY[g] for g in GROUP_ORDER], edgecolor="k", lw=0.3,
-            label=[f"{GROUP_LABEL[g]} ({int((D.group == g).sum())})" for g in GROUP_ORDER])
-    ymax = ax.get_ylim()[1]
-    for q, ls, yf in ((0.5, "-", 0.97), (0.9, "--", 0.55)):
-        v = D.spread.quantile(q)
-        ax.axvline(v, color="k", lw=0.8, ls=ls)
-        ax.text(v + 0.002, ymax * yf, f"{'median' if q == 0.5 else '90th percentile'}\n{v:.3f}", fontsize=7.5,
-                va="top")
-    ax.set_xlim(0, xmax)
-    ax.set_xlabel(SPREAD_LABEL)
-    ax.set_ylabel("number of sets")
-    ax.legend(fontsize=7.5, frameon=False, loc="upper right")
-    paths = _savefig(fig, out_dir, label)
-    plt.close(fig)
-    return paths
-
-
 # ---------------------------------------------------------------- driver
 def headline_numbers(D, samples, tau):
     """Numbers quoted in the SI text."""
@@ -716,6 +742,7 @@ def headline_numbers(D, samples, tau):
         n_sets_by_class={c: int((D.sym_class == c).sum()) for c in SYM_CLASSES},
         n_2fold=int((D.deg == 2).sum()), n_3fold=int((D.deg == 3).sum()),
         spread_median=float(D.spread.median()), spread_p90=float(D.spread.quantile(0.9)),
+        spread_p95=float(D.spread.quantile(0.95)),
         spread_max=float(D.spread.max()), spread_max_set=f"{D.molecule[smax]} {D.freq[smax]:.0f}",
         straddling_sets=[f"{m} {f:.0f}" for m, f in zip(D.molecule[D.straddles_tau], D.freq[D.straddles_tau])],
         sets_with_mixed_gaussian_labels=[f"{m} {f:.0f}" for m, f in
@@ -773,10 +800,9 @@ def run(data_dir="data", out_dir="data/figures", results_dir="data/results", n_r
     if figures:
         for k_, v_ in plot_all_sets(D, tau, out_dir).items():
             out["figures"][f"all_sets_{k_}"] = v_
-        out["figures"]["near_threshold"] = plot_near_threshold(D, tau, out_dir)
+        out["figures"]["range_near_threshold"] = plot_range_near_threshold(D, tau, out_dir)
         out["figures"]["mean_comparison"] = plot_mean_comparison(D, tau, out_dir)
         out["figures"]["rotations"] = plot_rotations(D, H, out_dir)
-        out["figures"]["spread"] = plot_spread(D, out_dir)
     out.update(headline_numbers(D, samples, tau))
     out["runtime_s"] = time.time() - t0
     return out

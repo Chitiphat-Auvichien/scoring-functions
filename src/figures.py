@@ -2560,7 +2560,7 @@ def plot_tau_sb_derivation(
     the submitted Fig. 4 in the main text).
 
     Single panel: classification error (%) vs tau_SB for the single-centre
-    (SC) calibration set and for the test set. Grey: the SC minimum-error
+    (SC) calibration set and for the test set. Green band: the SC minimum-error
     gap (tied minimum of the SC staircase). Dashed: the adopted tau_SB.
     (The s[V_S] histogram panel was dropped -- fig:modemixing carries the
     score-vs-bond-length picture -- and so was the SC molecule-bootstrap
@@ -2595,7 +2595,9 @@ def plot_tau_sb_derivation(
 
     c_t, c_sc = COLORS["threshold"], "#009E73"
     fig, ax = plt.subplots(figsize=(3.4, 2.4))
-    ax.axvspan(gap[0], gap[1], color=COLORS["background"], alpha=0.5, lw=0)
+    # Green (the SC curve's colour), not grey: grey bands mean the ambiguity
+    # range in the other figures; this band is the SC minimum-error gap.
+    ax.axvspan(gap[0], gap[1], color=c_sc, alpha=0.18, lw=0)
     ax.plot(grid, 100 * e_sc, color=c_sc, lw=1.2, label="SC")
     ax.plot(grid, 100 * e_te, color="k", lw=1.0, ls=(0, (4, 1.5)), label="test")
     ax.axvline(tau, color=c_t, ls="--", lw=1.0, label=r"adopted $\tau_\mathrm{SB}$")

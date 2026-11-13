@@ -2915,10 +2915,13 @@ def plot_stretch_predictor_sensitivity(
         ped_csv, "PED_Stretch_pct", mol_list_csv, characterised_modes_csv)
     wt_df = _prep_predictor_vs_reference(
         weighted_csv, "V_Stretch", mol_list_csv, characterised_modes_csv)
-    wt_df = wt_df.assign(V_Stretch_pct=wt_df["V_Stretch"] * 100)
+    # s[V_S] rounded half up to 0.01 before the comparison -- the classifier's rule
+    # (round_score), so the weighted curve is exactly the S/B call the program makes
+    pct = lambda v: np.round(round_score(v.to_numpy(float)) * 100, 6)
+    wt_df = wt_df.assign(V_Stretch_pct=pct(wt_df["V_Stretch"]))
     unw_df = _prep_predictor_vs_reference(
         unweighted_csv, "V_Stretch", mol_list_csv, characterised_modes_csv)
-    unw_df = unw_df.assign(V_Stretch_pct=unw_df["V_Stretch"] * 100)
+    unw_df = unw_df.assign(V_Stretch_pct=pct(unw_df["V_Stretch"]))
 
     n_ped, n_wt, n_unw = len(ped_df), len(wt_df), len(unw_df)
     ped_sweep = _sweep_error_vs_threshold(
@@ -2940,33 +2943,38 @@ def plot_stretch_predictor_sensitivity(
     os.makedirs(os.path.dirname(sweep_csv_path), exist_ok=True)
     sweep.to_csv(sweep_csv_path, index=False)
 
-    lo_p, hi_p, mid_p, min_p = _error_plateau_by_col(
-        ped_sweep.rename(columns={"tau": "tau_pct", "error": "error_PED"}),
-        "error_PED", "tau_pct")
-    lo_w, hi_w, mid_w, min_w = _error_plateau_by_col(
-        wt_sweep.rename(columns={"tau": "tau_pct", "error": "error_weighted_sVS"}),
-        "error_weighted_sVS", "tau_pct")
-    lo_u, hi_u, mid_u, min_u = _error_plateau_by_col(
-        unw_sweep.rename(columns={"tau": "tau_pct", "error": "error_unweighted_sVS"}),
-        "error_unweighted_sVS", "tau_pct")
+    # Minimum-error plateaus: every tau tied at the minimum, on a 0.1 % grid so each
+    # plateau is resolved as the interval between neighbouring scores (the error is a
+    # staircase constant on (v_k, v_k+1]); a 1 % grid misplaces the ends. All tied runs
+    # are kept (PED has two disjoint ones). Curves are drawn on the same fine grid.
+    step = 0.1
+    fine = np.round(np.arange(0.0, 100.0 + step / 2, step), 1)
+    series = (
+        ("PED", ped_df["PED_Stretch_pct"], COLORS["sens_accuracy"], "s", "PED"),
+        ("weighted_sVS", wt_df["V_Stretch_pct"], COLORS["sens_change"], "o",
+         r"$s[\mathrm{V_S}]\times100$"),
+        ("unweighted_sVS", unw_df["V_Stretch_pct"], COLORS["sens_single_centre"], "^",
+         r"unweighted $s[\mathrm{V_S}]\times100$"),
+    )
+    tau_sb_pct = 100 * Thresholds.calibrated().tau_SB
 
     fig, ax = plt.subplots(figsize=(5.6, 4.6))
-    ax.axvline(50.0, color=COLORS["threshold"], ls="-.", lw=1.0, zorder=2,
-               label=r"$\tau$=50%")
-    _draw_optimal(ax, COLORS["sens_accuracy"], "PED opt.", mid_p, lo_p, hi_p, fmt="{:g}%")
-    _draw_optimal(ax, COLORS["sens_change"], r"$s[\mathrm{V_S}]$ opt.",
-                  mid_w, lo_w, hi_w, fmt="{:g}%")
-    _draw_optimal(ax, COLORS["sens_single_centre"], r"unweighted $s[\mathrm{V_S}]$ opt.",
-                  mid_u, lo_u, hi_u, fmt="{:g}%")
-
-    l1, = ax.plot(sweep["tau_pct"], sweep["error_PED"], color=COLORS["sens_accuracy"],
-                  marker="s", markersize=2.5, lw=1.1, zorder=3, label="PED")
-    l2, = ax.plot(sweep["tau_pct"], sweep["error_weighted_sVS"], color=COLORS["sens_change"],
-                  marker="o", markersize=2.5, lw=1.1, zorder=3,
-                  label=r"$s[\mathrm{V_S}]\times100$")
-    l3, = ax.plot(sweep["tau_pct"], sweep["error_unweighted_sVS"], color=COLORS["sens_single_centre"],
-                  marker="^", markersize=2.5, lw=1.1, zorder=3,
-                  label=r"unweighted $s[\mathrm{V_S}]\times100$")
+    plateaus, min_err, line_h, band_h = {}, {}, [], []
+    for key, vals, col, mk, name in series:
+        df_ = {"PED": ped_df, "weighted_sVS": wt_df, "unweighted_sVS": unw_df}[key]
+        e = _sweep_error_vs_threshold(vals.to_numpy(float), df_["ref_label"], fine)["error"].to_numpy()
+        tied = fine[e <= e.min() + 1e-12]
+        runs = np.split(tied, np.flatnonzero(np.diff(tied) > step * 1.5) + 1)
+        ivs = [(round(float(r[0]) - step, 1), float(r[-1])) for r in runs]   # tau in (lo, hi]
+        plateaus[key], min_err[key] = ivs, float(e.min())
+        for lo, hi in ivs:
+            ax.axvspan(lo, hi, color=col, alpha=0.2, lw=0, zorder=1)
+        line_h.append(ax.plot(fine, e, color=col, marker=mk, markersize=2.5, markevery=10,
+                              lw=1.1, zorder=3, label=name)[0])
+        band_h.append(Patch(facecolor=col, alpha=0.35, lw=0,
+                            label="min. error: " + ", ".join(f"{lo:g}–{hi:g}%" for lo, hi in ivs)))
+    tau_h = ax.axvline(tau_sb_pct, color=COLORS["threshold"], ls="--", lw=1.0, zorder=2,
+                       label=r"$\tau_\mathrm{SB}$ = " + f"{tau_sb_pct:g}%")
 
     ax.set_xlabel(r"$\tau$ (%)")
     ax.set_ylabel("Classification error")
@@ -2975,7 +2983,9 @@ def plot_stretch_predictor_sensitivity(
     error_cols = ["error_PED", "error_weighted_sVS", "error_unweighted_sVS"]
     y_max = max(0.05, float(sweep[error_cols].max().max()) * 1.1)
     ax.set_ylim(-0.01, y_max)
-    ax.legend(loc="best", frameon=False, fontsize=LEGEND_FONTSIZE,
+    # each curve followed by its own plateau patch, then the adopted threshold
+    hand = [h for pair in zip(line_h, band_h) for h in pair] + [tau_h]
+    ax.legend(handles=hand, loc="upper right", frameon=False, fontsize=LEGEND_FONTSIZE,
               handletextpad=0.5, labelspacing=0.4)
 
     fig.tight_layout()
@@ -3003,11 +3013,13 @@ def plot_stretch_predictor_sensitivity(
                                       float(sweep["error_weighted_sVS"].max())),
         "error_unweighted_sVS_range": (float(sweep["error_unweighted_sVS"].min()),
                                         float(sweep["error_unweighted_sVS"].max())),
-        "optimal_tau_PED": mid_p, "optimal_tau_PED_plateau": (lo_p, hi_p), "min_error_PED": min_p,
-        "optimal_tau_weighted_sVS": mid_w, "optimal_tau_weighted_sVS_plateau": (lo_w, hi_w),
-        "min_error_weighted_sVS": min_w,
-        "optimal_tau_unweighted_sVS": mid_u, "optimal_tau_unweighted_sVS_plateau": (lo_u, hi_u),
-        "min_error_unweighted_sVS": min_u,
+        "tau_SB_pct": tau_sb_pct,
+        # minimum-error plateaus, each a list of (lo, hi] intervals in % (0.1 % grid)
+        "plateaus_PED": plateaus["PED"], "min_error_PED": min_err["PED"],
+        "plateaus_weighted_sVS": plateaus["weighted_sVS"],
+        "min_error_weighted_sVS": min_err["weighted_sVS"],
+        "plateaus_unweighted_sVS": plateaus["unweighted_sVS"],
+        "min_error_unweighted_sVS": min_err["unweighted_sVS"],
     }
     return summary
 

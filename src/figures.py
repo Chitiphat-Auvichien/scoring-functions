@@ -2978,27 +2978,31 @@ def plot_stretch_predictor_sensitivity(
         plateaus[key], chosen[key], thr_pct[key], min_err[key] = ivs, (lo, hi), thr, float(e.min())
         line_h.append(ax.plot(fine, e, color=col, marker=mk, markersize=2.5, markevery=10,
                               lw=1.1, zorder=3, label=name)[0])
-        thr_h.append(ax.axvline(thr, color=col, ls=":", lw=1.4, zorder=2,
-                                label="min.-error threshold: " + fmt_thr[key](thr)))
-    tau_h = ax.axvline(tau_sb_pct, color=COLORS["threshold"], ls="--", lw=1.0, zorder=2,
-                       label=r"$\tau_\mathrm{SB}$ = " + f"{tau_sb:.2f}")
+        if key == "weighted_sVS":
+            # one line for s[V_S]: the adopted tau_SB (black dashed) stands for its optimal threshold
+            # (the test-set midpoint rounds to the same 0.43; the number is kept in the summary)
+            thr_h.append(ax.axvline(tau_sb_pct, color="k", ls="--", lw=1.0, zorder=2,
+                                    label=r"$\tau_\mathrm{SB}$ = " + f"{tau_sb:.2f}"))
+        else:
+            thr_h.append(ax.axvline(thr, color=col, ls=":", lw=1.4, zorder=2,
+                                    label="optimal threshold: " + fmt_thr[key](thr)))
 
     # one physical axis, two notations: bottom = score threshold (0.xx), top = PED (%)
     ax.set_xlim(0, 100)
     ax.xaxis.set_major_locator(mtick.MultipleLocator(20))
     ax.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"{x / 100:.1f}"))
-    ax.set_xlabel(r"threshold on $s[\mathrm{V_S}]$")
+    ax.set_xlabel(r"Threshold on $s[\mathrm{V_S}]$")
     top = ax.secondary_xaxis("top")
     top.xaxis.set_major_locator(mtick.MultipleLocator(20))
     top.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f"{x:.0f}%"))
-    top.set_xlabel("threshold on PED")
+    top.set_xlabel("Threshold on PED")
     ax.set_ylabel("Classification error")
     ax.yaxis.set_major_formatter(mtick.PercentFormatter(xmax=1))
     error_cols = ["error_PED", "error_weighted_sVS", "error_unweighted_sVS"]
     y_max = max(0.05, float(sweep[error_cols].max().max()) * 1.1)
     ax.set_ylim(-0.01, y_max)
-    # each curve followed by its own selected threshold, then the adopted tau_SB
-    hand = [h for pair in zip(line_h, thr_h) for h in pair] + [tau_h]
+    # each curve followed by its own optimal threshold (tau_SB for s[V_S])
+    hand = [h for pair in zip(line_h, thr_h) for h in pair]
     ax.legend(handles=hand, loc="upper right", frameon=False, fontsize=LEGEND_FONTSIZE,
               handletextpad=0.5, labelspacing=0.4)
 

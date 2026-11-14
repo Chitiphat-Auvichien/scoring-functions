@@ -313,3 +313,16 @@ def test_s4_top_is_symmetric_and_its_frame_does_not_depend_on_the_input_orientat
         Q = _random_rotation()
         f1, _ = FR.select_frame(X @ Q.T, sym, m, bonds, [])
         assert np.allclose((X @ Q.T) @ f1.T, Y0, atol=1e-6)
+
+
+def test_step1_builds_one_frame_per_set_of_axis_lines():
+    # the SI flowchart's counts: n directions -> n (n/2 for even n, n/4 if 4 | n); spherical: 1
+    expect = {3: 3, 4: 1, 6: 3}
+    for mol in TOPS:
+        X, sym, m, _ = _com(_load(mol))
+        kind, z, n = FR.detect_top(X, sym, m)
+        reps = FR.candidate_lines(X, sym, m, kind, z)
+        assert len({FR.line_set(f) for f in reps}) == len(reps), mol
+        assert len(reps) == (expect[n] if kind == "symmetric" else 1), mol
+        allowed = FR.candidate_frames(X, sym, m, kind, z)
+        assert sorted({FR.line_set(f) for f in allowed}) == sorted(FR.line_set(f) for f in reps), mol

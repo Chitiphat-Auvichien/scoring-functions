@@ -11,10 +11,10 @@ Step 1 (symmetry, symmetric and spherical tops). As in Gaussian's standard orien
     z is the C_n axis (the S_4 axis of D2d/S4 tops, which have no C_n with n >= 3); y passes
     through an atom of the smallest set of symmetry-equivalent off-axis atoms; x = y cross z.
     Spherical tops: every set of three mutually perpendicular C2 axes (C4 axes for O/Oh).
-    These are the *allowed* frames. Frames on the same axis lines form one candidate: one per
-    direction to an atom of that set, modulo 90 deg -- n of them (n/2 for even n, n/4 if 4 | n)
-    when the set projects onto n directions; with an S_2n axis use 2n.
-Step 2 (tie-break). Among the allowed frames, grouped by their set of axis lines, the one
+    Step 1 builds one frame per set of axis lines (candidate_lines): one per direction to an
+    atom of that set, modulo 90 deg -- n of them (n/2 for even n, n/4 if 4 | n) when the set
+    projects onto n directions; with an S_2n axis use 2n. Signs and names wait for step 3.
+Step 2 (tie-break). Among the candidate sets of axis lines, the one
     with the largest value of the step-2 criterion over the input modes k (before any ideal
     references are added). The rotatable axes Q are x, y (symmetric top), x, y, z
     (spherical top) or y, z (linear molecule). Exact ties (TIE_TOL) go to step 3.
@@ -25,7 +25,8 @@ Step 2 (tie-break). Among the allowed frames, grouped by their set of axis lines
                          over the rotatable axes (the R1.5 report's sum D).
     Both give the same frame whenever the input contains translational and rotational modes
     (3N input) and for the benzene EMIT modes; with 3N-6 input they can differ.
-Step 3 (naming; no physical effect). +z towards the heaviest on-axis atom off the centre
+Step 3 (naming; no physical effect). Among the allowed frames on the winning lines (named_frames;
+    on every tied set of lines): +z towards the heaviest on-axis atom off the centre
     (else sum m z^3 > 0); the lowest-index atom in the yz plane on +y; remaining ties by
     the largest coordinates in input order. It fixes axis names and signs only: never a
     score magnitude, a label or the T/R assignment.
@@ -232,34 +233,68 @@ def smallest_set(X, sym, m, z):
     return [i for g in groups if key(g) == k0 for i in g], P, rad
 
 
-def candidate_frames(X, sym, m, kind, z, tol=None):
-    """The allowed right-handed frames (rows = new x, y, z) of a symmetric or spherical top."""
+def _dedup(frames):
+    uniq = []
+    for f in frames:
+        if not any(np.allclose(f, g, atol=1e-8) for g in uniq):
+            uniq.append(f)
+    return uniq
+
+
+def candidate_lines(X, sym, m, kind, z, tol=None):
+    """Step 1: one frame (rows = x, y, z) per set of candidate axis lines of a symmetric or spherical
+    top. Signs and names are left to step 3 (named_frames); they never change an |s|.
+      symmetric: z on the C_n axis, y through an atom of the smallest set, x = y cross z -- one set per
+                 direction to those atoms modulo 90 deg (180 deg reverses y, 90 deg swaps x and y);
+      spherical: one set per triple of perpendicular C2 axes (C4 for O/Oh): one for T..Oh, five for I/Ih."""
     tol = SYM_TOL if tol is None else tol
-    out = []
     if kind == "symmetric":
         atoms, P, rad = smallest_set(X, sym, m, z)
-        for i in atoms:
-            y = P[i] / rad[i]
-            base = np.array([np.cross(y, z), y, z])
-            out += [D @ base for D in SIGNS]
+        cands = [np.array([np.cross(P[i] / rad[i], z), P[i] / rad[i], z]) for i in atoms]
     elif kind == "spherical":
         ax = c2_axes(X, sym, tol)
         c4 = [a for a in ax if maps_onto_itself(X, sym, rotation(a, np.pi / 2), tol)]
         pool = c4 if len(c4) >= 3 else ax
-        # every mutually perpendicular triple: one set of lines for T, Th, Td, O, Oh; five for I, Ih
-        trips = [(a, b, c) for a, b, c in itertools.combinations(pool, 3)
+        cands = [np.array([a, b, c if np.linalg.det([a, b, c]) > 0 else -c])
+                 for a, b, c in itertools.combinations(pool, 3)
                  if abs(a @ b) < 1e-6 and abs(a @ c) < 1e-6 and abs(b @ c) < 1e-6]
-        for trip in trips:
-            for perm in itertools.permutations(range(3)):
-                for sg in itertools.product((1, -1), repeat=3):
-                    f = np.array([sg[k] * trip[perm[k]] for k in range(3)])
-                    if np.linalg.det(f) > 0:
-                        out.append(f)
-    uniq = []
-    for f in out:
-        if not any(np.allclose(f, g, atol=1e-8) for g in uniq):
-            uniq.append(f)
-    return uniq
+    else:
+        return []
+    reps, seen = [], set()
+    for f in cands:
+        k = line_set(f)
+        if k not in seen:
+            seen.add(k)
+            reps.append(f)
+    return reps
+
+
+def named_frames(X, sym, m, kind, f):
+    """Step 3's choices: every allowed right-handed frame on the axis lines of f.
+      symmetric: z stays on the C_n axis; y along either in-plane line of f that passes through an atom
+                 of the smallest set (both lines when 4 | n), with the 4 right-handed sign patterns;
+      spherical: the 3! orderings x 4 right-handed sign patterns of the three lines."""
+    if kind == "symmetric":
+        z = f[2]
+        atoms, P, rad = smallest_set(X, sym, m, z)
+        dirs = P[atoms] / rad[atoms, None]
+        out = []
+        for y in (f[0], f[1]):
+            if np.any(np.abs(dirs @ y) > 1 - 1e-6):
+                base = np.array([np.cross(y, z), y, z])
+                out += [D @ base for D in SIGNS]
+    else:
+        out = [g for g in (np.array([sg[k] * f[perm[k]] for k in range(3)])
+                           for perm in itertools.permutations(range(3))
+                           for sg in itertools.product((1, -1), repeat=3))
+               if np.linalg.det(g) > 0]
+    return _dedup(out)
+
+
+def candidate_frames(X, sym, m, kind, z, tol=None):
+    """All allowed right-handed frames of a symmetric or spherical top: the step-3 names of every step-1
+    set of axis lines (for analyses; select_frame scores one frame per set)."""
+    return [g for f in candidate_lines(X, sym, m, kind, z, tol) for g in named_frames(X, sym, m, kind, f)]
 
 
 def _line_key(r):
@@ -479,25 +514,23 @@ def select_frame(X, sym, m, bonds, vecs, keep_input_frame=None, tol=None, tie_br
         return f, dict(kind=kind, n=0, evaluations=info["scorings"], tie_break=tie_break, values=[info["value"]],
                        step=info["step"])
     axes = "xy" if kind == "symmetric" else "xyz"
-    groups = {}
-    for f in candidate_frames(X, sym, m, kind, z, tol):
-        groups.setdefault(line_set(f), []).append(f)
-    if len(groups) == 1:
-        score = {k: 0.0 for k in groups}
-        nev = 0
+    reps = candidate_lines(X, sym, m, kind, z, tol)                       # step 1: one frame per set of lines
+    if len(reps) == 1:
+        score, nev = [0.0], 0
     else:
-        score = {k: step2_value(X, sym, bonds, vecs, fs[0], axes, tie_break) for k, fs in groups.items()}
-        nev = len(groups)
-    best = max(score.values())
-    keep = [f for k, fs in groups.items() if score[k] >= best - TIE_TOL for f in fs]
-    tied = sum(score[k] >= best - TIE_TOL for k in groups)
-    info = dict(kind=kind, n=n, evaluations=nev, tie_break=tie_break, values=sorted(score.values(), reverse=True))
+        score = [step2_value(X, sym, bonds, vecs, f, axes, tie_break) for f in reps]   # step 2
+        nev = len(reps)
+    best = max(score)
+    winners = [f for f, s in zip(reps, score) if s >= best - TIE_TOL]
+    tied = len(winners)
+    info = dict(kind=kind, n=n, evaluations=nev, tie_break=tie_break, values=sorted(score, reverse=True))
     if keep_input_frame:
-        for fs in groups.values():
-            for f in fs:
-                if np.allclose(f, np.eye(3), atol=1e-4):
-                    return f, dict(info, step=f"{kind}: input frame kept")
-    if len(groups) == 1:
+        for f in reps:
+            for g in named_frames(X, sym, m, kind, f):
+                if np.allclose(g, np.eye(3), atol=1e-4):
+                    return g, dict(info, step=f"{kind}: input frame kept")
+    keep = [g for f in winners for g in named_frames(X, sym, m, kind, f)]   # step 3 names the winner
+    if len(reps) == 1:
         step = f"{kind}: one set of axis lines + naming"
     elif tied == 1:
         step = f"{kind}: {tie_break} + naming"

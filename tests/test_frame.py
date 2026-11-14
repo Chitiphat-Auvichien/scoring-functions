@@ -281,3 +281,35 @@ def test_linear_names_without_in_plane_scores_do_not_depend_on_the_input_orienta
         Q = _random_rotation()
         f1, _ = FR.select_frame(X @ Q.T, sym, m, bonds, [v @ Q.T for v in vecs])
         assert np.allclose(f1 @ Q, f0, atol=1e-6)                                   # same names and signs
+
+
+def _ring(r, angles_deg, h):
+    return [[r * np.cos(np.radians(a)), r * np.sin(np.radians(a)), h] for a in angles_deg]
+
+
+def test_line_set_one_key_per_line_at_45_degrees():
+    # S8 crown (D4d): top S at 0, 90, 180, 270 deg, bottom S at 45, 135, ... -> lines {0, 90} and {45, 135}
+    X = np.array(_ring(1.7, (0, 90, 180, 270), 0.5) + _ring(1.7, (45, 135, 225, 315), -0.5))
+    sym, m = ["S"] * 8, np.full(8, 32.06)
+    kind, z, n = FR.detect_top(X, sym, m)
+    assert (kind, n) == ("symmetric", 4)
+    cands = FR.candidate_frames(X, sym, m, kind, z)
+    assert len({FR.line_set(f) for f in cands}) == 2           # 2n-rule with the S8 axis: 8/4
+    f45 = FR.rotation(np.array([0, 0, 1.0]), np.pi / 4)
+    assert len({FR.line_set(D @ f45) for D in FR.SIGNS}) == 1  # sign patterns never split a line set
+
+
+def test_s4_top_is_symmetric_and_its_frame_does_not_depend_on_the_input_orientation():
+    # allene (D2d): equal perpendicular moments, highest proper axis C2 -> found through its S4 axis
+    X = np.array([[0, 0, 0], [0, 0, 1.31], [0, 0, -1.31]] + _ring(0.93, (0, 180), 1.87) + _ring(0.93, (90, 270), -1.87))
+    sym, bonds = ["C"] * 3 + ["H"] * 4, [(0, 1), (0, 2), (1, 3), (1, 4), (2, 5), (2, 6)]
+    m = np.array([12.011] * 3 + [1.008] * 4)
+    kind, z, n = FR.detect_top(X, sym, m)
+    assert kind == "symmetric" and n == 2 and abs(abs(z[2]) - 1) < 1e-8
+    f0, info = FR.select_frame(X, sym, m, bonds, [])
+    assert info["step"] == "symmetric: one set of axis lines + naming"
+    Y0 = X @ f0.T
+    for _ in range(5):
+        Q = _random_rotation()
+        f1, _ = FR.select_frame(X @ Q.T, sym, m, bonds, [])
+        assert np.allclose((X @ Q.T) @ f1.T, Y0, atol=1e-6)

@@ -8,9 +8,12 @@ rule that depends only on the geometry and the input modes, so the same input gi
 same frame in any orientation:
 
 Step 1 (symmetry, symmetric and spherical tops). As in Gaussian's standard orientation:
-    z is the C_n axis; y passes through an atom of the smallest set of symmetry-equivalent
-    off-axis atoms; x = y cross z. Spherical tops: every set of three mutually
-    perpendicular C2 axes (C4 axes for O/Oh). These are the *allowed* frames.
+    z is the C_n axis (the S_4 axis of D2d/S4 tops, which have no C_n with n >= 3); y passes
+    through an atom of the smallest set of symmetry-equivalent off-axis atoms; x = y cross z.
+    Spherical tops: every set of three mutually perpendicular C2 axes (C4 axes for O/Oh).
+    These are the *allowed* frames. Frames on the same axis lines form one candidate: one per
+    direction to an atom of that set, modulo 90 deg -- n of them (n/2 for even n, n/4 if 4 | n)
+    when the set projects onto n directions; with an S_2n axis use 2n.
 Step 2 (tie-break). Among the allowed frames, grouped by their set of axis lines, the one
     with the largest value of the step-2 criterion over the input modes k (before any ideal
     references are added). The rotatable axes Q are x, y (symmetric top), x, y, z
@@ -181,7 +184,8 @@ def c2_axes(X, sym, tol):
 
 
 def detect_top(X, sym, m, tol=None):
-    """('linear' | 'spherical' | 'symmetric' | 'asymmetric', unique axis or None, n of C_n)."""
+    """('linear' | 'spherical' | 'symmetric' | 'asymmetric', unique axis or None, n of C_n).
+    Symmetric: a proper C_n with n >= 3, or an S_4 axis (D2d, S4: highest proper axis C_2, returned n = 2)."""
     tol = SYM_TOL if tol is None else tol
     mom, W = np.linalg.eigh(inertia(X, m))
     if mom[0] <= LIN_TOL * mom.max():
@@ -195,6 +199,12 @@ def detect_top(X, sym, m, tol=None):
         for n in range(8, 2, -1):
             if maps_onto_itself(X, sym, rotation(W[:, k], 2 * np.pi / n), tol):
                 return "symmetric", W[:, k], n
+    # S_4 without a proper C_n>=3 (allene, D2d; S4): two equal moments, so the eigenvectors alone would leave the
+    # perpendicular axes arbitrary. (S_2n for n >= 3 contains C_n and is found above.)
+    for k in range(3):
+        u = W[:, k]
+        if maps_onto_itself(X, sym, (np.eye(3) - 2 * np.outer(u, u)) @ rotation(u, np.pi / 2), tol):
+            return "symmetric", u, 2
     return "asymmetric", None, 0
 
 
@@ -252,9 +262,16 @@ def candidate_frames(X, sym, m, kind, z, tol=None):
     return uniq
 
 
+def _line_key(r):
+    """One key per line (r and -r): the sign that makes the first clearly nonzero component positive.
+    (Signing by the largest component fails for a line with two equal largest components, e.g. at 45 deg.)"""
+    i = int(np.flatnonzero(np.abs(r) > 1e-4)[0])
+    return tuple(np.round(r if r[i] > 0 else -r, 4) + 0.0)
+
+
 def line_set(f):
     """The unordered set of axis lines of a frame (frames on the same lines give the same |s| up to names)."""
-    return tuple(sorted(tuple(np.round(r if r[np.argmax(np.abs(r))] > 0 else -r, 4)) for r in f))
+    return tuple(sorted(_line_key(r) for r in f))
 
 
 def convention_key(X, sym, m, f):

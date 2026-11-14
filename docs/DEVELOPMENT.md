@@ -66,7 +66,7 @@ The T/R scores are evaluated in a frame chosen from the input geometry and the i
   `LINEAR_WINDOW_DEG` = 1°), averaged over the votes in that window. Translations carry the largest possible
   weight (`|w| = √N`), so 3N input follows the T vectors. `--linear-turn scan`: the turn with the largest
   tie-break criterion (`Q = y, z`) from a 0.1° rescoring scan (the earlier rule; ~200× slower, frames within
-  0.1° of the vector rule on the roster). Either way `y`/`z` are named by the first mode with an in-plane score.
+  0.1° of the vector rule on the roster). Either way `y`/`z` are named by the first mode with an in-plane score (if none, e.g. HCCH bends: by the first in-plane atomic displacement).
 * EMIT vectors are stored in `MIT()`'s frame and are returned to the input frame
   (`ModeScorer.mit_rotation_matrix`) before the frame is chosen; `--emit-projection` asserts that the
   normal-mode and EMIT pools end in the same frame.

@@ -379,7 +379,10 @@ def vector_turn(vecs, ax, u, window_deg=None):
 
 def _linear_named(X, sym, bonds, vecs, ax, u, phi):
     """Of the four frames phi + k*90 deg, the one whose first mode with an in-plane score
-    (|s_y| != |s_z|) has its larger component on +y, positive."""
+    (|s_y| != |s_z|) has its larger component on +y, positive. If no mode has one (e.g. the
+    bends of HCCH, whose in-plane T and R scores all vanish), the first in-plane atomic
+    displacement (first mode in input order, first moving atom) decides the same way, so
+    the names never depend on the input orientation."""
     cands = [_linear_frame_at(ax, u, phi + k * np.pi / 2) for k in range(4)]
     S = [_scores_in_frame(X, sym, bonds, vecs, f) for f in cands]
     for kmode in range(len(vecs)):
@@ -388,6 +391,13 @@ def _linear_named(X, sym, bonds, vecs, ax, u, phi):
             if abs(abs(a0) - abs(b0)) > 1e-6:
                 ok = [abs(s[kmode][K]["y"]) > abs(s[kmode][K]["z"]) and s[kmode][K]["y"] > 0 for s in S]
                 return cands[int(np.argmax(ok))]
+    for v in vecs:
+        P = v - np.outer(v @ ax, ax)
+        n_ = np.linalg.norm(P, axis=1)
+        if n_.max() > 1e-6:
+            p = P[int(np.argmax(n_ > 1e-6))]
+            ok = [abs(p @ f[1]) > abs(p @ f[2]) + 1e-9 and p @ f[1] > 0 for f in cands]
+            return cands[int(np.argmax(ok))]
     return cands[0]
 
 

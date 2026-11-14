@@ -254,3 +254,30 @@ def test_eigh_rule_restores_the_submitted_frame():
     ref = ModeScorer(raw["atoms"], raw["coords"], raw["bonds"])
     ref.MIT()
     assert np.allclose(sc.coords, ref.coords, atol=1e-12)
+
+
+def _hcch_bends():
+    """Synthetic HCCH along x (COM at the origin) with its two bend pairs (cis: H and C opposite,
+    trans: centrosymmetric). Every in-plane s[T_Q] and s[R_Q] of these modes vanishes, so only the
+    displacements can name y and z."""
+    X = np.array([[-1.66, 0, 0], [-0.60, 0, 0], [0.60, 0, 0], [1.66, 0, 0]])
+    sym, bonds = ["H", "C", "C", "H"], [(0, 1), (1, 2), (2, 3)]
+    m = np.array([1.008, 12.011, 12.011, 1.008])
+    vecs = []
+    for e in (np.array([0, 0.3, 0.95]), np.array([0, -0.95, 0.3])):            # a pair at an arbitrary turn
+        e = e / np.linalg.norm(e)
+        cis = np.array([e, -e * 1.008 / 12.011, -e * 1.008 / 12.011, e])
+        trans = np.array([e, -e * 0.7, e * 0.7, -e])
+        vecs += [cis / np.linalg.norm(cis), trans / np.linalg.norm(trans)]
+    stretch = np.array([[1, 0, 0], [-0.5, 0, 0], [0.5, 0, 0], [-1, 0, 0]], float)
+    return X, sym, m, bonds, vecs + [stretch / np.linalg.norm(stretch)]
+
+
+def test_linear_names_without_in_plane_scores_do_not_depend_on_the_input_orientation():
+    X, sym, m, bonds, vecs = _hcch_bends()
+    f0, info = FR.select_frame(X, sym, m, bonds, vecs)
+    assert info["kind"] == "linear" and np.linalg.det(f0) > 0
+    for _ in range(5):
+        Q = _random_rotation()
+        f1, _ = FR.select_frame(X @ Q.T, sym, m, bonds, [v @ Q.T for v in vecs])
+        assert np.allclose(f1 @ Q, f0, atol=1e-6)                                   # same names and signs

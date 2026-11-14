@@ -604,9 +604,9 @@ def main():
                                  "|s| of mode k over the rotatable axes.")
     dev_group.add_argument("--linear-turn", choices=list(frame_rule.LINEAR_RULES), default="vector",
                             dest="linear_turn",
-                            help="Turn of a linear molecule about its axis. 'vector' (default): the direction "
-                                 "with the highest density of the modes' in-plane sum_A d^A (modulo 90 deg, "
-                                 "weight |sum_A d^A|). 'scan': the turn with the largest --tie-break "
+                            help="Turn of a linear molecule about its axis. 'vector' (default): y on the line "
+                                 "with the highest density of the modes' in-plane sum_A d^A (sign ignored, "
+                                 "weight |sum_A d^A|), z = x cross y. 'scan': the turn with the largest --tie-break "
                                  "criterion from a 0.1 deg rescoring scan.")
     dev_group.add_argument("--keep-input-frame", action="store_true", dest="keep_input_frame",
                             help="Keep the input frame (e.g. Gaussian's standard orientation) when "

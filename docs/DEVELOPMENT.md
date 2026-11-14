@@ -60,10 +60,10 @@ The T/R scores are evaluated in a frame chosen from the input geometry and the i
 * **Asymmetric tops** — eigenvectors of the inertia tensor in increasing moment order, right-handed, signs
   by the step-3 key.
 * **Linear molecules** — `x` = molecular axis towards the heaviest atom off the centre; the turn about `x`
-  from the mode vectors (`--linear-turn vector`, default): each mode votes for the direction of its in-plane
-  `w = Σ_A d^A` with weight `|w|`, directions modulo 90° (`y` and `z` are both axes; a degenerate pair points
-  at 90°). The turn is the direction with the highest density of votes (largest summed `|w|` within
-  `LINEAR_WINDOW_DEG` = 1°), averaged over the votes in that window. Translations carry the largest possible
+  from the mode vectors (`--linear-turn vector`, default): each mode votes for the line of its in-plane
+  `w = Σ_A d^A` (sign ignored, like the mode's) with weight `|w|`. `y` goes on the line with the highest
+  density of votes (largest summed `|w|` within `LINEAR_WINDOW_DEG` = 1°), averaged over the votes in that
+  window, and `z = x × y` (a degenerate pair gives equal peaks 90° apart: the same axis lines). Translations carry the largest possible
   weight (`|w| = √N`), so 3N input follows the T vectors. `--linear-turn scan`: the turn with the largest
   tie-break criterion (`Q = y, z`) from a 0.1° rescoring scan (the earlier rule; ~200× slower, frames within
   0.1° of the vector rule on the roster). Either way `y`/`z` are named by the first mode with an in-plane score (if none, e.g. HCCH bends: by the first in-plane atomic displacement).

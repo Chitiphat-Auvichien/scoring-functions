@@ -326,3 +326,18 @@ def test_step1_builds_one_frame_per_set_of_axis_lines():
         assert len(reps) == (expect[n] if kind == "symmetric" else 1), mol
         allowed = FR.candidate_frames(X, sym, m, kind, z)
         assert sorted({FR.line_set(f) for f in allowed}) == sorted(FR.line_set(f) for f in reps), mol
+
+
+@pytest.mark.parametrize("mol", ["CO2", "CS2", "CSe2", "CTe2"])
+def test_linear_votes_are_lines_so_mode_signs_do_not_matter(mol):
+    raw = _load(mol)
+    X, sym, m, bonds = _com(raw)
+    vecs = _vecs(raw)
+    ax, u = FR._linear_start(X, m)
+    assert all(0 <= t < np.pi for _, t in FR.linear_votes(vecs, ax, u))
+    f0, _ = FR.frame_linear(X, sym, m, bonds, vecs)
+    for _ in range(4):
+        flips = RNG.choice([-1.0, 1.0], size=len(vecs))
+        f1, _ = FR.frame_linear(X, sym, m, bonds, [s * v for s, v in zip(flips, vecs)])
+        # same axis lines with the same names (the +y/+z signs follow the signed scores of the modes)
+        assert np.allclose(np.abs(f1 @ f0.T), np.eye(3), atol=1e-9)

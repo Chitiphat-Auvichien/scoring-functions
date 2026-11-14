@@ -34,11 +34,11 @@ Asymmetric tops: eigenvectors of the inertia tensor in increasing moment order
     (x = a, y = b, z = c), right-handed, signs by the step-3 key.
 Linear molecules: x = the molecular axis, +x towards the heaviest atom off the centre.
     The turn about x follows the mode vectors ("vector", default): each mode k votes for the
-    direction of w_k = sum_A d_k^A projected onto the yz plane, with weight |w_k|. Directions
-    count modulo 90 deg (y and z are both axes, and the two members of a degenerate pair
-    point at 90 deg to each other). The turn is the direction with the highest density of
-    votes (largest summed weight within LINEAR_WINDOW_DEG), averaged over the votes in that
-    window; ties: the larger single vote, then the smallest turn. No vote (no mode moves the
+    line of w_k = sum_A d_k^A projected onto the yz plane (its sign is arbitrary, as is the
+    mode's), with weight |w_k|. y goes on the line with the highest density of votes (largest
+    summed weight within LINEAR_WINDOW_DEG), averaged over the votes in that window, and
+    z = x cross y; ties: the larger single vote, then the smallest turn (the two members of a
+    degenerate pair give equal peaks 90 deg apart, i.e. the same axis lines). No vote (no mode moves the
     atoms' sum off the axis): +y along the first in-plane atomic displacement. Translations
     carry the largest possible weight (|w| = sqrt(N) for a normalised vector), so 3N input
     follows the T vectors. Option "scan": the turn with the largest step-2 criterion, found
@@ -71,7 +71,7 @@ LIN_TOL = 1e-6
 SPHERICAL_TOL = 1e-4
 # Step of the linear-molecule turn scan (degrees; linear rule "scan").
 LINEAR_STEP_DEG = 0.1
-# Linear rule "vector": votes within this angle (degrees, modulo 90) count as one direction.
+# Linear rule "vector": votes whose lines lie within this angle (degrees) count as one line.
 LINEAR_WINDOW_DEG = 1.0
 # Linear rule "vector": an in-plane |sum_A d^A| at or below this casts no vote.
 LINEAR_VOTE_TOL = 1e-6
@@ -395,9 +395,9 @@ def _linear_frame_at(ax, u, phi):
 
 
 def linear_votes(vecs, ax, u, tol=None):
-    """One vote per mode: (|w|, angle of w in [0, pi/2)) for w = sum_A d^A projected onto the
-    plane perpendicular to ax, the angle measured from u towards ax x u. Modes with
-    |w| <= tol cast no vote."""
+    """One vote per mode: (|w|, angle of the line of w in [0, pi)) for w = sum_A d^A projected
+    onto the plane perpendicular to ax, the angle measured from u towards ax x u. A line, not a
+    direction: d and -d are the same mode. Modes with |w| <= tol cast no vote."""
     tol = LINEAR_VOTE_TOL if tol is None else tol
     v = np.cross(ax, u)
     out = []
@@ -406,27 +406,29 @@ def linear_votes(vecs, ax, u, tol=None):
         a, b = float(w @ u), float(w @ v)
         r = float(np.hypot(a, b))
         if r > tol:
-            out.append((r, float(np.arctan2(b, a) % (np.pi / 2))))
+            out.append((r, float(np.arctan2(b, a) % np.pi)))
     return out
 
 
 def vector_turn(vecs, ax, u, window_deg=None):
-    """The turn (radians, in [0, pi/2)) with the highest density of mode votes, averaged over
-    the votes within the window of the densest one. Returns (phi or None, density, n_votes)."""
+    """The turn (radians, in [0, pi)) putting y on the densest line of mode votes, averaged over
+    the votes within the window of the densest one; z = x cross y follows. The two members of a
+    degenerate pair give equal peaks 90 deg apart (same axis lines); ties: the larger single
+    vote, then the smallest turn. Returns (phi or None, density, n_votes)."""
     win = np.radians(LINEAR_WINDOW_DEG if window_deg is None else window_deg)
     votes = linear_votes(vecs, ax, u)
     if not votes:
         return None, 0.0, 0
     w = np.array([r for r, _ in votes])
     th = np.array([t for _, t in votes])
-    q = np.pi / 2
-    dist = np.abs((th[:, None] - th[None, :] + q / 2) % q - q / 2)       # angular distance modulo 90 deg
+    q = np.pi
+    dist = np.abs((th[:, None] - th[None, :] + q / 2) % q - q / 2)       # angle between two lines
     near = dist <= win + 1e-12
     dens = near @ w
     best = min(range(len(votes)), key=lambda k: (-round(float(dens[k]), 9), -round(float(w[k]), 9), th[k]))
     sel = near[best]
-    z = np.sum(w[sel] * np.exp(4j * th[sel]))                          # 4-fold mean of the peak's votes
-    return float((np.angle(z) / 4) % q), float(dens[best]), len(votes)
+    z = np.sum(w[sel] * np.exp(2j * th[sel]))                          # mean line of the peak's votes
+    return float((np.angle(z) / 2) % q), float(dens[best]), len(votes)
 
 
 def _linear_named(X, sym, bonds, vecs, ax, u, phi):

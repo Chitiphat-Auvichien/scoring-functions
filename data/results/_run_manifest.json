@@ -1,9 +1,8 @@
 {
   "v_weighting": "mu",
-  "git_commit": "c4c877bcc2a813174fa9e114193ea6999f537037",
-  "timestamp": "2026-11-13T21:04:59",
+  "git_commit": "45217ea6a8b654e2b49820e64af608f5afd1453b",
+  "timestamp": "2026-11-14T16:07:40",
   "stages_run": [
-    "si_tables",
     "si_analyses"
   ],
   "molecules": [
@@ -35,14 +34,6 @@
     "XeF2Cl2"
   ],
   "outputs": [
-    "..\\..\\JCC\\JCC_SI\\tables\\tab_benzene_emit_full.tex",
-    "..\\..\\JCC\\JCC_SI\\tables\\tab_benzene_emit_summary.tex",
-    "..\\..\\JCC\\JCC_SI\\tables\\tab_benzene_normal.tex",
-    "..\\..\\JCC\\JCC_SI\\tables\\tab_cartesian_benzene.tex",
-    "..\\..\\JCC\\JCC_SI\\tables\\tab_cartesian_water.tex",
-    "..\\..\\JCC\\JCC_SI\\tables\\tab_library_scores.tex",
-    "..\\..\\JCC\\JCC_SI\\tables\\tab_transferability_misclassified.tex",
-    "..\\..\\JCC\\JCC_SI\\tables\\tab_water_scores.tex",
     "data\\figures\\fig_si_frame_spread.pdf",
     "data\\figures\\fig_si_frame_spread.png",
     "data\\figures\\fig_si_onaxis_displacement.pdf",

@@ -60,7 +60,13 @@ The T/R scores are evaluated in a frame chosen from the input geometry and the i
 * **Asymmetric tops** — eigenvectors of the inertia tensor in increasing moment order, right-handed, signs
   by the step-3 key.
 * **Linear molecules** — `x` = molecular axis towards the heaviest atom off the centre; the turn about `x`
-  with the largest tie-break criterion (`Q = y, z`) from a 0.1° rescoring scan; `y`/`z` named by the first mode with an in-plane score.
+  from the mode vectors (`--linear-turn vector`, default): each mode votes for the direction of its in-plane
+  `w = Σ_A d^A` with weight `|w|`, directions modulo 90° (`y` and `z` are both axes; a degenerate pair points
+  at 90°). The turn is the direction with the highest density of votes (largest summed `|w|` within
+  `LINEAR_WINDOW_DEG` = 1°), averaged over the votes in that window. Translations carry the largest possible
+  weight (`|w| = √N`), so 3N input follows the T vectors. `--linear-turn scan`: the turn with the largest
+  tie-break criterion (`Q = y, z`) from a 0.1° rescoring scan (the earlier rule; ~200× slower, frames within
+  0.1° of the vector rule on the roster). Either way `y`/`z` are named by the first mode with an in-plane score.
 * EMIT vectors are stored in `MIT()`'s frame and are returned to the input frame
   (`ModeScorer.mit_rotation_matrix`) before the frame is chosen; `--emit-projection` asserts that the
   normal-mode and EMIT pools end in the same frame.
@@ -69,6 +75,7 @@ Flags:
 * `--frame-rule {symmetry,eigh}` — `symmetry` (default) is the rule above; `eigh` restores the submitted
   version's `MIT()` frame (eigenvectors with the heaviest-atom sign fix; can be left-handed).
 * `--tie-break {tmax,gap}` — step 2 criterion (above); `tmax` is the default, `gap` is the R1.5 report's `ΣD`.
+* `--linear-turn {vector,scan}` — turn of a linear molecule about its axis (above); `vector` is the default.
 * `--keep-input-frame` — keep the input frame (e.g. Gaussian's standard orientation) when it is one of the
   allowed frames. Without it the rule alone reproduces Gaussian's axis lines for 25 of the 40 roster tops (24 with `--tie-break gap`)
   with 3N−6 input (all 40 with 3N input); the rest get a symmetry-equivalent frame.
@@ -78,8 +85,11 @@ Known limits:
 * `SYM_TOL` is calibrated on the roster (tops symmetric to ≤ 4.5e-6 Å; the ten C2v near-tops miss a `C_n`
   axis by ≥ 5e-5 Å and stay asymmetric). Coordinates printed more coarsely than 1e-5 Å need a larger value.
 * Accidentally equal moments without a `C_n` (n ≥ 3) axis are not covered (the eigenvector frame is then arbitrary).
-* Linear molecules: the turn is fixed to the 0.1° step (re-oriented input: axes within 0.06°, per-axis
-  scores within 4e-4). With a central atom, input bent by more than the on-axis cut-off (`ON_AXIS_TOL`)
+* Linear molecules: the vector turn needs at least one mode whose atoms' summed displacement leaves the
+  axis (any u-symmetry bend or a perpendicular T/R; in a centrosymmetric molecule g modes sum to zero);
+  otherwise `+y` follows the first in-plane atomic displacement. Votes closer than 1° count as one
+  direction, so displacements printed to few decimals can split a peak. `scan` is fixed to its 0.1° step
+  (re-oriented input: axes within 0.08°). With a central atom, input bent by more than the on-axis cut-off (`ON_AXIS_TOL`)
   makes `s[R_y]`, `s[R_z]` jump with the turn.
 * Axis names and signs can depend on the atom numbering where the alternatives are symmetry-equivalent;
   never on the input orientation, and never in `|s|`, labels or the assignment.

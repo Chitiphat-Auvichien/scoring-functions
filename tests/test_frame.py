@@ -11,7 +11,8 @@ rule's reference prototype (checks I1-I12 and S1-S5 of the R1.5 analysis):
     submitted MIT frame), and the normal-mode and EMIT pools end in the same frame;
   * re-oriented / renumbered input gives the same assignment, labels and |scores|;
   * re-oriented input with the same numbering gives exactly the same signed frame;
-  * asymmetric frames are right-handed; linear molecules: axes within one scan step.
+  * asymmetric frames are right-handed; linear molecules: the vector turn is orientation-independent,
+    within one scan step of the scan, and follows the densest direction of the modes' sum_A d^A.
 """
 import os
 import sys
@@ -216,12 +217,31 @@ def test_linear_molecule_scan_reproducible_and_3n_returns_its_frame():
     assert np.allclose(np.abs(f0[0]), np.abs(FR._linear_start(X, m)[0]), atol=1e-12)   # x = molecular axis
     Q = _random_rotation()
     f1, _ = FR.select_frame(X @ Q.T, sym, m, bonds, [v @ Q.T for v in vecs])
-    cosines = np.sum((f1 @ Q) * f0, axis=1)
-    assert np.all(cosines > np.cos(np.radians(FR.LINEAR_STEP_DEG + 1e-6)))           # same names and signs
+    assert np.allclose(f1 @ Q, f0, atol=1e-6)                                        # same names and signs
     s0 = ModeScorer(sym, X @ f0.T, bonds)
     tr = [md["vector"] @ f0 for md in s0.construct_T() + s0.construct_R()]
     f3, _ = FR.select_frame(X, sym, m, bonds, vecs + tr)
     assert np.allclose(np.abs(f3 @ f0.T).max(axis=1), 1, atol=1e-6)
+
+
+@pytest.mark.parametrize("mol", ["CO2", "CS2", "CSe2", "CTe2"])
+def test_linear_vector_turn_follows_the_densest_direction_and_matches_the_scan(mol):
+    raw = _load(mol)
+    X, sym, m, bonds = _com(raw)
+    vecs = _vecs(raw)
+    fv, iv = FR.frame_linear(X, sym, m, bonds, vecs, linear_rule="vector")
+    fs, _ = FR.frame_linear(X, sym, m, bonds, vecs, linear_rule="scan")
+    assert iv["step"].startswith("linear: vector")
+    assert np.all(np.sum(fv * fs, axis=1) > np.cos(np.radians(FR.LINEAR_STEP_DEG)))  # within one scan step
+    # 3N input with the T/R vectors built at 62 deg: the densest direction (T, |w| = sqrt(N)) wins
+    # over the bends, where a plain 4-fold mean of all votes would land in between
+    ax, u = FR._linear_start(X, m)
+    f62 = FR._linear_frame_at(ax, u, np.radians(62.0))
+    s0 = ModeScorer(sym, X @ f62.T, bonds)
+    tr = [md["vector"] @ f62 for md in s0.construct_T() + s0.construct_R()]
+    f3, i3 = FR.frame_linear(X, sym, m, bonds, vecs + tr, linear_rule="vector")
+    assert abs(i3["phi"] - 62.0) < 1e-6
+    assert np.allclose(np.abs(f3 @ f62.T).max(axis=1), 1, atol=1e-9)
 
 
 def test_eigh_rule_restores_the_submitted_frame():

@@ -173,7 +173,8 @@ def build_scorer_and_final(raw, mode_type, v_weighting=None):
     identical mode list.
       - the frame is chosen by src/frame.py (R1.5 rule: symmetry + step-2
         tie-break (--tie-break: tmax default, gap = sum D) + naming convention; asymmetric tops = eigenvector axes,
-        right-handed; linear = turn scan about the molecular axis) from the
+        right-handed; linear = turn about the molecular axis from the modes'
+        in-plane sum_A d^A, --linear-turn) from the
         COM-shifted input geometry and the input modes; geometry and mode
         vectors are then expressed in it. --frame-rule eigh restores the
         submitted version's MIT() frame.
@@ -597,10 +598,16 @@ def main():
     dev_group.add_argument("--tie-break", choices=list(frame_rule.TIE_BREAKS), default="tmax",
                             dest="tie_break",
                             help="Step 2 of the symmetry frame rule, among the allowed sets of axis lines "
-                                 "(and the turn of a linear molecule). 'tmax' (default): largest sum of "
+                                 "(and the turn of a linear molecule with --linear-turn scan). 'tmax' (default): largest sum of "
                                  "|s[T_Q]| over the rotatable axes, each axis from a different input mode. "
                                  "'gap': largest sum_k (D_T,k + D_R,k), D = gap between the two largest "
                                  "|s| of mode k over the rotatable axes.")
+    dev_group.add_argument("--linear-turn", choices=list(frame_rule.LINEAR_RULES), default="vector",
+                            dest="linear_turn",
+                            help="Turn of a linear molecule about its axis. 'vector' (default): the direction "
+                                 "with the highest density of the modes' in-plane sum_A d^A (modulo 90 deg, "
+                                 "weight |sum_A d^A|). 'scan': the turn with the largest --tie-break "
+                                 "criterion from a 0.1 deg rescoring scan.")
     dev_group.add_argument("--keep-input-frame", action="store_true", dest="keep_input_frame",
                             help="Keep the input frame (e.g. Gaussian's standard orientation) when "
                                  "it is one of the frames the symmetry rule allows.")
@@ -613,6 +620,7 @@ def main():
     frame_rule.set_frame_rule(args.frame_rule)
     frame_rule.set_keep_input_frame(args.keep_input_frame)
     frame_rule.set_tie_break(args.tie_break)
+    frame_rule.set_linear_rule(args.linear_turn)
     if args.sym_tol is not None:
         frame_rule.set_sym_tol(args.sym_tol)
 

@@ -28,10 +28,19 @@ Step 3 (naming; no physical effect). +z towards the heaviest on-axis atom off th
     score magnitude, a label or the T/R assignment.
 Asymmetric tops: eigenvectors of the inertia tensor in increasing moment order
     (x = a, y = b, z = c), right-handed, signs by the step-3 key.
-Linear molecules: x = the molecular axis, +x towards the heaviest atom off the centre;
-    the turn about x with the largest step-2 criterion, found by rescoring every mode at turns of
-    0.1 deg from the input frame (ties: the smallest turn); y and z then named by the
-    modes (the first mode with an in-plane score has its larger component on +y).
+Linear molecules: x = the molecular axis, +x towards the heaviest atom off the centre.
+    The turn about x follows the mode vectors ("vector", default): each mode k votes for the
+    direction of w_k = sum_A d_k^A projected onto the yz plane, with weight |w_k|. Directions
+    count modulo 90 deg (y and z are both axes, and the two members of a degenerate pair
+    point at 90 deg to each other). The turn is the direction with the highest density of
+    votes (largest summed weight within LINEAR_WINDOW_DEG), averaged over the votes in that
+    window; ties: the larger single vote, then the smallest turn. No vote (no mode moves the
+    atoms' sum off the axis): +y along the first in-plane atomic displacement. Translations
+    carry the largest possible weight (|w| = sqrt(N) for a normalised vector), so 3N input
+    follows the T vectors. Option "scan": the turn with the largest step-2 criterion, found
+    by rescoring every mode at turns of 0.1 deg (ties: the smallest turn). Either way y and z
+    are then named by the modes (the first mode with an in-plane score has its larger
+    component on +y).
 
 All functions work in the *input* coordinates, shifted to the centre of mass. A frame F
 is a 3x3 matrix whose rows are the new x, y, z axes; coordinates and mode vectors go into
@@ -56,8 +65,12 @@ TIE_TOL = 1e-6
 LIN_TOL = 1e-6
 # Spherical top: moments equal to this relative tolerance (and three perpendicular C2 axes).
 SPHERICAL_TOL = 1e-4
-# Step of the linear-molecule turn scan (degrees).
+# Step of the linear-molecule turn scan (degrees; linear rule "scan").
 LINEAR_STEP_DEG = 0.1
+# Linear rule "vector": votes within this angle (degrees, modulo 90) count as one direction.
+LINEAR_WINDOW_DEG = 1.0
+# Linear rule "vector": an in-plane |sum_A d^A| at or below this casts no vote.
+LINEAR_VOTE_TOL = 1e-6
 # Geometric tolerance for "on the axis", "in the plane", equivalent radii/heights (Angstrom).
 GEOM_TOL = 1e-3
 
@@ -69,6 +82,20 @@ _keep_input_frame = False
 # Step-2 criterion (main.py --tie-break): "tmax" (default) or "gap" (sum D).
 TIE_BREAKS = ("tmax", "gap")
 _tie_break = "tmax"
+# Turn of a linear molecule about its axis (main.py --linear-turn): "vector" (default) or "scan".
+LINEAR_RULES = ("vector", "scan")
+_linear_rule = "vector"
+
+
+def set_linear_rule(rule):
+    global _linear_rule
+    if rule not in LINEAR_RULES:
+        raise ValueError(f"linear rule must be one of {LINEAR_RULES}, got {rule!r}")
+    _linear_rule = rule
+
+
+def get_linear_rule():
+    return _linear_rule
 
 
 def set_tie_break(rule):
@@ -315,44 +342,101 @@ def _linear_frame_at(ax, u, phi):
     return np.array([ax, c * u + s_ * v, -s_ * u + c * v])          # right-handed, x = molecular axis
 
 
-def frame_linear(X, sym, m, bonds, vecs, step_deg=None, tie_break=None):
-    """Turn about the molecular axis by a rescoring scan. Returns (frame, info)."""
-    step = LINEAR_STEP_DEG if step_deg is None else step_deg
-    tie_break = _tie_break if tie_break is None else tie_break
-    ax, u = _linear_start(X, m)
-    turns = np.radians(np.arange(0.0, 90.0, step))
-    sums = np.array([step2_value(X, sym, bonds, vecs, _linear_frame_at(ax, u, t), "yz", tie_break) for t in turns])
-    if sums.max() < TIE_TOL:
-        # No in-plane score (for "tmax": no in-plane T score) at all: the criterion is the
-        # same at every turn. +y follows the perpendicular displacement of the first moving
-        # atom (first mode in input order).
-        for v in vecs:
-            P = v - np.outer(v @ ax, ax)
-            n_ = np.linalg.norm(P, axis=1)
-            if n_.max() > 1e-6:
-                y = P[int(np.argmax(n_ > 1e-6))]
-                y = y / np.linalg.norm(y)
-                return (np.array([ax, y, np.cross(ax, y)]),
-                        dict(phi=None, value=0.0, tie_break=tie_break, scorings=len(turns), step="linear: no in-plane score"))
-        return (_linear_frame_at(ax, u, 0.0),
-                dict(phi=None, value=0.0, tie_break=tie_break, scorings=len(turns), step="linear: no in-plane displacement"))
-    i = int(np.argmax(sums >= sums.max() - TIE_TOL))
-    phi = turns[i]
+def linear_votes(vecs, ax, u, tol=None):
+    """One vote per mode: (|w|, angle of w in [0, pi/2)) for w = sum_A d^A projected onto the
+    plane perpendicular to ax, the angle measured from u towards ax x u. Modes with
+    |w| <= tol cast no vote."""
+    tol = LINEAR_VOTE_TOL if tol is None else tol
+    v = np.cross(ax, u)
+    out = []
+    for d in vecs:
+        w = np.asarray(d, dtype=float).sum(axis=0)
+        a, b = float(w @ u), float(w @ v)
+        r = float(np.hypot(a, b))
+        if r > tol:
+            out.append((r, float(np.arctan2(b, a) % (np.pi / 2))))
+    return out
+
+
+def vector_turn(vecs, ax, u, window_deg=None):
+    """The turn (radians, in [0, pi/2)) with the highest density of mode votes, averaged over
+    the votes within the window of the densest one. Returns (phi or None, density, n_votes)."""
+    win = np.radians(LINEAR_WINDOW_DEG if window_deg is None else window_deg)
+    votes = linear_votes(vecs, ax, u)
+    if not votes:
+        return None, 0.0, 0
+    w = np.array([r for r, _ in votes])
+    th = np.array([t for _, t in votes])
+    q = np.pi / 2
+    dist = np.abs((th[:, None] - th[None, :] + q / 2) % q - q / 2)       # angular distance modulo 90 deg
+    near = dist <= win + 1e-12
+    dens = near @ w
+    best = min(range(len(votes)), key=lambda k: (-round(float(dens[k]), 9), -round(float(w[k]), 9), th[k]))
+    sel = near[best]
+    z = np.sum(w[sel] * np.exp(4j * th[sel]))                          # 4-fold mean of the peak's votes
+    return float((np.angle(z) / 4) % q), float(dens[best]), len(votes)
+
+
+def _linear_named(X, sym, bonds, vecs, ax, u, phi):
+    """Of the four frames phi + k*90 deg, the one whose first mode with an in-plane score
+    (|s_y| != |s_z|) has its larger component on +y, positive."""
     cands = [_linear_frame_at(ax, u, phi + k * np.pi / 2) for k in range(4)]
     S = [_scores_in_frame(X, sym, bonds, vecs, f) for f in cands]
-    info = dict(phi=float(np.degrees(phi)), value=float(sums[i]), tie_break=tie_break, scorings=len(turns) + 4,
-                step=f"linear: scan ({tie_break})")
     for kmode in range(len(vecs)):
         for K in ("T", "R"):
             a0, b0 = S[0][kmode][K]["y"], S[0][kmode][K]["z"]
             if abs(abs(a0) - abs(b0)) > 1e-6:
                 ok = [abs(s[kmode][K]["y"]) > abs(s[kmode][K]["z"]) and s[kmode][K]["y"] > 0 for s in S]
-                return cands[int(np.argmax(ok))], info
-    return cands[0], info
+                return cands[int(np.argmax(ok))]
+    return cands[0]
+
+
+def _linear_no_turn(ax, u, vecs, tie_break, scorings, why):
+    """Nothing fixes the turn: +y along the perpendicular displacement of the first moving
+    atom (first mode in input order)."""
+    for v in vecs:
+        P = v - np.outer(v @ ax, ax)
+        n_ = np.linalg.norm(P, axis=1)
+        if n_.max() > 1e-6:
+            y = P[int(np.argmax(n_ > 1e-6))]
+            y = y / np.linalg.norm(y)
+            return (np.array([ax, y, np.cross(ax, y)]),
+                    dict(phi=None, value=0.0, tie_break=tie_break, scorings=scorings, step=f"linear: {why}"))
+    return (_linear_frame_at(ax, u, 0.0),
+            dict(phi=None, value=0.0, tie_break=tie_break, scorings=scorings, step="linear: no in-plane displacement"))
+
+
+def frame_linear(X, sym, m, bonds, vecs, step_deg=None, tie_break=None, linear_rule=None):
+    """Turn about the molecular axis, from the mode vectors ("vector") or by a rescoring
+    scan ("scan"). Returns (frame, info)."""
+    tie_break = _tie_break if tie_break is None else tie_break
+    linear_rule = _linear_rule if linear_rule is None else linear_rule
+    if linear_rule not in LINEAR_RULES:
+        raise ValueError(f"linear rule must be one of {LINEAR_RULES}, got {linear_rule!r}")
+    ax, u = _linear_start(X, m)
+    if linear_rule == "vector":
+        phi, dens, nv = vector_turn(vecs, ax, u)
+        if phi is None:
+            return _linear_no_turn(ax, u, vecs, tie_break, 0, "no vote (vector)")
+        info = dict(phi=float(np.degrees(phi)), value=dens, tie_break=tie_break, scorings=4,
+                    step=f"linear: vector ({nv} votes)")
+        return _linear_named(X, sym, bonds, vecs, ax, u, phi), info
+    step = LINEAR_STEP_DEG if step_deg is None else step_deg
+    turns = np.radians(np.arange(0.0, 90.0, step))
+    sums = np.array([step2_value(X, sym, bonds, vecs, _linear_frame_at(ax, u, t), "yz", tie_break) for t in turns])
+    if sums.max() < TIE_TOL:
+        # No in-plane score (for "tmax": no in-plane T score) at all: the criterion is the
+        # same at every turn.
+        return _linear_no_turn(ax, u, vecs, tie_break, len(turns), "no in-plane score")
+    i = int(np.argmax(sums >= sums.max() - TIE_TOL))
+    phi = turns[i]
+    info = dict(phi=float(np.degrees(phi)), value=float(sums[i]), tie_break=tie_break, scorings=len(turns) + 4,
+                step=f"linear: scan ({tie_break})")
+    return _linear_named(X, sym, bonds, vecs, ax, u, phi), info
 
 
 # ---------------------------------------------------------------- the rule
-def select_frame(X, sym, m, bonds, vecs, keep_input_frame=None, tol=None, tie_break=None):
+def select_frame(X, sym, m, bonds, vecs, keep_input_frame=None, tol=None, tie_break=None, linear_rule=None):
     """Choose the frame for COM-shifted input coordinates X and the input mode vectors `vecs`
     (as given: no ideal references). Returns (F, info); info has kind, n, evaluations,
     tie_break (the step-2 criterion), values (its value per set of axis lines, descending)
@@ -364,7 +448,7 @@ def select_frame(X, sym, m, bonds, vecs, keep_input_frame=None, tol=None, tie_br
         return frame_asymmetric(X, sym, m), dict(kind=kind, n=0, evaluations=0, tie_break=tie_break,
                                                  values=[], step="asymmetric: eigenvectors + naming")
     if kind == "linear":
-        f, info = frame_linear(X, sym, m, bonds, vecs, tie_break=tie_break)
+        f, info = frame_linear(X, sym, m, bonds, vecs, tie_break=tie_break, linear_rule=linear_rule)
         return f, dict(kind=kind, n=0, evaluations=info["scorings"], tie_break=tie_break, values=[info["value"]],
                        step=info["step"])
     axes = "xy" if kind == "symmetric" else "xyz"
@@ -395,7 +479,7 @@ def select_frame(X, sym, m, bonds, vecs, keep_input_frame=None, tol=None, tie_br
     return min(keep, key=lambda f: convention_key(X, sym, m, f)), dict(info, step=step)
 
 
-def select_frame_for_scorer(scorer, vecs, keep_input_frame=None, tol=None, tie_break=None):
+def select_frame_for_scorer(scorer, vecs, keep_input_frame=None, tol=None, tie_break=None, linear_rule=None):
     """select_frame on a ModeScorer's current (COM-shifted) coordinates."""
     return select_frame(scorer.coords, scorer.symbols, scorer.masses, scorer.bList, vecs,
-                        keep_input_frame=keep_input_frame, tol=tol, tie_break=tie_break)
+                        keep_input_frame=keep_input_frame, tol=tol, tie_break=tie_break, linear_rule=linear_rule)

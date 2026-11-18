@@ -16,8 +16,9 @@ current outputs.
 Opt-in stages (run only with `--only`): `sync_manuscript`, `si_tables`, and `si_analyses`, the
 Supporting-Information analyses of the JCC revision (about 1.5 min): `src/si_degenerate.py` (s[V_S]
 over all bases of each degenerate set), `src/si_frame.py` (frame spread; on-axis cut-off),
-`src/si_water_overlaps.py` (H2O scores vs Cartesian / mass-weighted overlaps) and
-`src/si_tau_robustness.py` (robustness of tau_SB and the S/B ambiguity range). They write
+`src/si_water_overlaps.py` (H2O scores vs Cartesian / mass-weighted overlaps),
+`src/si_tau_robustness.py` (robustness of tau_SB and the S/B ambiguity range) and
+`src/si_near_axis.py` (NH3: N moved off the C3 axis, s[R_z] with and without the on-axis tolerance). They write
 `data/results/si_*.csv` and `data/figures/fig_si_*`; each module also runs on its own
 (`python -m src.si_degenerate`, ...).
 

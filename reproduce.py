@@ -269,13 +269,13 @@ def stage_si_analyses(ctx):
     data/figures/fig_si_*. Slow (degenerate-subspace scans, 10^4-replicate
     bootstraps), hence opt-in. si_degenerate runs first: its set list defines
     the label-flip units of si_tau_robustness."""
-    from src import si_degenerate, si_frame, si_water_overlaps, si_tau_robustness
+    from src import si_degenerate, si_frame, si_water_overlaps, si_tau_robustness, si_near_axis
     d = ctx["data_dir"]
     figs, res = os.path.join(d, "figures"), results_dir(d)
     done = []
     for name, mod in (("degenerate", si_degenerate), ("frame", si_frame),
                       ("water_overlaps", si_water_overlaps),
-                      ("tau_robustness", si_tau_robustness)):
+                      ("tau_robustness", si_tau_robustness), ("near_axis", si_near_axis)):
         summary = mod.run(data_dir=d, out_dir=figs, results_dir=res)
         for v in summary.values():
             if isinstance(v, str) and os.path.splitext(v)[1] in (".csv", ".pdf", ".png", ".tex"):
